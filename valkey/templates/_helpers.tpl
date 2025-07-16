@@ -60,3 +60,20 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Creating Image Pull Secrets
+*/}}
+{{- define "imagePullSecret" }}
+{{- with .Values.imageCredentials }}
+{{- printf "{\"auths\":{\"%s\":{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\",\"auth\":\"%s\"}}}" .registry .username .password .email (printf "%s:%s" .username .password | b64enc) | b64enc }}
+{{- end }}
+{{- end }}
+
+{{- define "valkey.secretName" -}}
+{{- if .Values.imagePullSecrets.nameOverride }}
+{{- .Values.imagePullSecrets.nameOverride }}
+{{- else }}
+{{- printf "%s-regcred" .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}

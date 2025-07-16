@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "valkey.fullname" . }}
+  labels:
+  {{- include "valkey.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+    {{- include "valkey.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "valkey.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        name: {{ include "valkey.fullname" . }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        env:
+          {{- range $key, $val := .Values.env }}
+          - name: {{ $key }}
+            value: "{{ $val }}"
+          {{- end }}
+        ports:
+          - name: valkey
+            containerPort: {{ .Values.service.port }}
+            protocol: TCP
+        {{- if .Values.customStartupProbe }}
+        startupProbe:
+          {{- toYaml .Values.customStartupProbe | nindent 12 }}
+        {{- else }}
+        {{- if .Values.startupProbe.enabled }}
+        startupProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - valkey-cli ping
+        {{- with .Values.startupProbe }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.customLivenessProbe }}
+        livenessProbe:
+          {{- toYaml .Values.customLivenessProbe | nindent 12 }}
+        {{- else }}
+        {{- if .Values.livenessProbe.enabled }}              
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - valkey-cli ping
+        {{- with .Values.livenessProbe }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        {{- with .Values.volumeMounts }}
+        volumeMounts:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
