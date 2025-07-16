@@ -80,18 +80,23 @@ livenessProbe:
   # customLivenessProbe: {}
 
 # Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
+volumes: 
+  - name: init-scripts
+    configMap:
+      name: init-scripts
+      defaultMode: 0555
+      volumes:
+  - name: data
+    emptyDir: {}
 
 # Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
-
+volumeMounts: 
+- name: init-scripts
+  mountPath: "/scripts"
+  readOnly: true
+- name: data
+  mountPath: /data
+  
 nodeSelector: {}
 
 tolerations: []

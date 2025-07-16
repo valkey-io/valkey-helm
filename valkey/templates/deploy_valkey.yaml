@@ -32,6 +32,13 @@ spec:
       containers:
       - image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         name: {{ include "valkey.fullname" . }}
+        command:
+          - sh
+          - -c
+          - |
+            /scripts/init.sh && valkey-server
+        args:
+           - /data/conf/valkey.conf
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
         env:
@@ -39,6 +46,8 @@ spec:
           - name: {{ $key }}
             value: "{{ $val }}"
           {{- end }}
+          - name: VALKEY_LOGLEVEL
+            value: "{{ .Values.valkeyLogLevel }}"
         ports:
           - name: valkey
             containerPort: {{ .Values.service.port }}

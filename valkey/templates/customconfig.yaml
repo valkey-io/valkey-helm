@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: init-scripts
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+data:
+  init.sh: |-
+    #!/bin/bash
+    set -euo pipefail
+
+    # Default config paths
+    VALKEY_CONF=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
+
+    DATA_DIR="/data/conf"
+
+    # Base valkey.conf
+    generate_valkey_base() {
+      mkdir -p "$DATA_DIR"
+      {
+        echo "port 6379"
+        echo "protected-mode no"
+        echo "bind 0.0.0.0"
+        echo "dir /data"
+        echo "daemonize no"
+        echo "logfile \"\""
+        echo "loglevel ${VALKEY_LOGLEVEL:-notice}"
+      } >>"$VALKEY_CONF"
+    }
+
+    # Append extra configs if present
+    if [ -f /usr/local/etc/valkey/valkey.conf ]; then
+      cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONF"
+    fi
+    if [ -d /extravalkeyconfigs ]; then
+      cat /extravalkeyconfigs/* >>"$VALKEY_CONF"
+    fi
