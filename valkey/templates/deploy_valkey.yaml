@@ -22,6 +22,7 @@ spec:
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+        checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:

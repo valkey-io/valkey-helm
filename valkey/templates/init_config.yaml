@@ -11,7 +11,6 @@ data:
 
     # Default config paths
     VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
-    SENTINEL_CONFIG=${SENTINEL_CONFIG_PATH:-/data/conf/sentinel.conf}
 
     LOGFILE="/data/init.log"
     DATA_DIR="/data/conf"
@@ -32,7 +31,7 @@ data:
 
     log "Creating configuration in $DATA_DIR..."
     mkdir -p "$DATA_DIR"
-    rm -f "$VALKEY_CONFIG" "$SENTINEL_CONFIG"
+    rm -f "$VALKEY_CONFIG" 
 
  
     # Base valkey.conf
@@ -44,10 +43,10 @@ data:
       echo "dir /data"
     } >>"$VALKEY_CONFIG"
 
-  {{- if .Values.auth.enabled }}
-    echo "aclfile /data/conf/users.acl" >>"$VALKEY_CONF"
+    {{- if .Values.auth.enabled }}
+    echo "aclfile /data/conf/users.acl" >>"$VALKEY_CONFIG"
     cat <<EOF > /data/conf/users.acl
-  {{ .Values.auth.aclConfig | indent 0 }}
+{{ .Values.auth.aclConfig | indent 6 }}
     EOF
     {{- end }}
 
