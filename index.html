@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Valkey Helm Charts</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #333;
+    }
+    h1 {
+      color: #d73333;
+    }
+    code {
+      background: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    pre {
+      background: #f4f4f4;
+      padding: 10px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Valkey Helm Charts</h1>
+  <p>This GitHub Pages site hosts a Helm repository for <strong>Valkey</strong>.</p>
+
+  <h2>Usage</h2>
+  <p>Add this repo to Helm:</p>
+  <pre><code>helm repo add valkey https://&lt;your-github-username&gt;.github.io/&lt;repo-name&gt;/</code></pre>
+
+  <p>Update your local cache:</p>
+  <pre><code>helm repo update</code></pre>
+
+  <p>Install the chart:</p>
+  <pre><code>helm install valkey valkey/valkey</code></pre>
+
+  <h2>Repository Contents</h2>
+  <ul>
+    <li><a href="./index.yaml">index.yaml</a> - Helm repository index</li>
+    <li><a href="./charts/">charts/</a> - Packaged charts</li>
+  </ul>
+
+  <footer style="margin-top: 50px; font-size: 0.9em;">
+    <hr>
+    <p>Published with ❤️ using GitHub Pages</p>
+  </footer>
+</body>
+</html>
