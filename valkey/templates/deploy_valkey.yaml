@@ -1,14 +1,16 @@
+{{- $createPvc := and (empty .Values.storage.persistentVolumeClaimName) (.Values.storage.requestedSize) }}
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
-  {{- include "valkey.labels" . | nindent 4 }}
+    {{- include "valkey.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-    {{- include "valkey.selectorLabels" . | nindent 6 }}
+      {{- include "valkey.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
@@ -25,72 +27,139 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      containers:
-      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-        name: {{ include "valkey.fullname" . }}
-        securityContext:
-          {{- toYaml .Values.securityContext | nindent 12 }}
-        env:
-          {{- range $key, $val := .Values.env }}
-          - name: {{ $key }}
-            value: "{{ $val }}"
+
+      initContainers:
+        - name: {{ .Chart.Name }}-init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
           {{- end }}
-        ports:
-          - name: valkey
-            containerPort: {{ .Values.service.port }}
-            protocol: TCP
-        {{- if .Values.customStartupProbe }}
-        startupProbe:
-          {{- toYaml .Values.customStartupProbe | nindent 12 }}
-        {{- else }}
-        {{- if .Values.startupProbe.enabled }}
-        startupProbe:
-          exec:
-            command:
-              - sh
-              - -c
-              - valkey-cli ping
-        {{- with .Values.startupProbe }}
-        {{- end }}
-        {{- end }}
-        {{- end }}
-        {{- if .Values.customLivenessProbe }}
-        livenessProbe:
-          {{- toYaml .Values.customLivenessProbe | nindent 12 }}
-        {{- else }}
-        {{- if .Values.livenessProbe.enabled }}              
-        livenessProbe:
-          exec:
-            command:
-              - sh
-              - -c
-              - valkey-cli ping
-        {{- with .Values.livenessProbe }}
-        {{- end }}
-        {{- end }}
-        {{- end }}
-        resources:
-          {{- toYaml .Values.resources | nindent 12 }}
-        {{- with .Values.volumeMounts }}
-        volumeMounts:
-          {{- toYaml . | nindent 12 }}
-        {{- end }}
-      {{- with .Values.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+          command: [ "/scripts/init.sh" ]
+          volumeMounts:
+            - name: {{ .Values.storage.volumeName }}
+              mountPath: /data
+            - name: scripts
+              mountPath: /scripts
+            {{- if .Values.valkeyConfig }}
+            - name: config
+              mountPath: /usr/local/etc/valkey/valkey.conf
+              subPath: valkey.conf
+            {{- end }}
+            {{- if .Values.extraSecretValkeyConfigs }}
+            - name: extravalkeyconfigs-volume
+              mountPath: /extravalkeyconfigs
+            {{- end }}
+          {{- with .Values.initResources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+      {{- with .Values.extraInitContainers }}
+      {{- toYaml . | nindent 8 }}
       {{- end }}
+
+      containers:
+        - name: {{ include "valkey.fullname" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: [ "valkey-server" ]
+          args: [ "/data/conf/valkey.conf" ]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            {{- range $key, $val := .Values.env }}
+            - name: {{ $key }}
+              value: "{{ $val }}"
+            {{- end }}
+            - name: VALKEY_LOGLEVEL
+              value: "{{ .Values.valkeyLogLevel }}"
+          ports:
+            - name: valkey
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          startupProbe:
+            exec:
+              command: [ "sh", "-c", "valkey-cli ping" ]
+          livenessProbe:
+            exec:
+              command: [ "sh", "-c", "valkey-cli ping" ]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: {{ .Values.storage.volumeName }}
+              mountPath: /data
+            {{- range .Values.extraValkeySecrets }}
+            - name: {{ .name }}-valkey
+              mountPath: {{ .mountPath }}
+            {{- end }}
+            {{- range .Values.extraValkeyConfigs }}
+            - name: {{ .name }}-valkey
+              mountPath: {{ .mountPath }}
+            {{- end }}
+            {{- range .Values.extraStorage }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+            {{- end }}
+
+      volumes:
+        - name: scripts
+          configMap:
+            name: valkey-init
+            defaultMode: 0555
+        - name: config
+          configMap:
+            name: valkey-config
+        {{- range .Values.extraValkeySecrets }}
+        - name: {{ .name }}-valkey
+          secret:
+            secretName: {{ .name }}
+            defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- range .Values.extraValkeyConfigs }}
+        - name: {{ .name }}-valkey
+          configMap:
+            name: {{ .name }}
+            defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- if .Values.metrics.enabled }}
+        {{- range .Values.metrics.exporter.extraExporterSecrets }}
+        - name: {{ .name }}-exporter
+          secret:
+            secretName: {{ .name }}
+            defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- end }}
+        {{- range .Values.extraStorage }}
+        - name: {{ .name }}
+          persistentVolumeClaim:
+            claimName: {{ .pvcName }}
+        {{- end }}
+        {{- if not $createPvc }}
+        - name: {{ .Values.storage.volumeName }}
+          {{- if .Values.storage.persistentVolumeClaimName }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.storage.persistentVolumeClaimName }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+
       {{- with .Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
