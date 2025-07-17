@@ -86,11 +86,13 @@ extraValkeyConfigs: []
 extraSecretValkeyConfigs: false
 extraStorage: []
 valkeyConfig: ""
+
 auth:
-  enable: false
+  enabled: false
   aclConfig: |
     # Users and permissions can be defined here
     # Example:
+    # user default off
     # user default on >defaultpassword ~* +@all 
 
 nodeSelector: {}
