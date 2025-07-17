@@ -1,0 +1,56 @@
+name: Publish Helm Chart
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  package-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for tags
+          persist-credentials: false  # we'll auth manually
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+
+      - name: Set up Git
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Package Helm charts
+        run: |
+          mkdir -p output
+          for dir in charts/*; do
+            [ -d "$dir" ] || continue
+            helm dependency update "$dir" || true
+            helm package "$dir" --destination output
+          done
+
+      - name: Fetch gh-pages branch into worktree
+        run: |
+          git fetch origin gh-pages
+          git worktree add gh-pages gh-pages
+
+      - name: Merge and update index.yaml
+        run: |
+          helm repo index output \
+            --url https://<your-username>.github.io/<your-repo-name> \
+            --merge gh-pages/index.yaml
+          cp output/*.tgz gh-pages/
+          cp output/index.yaml gh-pages/
+
+      - name: Commit and push updated gh-pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd gh-pages
+          git add .
+          git commit -m "Publish updated Helm chart(s) from main branch" || echo "No changes to commit"
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }} gh-pages
