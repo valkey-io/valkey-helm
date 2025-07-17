@@ -1,26 +1,39 @@
-# valkey-helm
-Valkey Helm Chart
+# valkey Helm Chart
+
+A lightweight Helm chart for deploying Valkey (a Redis alternative) to Kubernetes.
+
+---
+
+## TL;DR
+
+```bash
+helm repo add mk-raven https://mk-raven.github.io/valkey-helm
+helm install valkey mk-raven/valkey
+```
+
+---
+
+## Introduction
+
+This chart bootstraps a [Valkey](https://valkey.io) deployment using the Helm package manager.
+
+---
 
 ## Prerequisites
 
-- Kubernetes 1.30+
-- Helm 3.x
-- PV provisioner support in the underlying infrastructure
+* Kubernetes 1.20+
+* Helm 3.5+
 
+---
 
-## Installing the Chart
+## Maintainers
 
-To install the chart with the release name `my-release`:
+| Name     | Email         |
+| -------- | ------------- |
+| mk-raven | \[] |
 
-```bash
-helm repo add https://mk-raven.github.io/valkey-helm/
-helm repo update
-helm install my-release valkey
-```
+---
 
-## Uninstalling the Chart
+## License
 
-To uninstall/delete the `my-release` deployment:
-
-```bash
-helm uninstall my-release
+BSD 3-Clause License
