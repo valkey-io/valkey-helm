@@ -16,7 +16,7 @@ entries:
     - https://valkey.io
     type: application
     urls:
-    - gh-pages/valkey-0.3.0.tgz
+    - valkey-0.3.0.tgz
     version: 0.3.0
   - apiVersion: v2
     appVersion: 8.1.0
@@ -33,7 +33,7 @@ entries:
     - https://valkey.io
     type: application
     urls:
-    - gh-pages/valkey-0.2.0.tgz
+    - valkey-0.2.0.tgz
     version: 0.2.0
   - apiVersion: v2
     appVersion: 8.1.0
@@ -46,6 +46,6 @@ entries:
     name: valkey
     type: application
     urls:
-    - gh-pages/valkey-0.1.0.tgz
+    - valkey-0.1.0.tgz
     version: 0.1.0
 generated: "2025-07-17T17:20:51.363315558+03:00"
