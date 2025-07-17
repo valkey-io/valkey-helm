@@ -79,18 +79,22 @@ livenessProbe:
   timeoutSeconds: 5
   # customLivenessProbe: {}
 
-# Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
+storage:
+  volumeName: valkey-data
+  accessModes:
+  - ReadWriteOnce
+  annotations: {}
+  className: null
+  keepPvc: false
+  labels: {}
+  # persistentVolumeClaimName: null
+  # requestedSize: null
 
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
+extraValkeySecrets: []
+extraValkeyConfigs: []
+extraSecretValkeyConfigs: false
+extraStorage: []
+valkeyConfig: ""
 
 nodeSelector: {}
 
@@ -100,6 +104,12 @@ affinity: {}
 
 valkeyLogLevel: "notice"
 
+
+metrics:
+  enabled: false
+  exporter:
+    extraExporterSecrets: []
+ 
 env: {}
 
 
