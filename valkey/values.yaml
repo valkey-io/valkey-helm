@@ -55,29 +55,20 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
-resources: 
-  limits:
-    cpu: 100m
-    memory: 128Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-startupProbe:
-  enabled: true
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 6
-  successThreshold: 1
-  # customStartupProbe: {}
-livenessProbe:
-  enabled: true
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  timeoutSeconds: 5
-  # customLivenessProbe: {}
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+initResources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
 
 storage:
   volumeName: valkey-data
@@ -95,6 +86,12 @@ extraValkeyConfigs: []
 extraSecretValkeyConfigs: false
 extraStorage: []
 valkeyConfig: ""
+auth:
+  enable: false
+  aclConfig: |
+    # Users and permissions can be defined here
+    # Example:
+    # user default on >defaultpassword ~* +@all 
 
 nodeSelector: {}
 
@@ -104,12 +101,10 @@ affinity: {}
 
 valkeyLogLevel: "notice"
 
-
 metrics:
   enabled: false
   exporter:
     extraExporterSecrets: []
  
 env: {}
-
 
