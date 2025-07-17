@@ -13,6 +13,8 @@ Valkey Helm Chart
 To install the chart with the release name `my-release`:
 
 ```bash
+helm repo add https://mk-raven.github.io/valkey-helm/
+helm repo update
 helm install my-release valkey
 ```
 
