@@ -112,4 +112,9 @@ metrics:
  
 env: {}
 
-
+auth:
+  enable: false
+  aclConfig: |
+    # Users and permissions can be defined here
+    # Example:
+    # user default on >defaultpassword ~* +@all 
