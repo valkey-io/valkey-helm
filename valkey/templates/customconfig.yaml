@@ -51,7 +51,6 @@ data:
     EOF
     {{- end }}
 
-
     # Append extra configs if present
     if [ -f /usr/local/etc/valkey/valkey.conf ]; then
       log "Appending /usr/local/etc/valkey/valkey.conf"
