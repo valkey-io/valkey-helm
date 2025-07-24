@@ -1,4 +1,4 @@
-{{- $createPVC := and (empty .Values.storage.persistentVolumeClaimName) (.Values.storage.requestedSize) }}
+{{- $fullname := include "valkey.fullname" . }}
 
 apiVersion: apps/v1
 kind: Deployment
@@ -28,12 +28,11 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
-
+      {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      
       initContainers:
         - name: {{ .Chart.Name }}-init
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -44,7 +43,7 @@ spec:
           {{- end }}
           command: [ "/scripts/init.sh" ]
           volumeMounts:
-            - name: {{ .Values.storage.volumeName }}
+            - name: {{ .Values.dataStorage.volumeName }}
               mountPath: /data
             - name: scripts
               mountPath: /scripts
@@ -93,21 +92,16 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - name: {{ .Values.storage.volumeName }}
+            - name: {{ .Values.dataStorage.volumeName }}
               mountPath: /data
-            {{- range .Values.extraValkeySecrets }}
-            - name: {{ .name }}-valkey
-              mountPath: {{ .mountPath }}
+            {{- range $secret := .Values.extraValkeySecrets }}
+            - name: {{ $secret.name }}-valkey
+              mountPath: {{ $secret.mountPath }}
             {{- end }}
-            {{- range .Values.extraValkeyConfigs }}
-            - name: {{ .name }}-valkey
-              mountPath: {{ .mountPath }}
+            {{- range $config := .Values.extraValkeyConfigs }}
+            - name: {{ $config.name }}-valkey
+              mountPath: {{ $config.mountPath }}
             {{- end }}
-            {{- range .Values.extraStorage }}
-            - name: {{ .name }}
-              mountPath: {{ .mountPath }}
-            {{- end }}
-
       volumes:
         - name: scripts
           configMap:
@@ -136,20 +130,16 @@ spec:
             defaultMode: {{ .defaultMode | default 0440 }}
         {{- end }}
         {{- end }}
-        {{- range .Values.extraStorage }}
-        - name: {{ .name }}
+      {{- with .Values.dataStorage }}
+        - name: {{ .volumeName }}
+        {{- if .persistentVolumeClaimName }}
           persistentVolumeClaim:
-            claimName: {{ .pvcName }}
-        {{- end }}
-        {{- if not $createPVC }}
-        - name: {{ .Values.storage.volumeName }}
-          {{- if .Values.storage.persistentVolumeClaimName }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.storage.persistentVolumeClaimName }}
-          {{- else }}
+            claimName: {{ .persistentVolumeClaimName }}
+        {{- else }}
           emptyDir: {}
-          {{- end }}
         {{- end }}
+      {{- end }}
+
 
       {{- with .Values.nodeSelector }}
       nodeSelector:
