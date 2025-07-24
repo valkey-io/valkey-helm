@@ -12,7 +12,7 @@ fullnameOverride: ""
 
 serviceAccount:
   create: true
-  automount: true
+  automount: false
   annotations: {}
   name: ""
 
@@ -70,17 +70,33 @@ initResources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
-storage:
-  volumeName: valkey-data
-  accessModes:
-  - ReadWriteOnce
-  annotations: {}
-  className: null
-  keepPvc: false
-  labels: {}
-  # persistentVolumeClaimName: null
-  # requestedSize: null
+## Storage parameters
+dataStorage:
+  enable: false
+  ##  Set persistentVolumenClaimName to reference an existing PVC
+  persistentVolumeClaimName: ы
 
+  ## Internal volume name and prefix of a created PVC
+  volumeName: "valkey-data"
+
+  ## Alternative set requestedSize to define a size for a dynmaically created PVC
+  requestedSize:
+
+  ## the storage class name
+  className:
+
+  ## Default access mode (ReadWriteOnce)
+  accessModes:
+    - ReadWriteOnce
+
+  ## Keep a created Persistent volume claim when uninstalling the helm chart
+  keepPvc: false
+
+  ## Additional storage annotations
+  annotations: {}
+
+  ## Additional storage labels
+  labels: {}
 extraValkeySecrets: []
 extraValkeyConfigs: []
 extraSecretValkeyConfigs: false
