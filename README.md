@@ -7,8 +7,8 @@ A lightweight Helm chart for deploying Valkey (a Redis alternative) to Kubernete
 ## TL;DR
 
 ```bash
-helm repo add mk-raven https://mk-raven.github.io/valkey-helm
-helm install valkey mk-raven/valkey
+helm repo add valkey https://mk-raven.github.io/valkey-helm
+helm install valkey valkey/valkey
 ```
 
 ---

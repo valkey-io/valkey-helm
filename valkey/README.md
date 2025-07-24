@@ -9,7 +9,7 @@ A Helm chart for Kubernetes
 
 1. Add valkey chart repository.
 ```
-helm repo add mk-raven https://mk-raven.github.io/valkey-helm
+helm repo add valkey https://mk-raven.github.io/valkey-helm
 
 ```
 
