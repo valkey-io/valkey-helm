@@ -97,7 +97,7 @@ initResources: {}
 # Persistent storage configuration
 dataStorage:
   # Enable persistent volume claim creation
-  enable: false
+  enabled: false
 
   # Use existing PVC by name (skip dynamic provisioning if set)
   persistentVolumeClaimName:

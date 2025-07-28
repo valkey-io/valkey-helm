@@ -31,7 +31,7 @@
                 "className": {
                     "type": "null"
                 },
-                "enable": {
+                "enabled": {
                     "type": "boolean"
                 },
                 "keepPvc": {

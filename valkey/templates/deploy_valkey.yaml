@@ -1,6 +1,6 @@
 {{- $fullname := include "valkey.fullname" . }}
 {{- $storage := .Values.dataStorage }}
-{{- $createPVC := and $storage.enable (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
+{{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
