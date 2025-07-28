@@ -97,19 +97,19 @@ initResources: {}
 # Persistent storage configuration
 dataStorage:
   # Enable persistent volume claim creation
-  enable: false
+  enabled: false
 
   # Use existing PVC by name (skip dynamic provisioning if set)
-  persistentVolumeClaimName:
+  persistentVolumeClaimName: ""
 
   # Name of the volume (referenced in deployment)
   volumeName: "valkey-data"
 
   # Request size (e.g. 5Gi) for dynamically provisioned volume
-  requestedSize:
+  requestedSize: ""
 
   # Name of the storage class to use
-  className:
+  className: ""
 
   # Access modes for the PVC (e.g., ReadWriteOnce, ReadWriteMany)
   accessModes:

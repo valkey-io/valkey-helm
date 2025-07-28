@@ -29,9 +29,9 @@
                     "type": "object"
                 },
                 "className": {
-                    "type": "null"
+                    "type": "string"
                 },
-                "enable": {
+                "enabled": {
                     "type": "boolean"
                 },
                 "keepPvc": {
@@ -41,10 +41,10 @@
                     "type": "object"
                 },
                 "persistentVolumeClaimName": {
-                    "type": "null"
+                    "type": "string"
                 },
                 "requestedSize": {
-                    "type": "null"
+                    "type": "string"
                 },
                 "volumeName": {
                     "type": "string"
