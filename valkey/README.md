@@ -1,45 +1,38 @@
 # valkey
 
-![Version: 0.7.0](https://img.shields.io/badge/Version-0.7.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 8.1.0](https://img.shields.io/badge/AppVersion-8.1.0-informational?style=flat-square)
+![Version: 0.7.0](https://img.shields.io/badge/Version-0.7.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 8.1.3](https://img.shields.io/badge/AppVersion-8.1.3-informational?style=flat-square)
 
 A Helm chart for Kubernetes
 
 **Homepage:** <https://github.com/mk-raven>
-## Installation
 
-1. Add valkey chart repository.
-```
-helm repo add valkey https://mk-raven.github.io/valkey-helm
+## Maintainers
 
-```
+| Name | Email | Url |
+| ---- | ------ | --- |
+| raven |  | <https://github.com/mk-raven> |
 
-2. Update local valkey chart information from chart repository.
-```
-helm repo update
-```
+## Source Code
 
-3. Use the following commands to create the `valkey` namespace first, then install the valkey chart.
-
-```
-kubectl create namespace valkey
-helm install valkey valkey/valkey --namespace valkey
-```
-
-## Uninstallation
-
-```
-helm uninstall valkey -n valkey
-kubectl delete namespace valkey
-```
-
+* <https://github.com/mk-raven/valkey-helm.git>
+* <https://valkey.io>
 
 ## Values
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
-| auth.aclConfig | string | `"# Users and permissions can be defined here\n# Example:\n# user default off\n# user default on >defaultpassword ~* +@all \n"` |  |
+| auth.aclConfig | string | `"# Users and permissions can be defined here\n# Example:\n# user default off\n# user default on >defaultpassword ~*  &* +@all \n"` |  |
 | auth.enabled | bool | `false` |  |
+| dataStorage.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| dataStorage.annotations | object | `{}` |  |
+| dataStorage.className | string | `nil` |  |
+| dataStorage.enable | bool | `false` |  |
+| dataStorage.keepPvc | bool | `false` |  |
+| dataStorage.labels | object | `{}` |  |
+| dataStorage.persistentVolumeClaimName | string | `nil` |  |
+| dataStorage.requestedSize | string | `nil` |  |
+| dataStorage.volumeName | string | `"valkey-data"` |  |
 | env | object | `{}` |  |
 | extraSecretValkeyConfigs | bool | `false` |  |
 | extraStorage | list | `[]` |  |
@@ -65,7 +58,9 @@ kubectl delete namespace valkey
 | nodeSelector | object | `{}` |  |
 | podAnnotations | object | `{}` |  |
 | podLabels | object | `{}` |  |
-| podSecurityContext | object | `{}` |  |
+| podSecurityContext.fsGroup | int | `1000` |  |
+| podSecurityContext.runAsGroup | int | `1000` |  |
+| podSecurityContext.runAsUser | int | `1000` |  |
 | replicaCount | int | `1` |  |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
@@ -75,15 +70,9 @@ kubectl delete namespace valkey
 | service.port | int | `6379` |  |
 | service.type | string | `"ClusterIP"` |  |
 | serviceAccount.annotations | object | `{}` |  |
-| serviceAccount.automount | bool | `true` |  |
+| serviceAccount.automount | bool | `false` |  |
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
-| storage.accessModes[0] | string | `"ReadWriteOnce"` |  |
-| storage.annotations | object | `{}` |  |
-| storage.className | string | `nil` |  |
-| storage.keepPvc | bool | `false` |  |
-| storage.labels | object | `{}` |  |
-| storage.volumeName | string | `"valkey-data"` |  |
 | tolerations | list | `[]` |  |
 | valkeyConfig | string | `""` |  |
 | valkeyLogLevel | string | `"notice"` |  |

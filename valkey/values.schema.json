@@ -16,6 +16,41 @@
                 }
             }
         },
+        "dataStorage": {
+            "type": "object",
+            "properties": {
+                "accessModes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "annotations": {
+                    "type": "object"
+                },
+                "className": {
+                    "type": "null"
+                },
+                "enable": {
+                    "type": "boolean"
+                },
+                "keepPvc": {
+                    "type": "boolean"
+                },
+                "labels": {
+                    "type": "object"
+                },
+                "persistentVolumeClaimName": {
+                    "type": "null"
+                },
+                "requestedSize": {
+                    "type": "null"
+                },
+                "volumeName": {
+                    "type": "string"
+                }
+            }
+        },
         "env": {
             "type": "object"
         },
@@ -128,7 +163,18 @@
             "type": "object"
         },
         "podSecurityContext": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+                "fsGroup": {
+                    "type": "integer"
+                },
+                "runAsGroup": {
+                    "type": "integer"
+                },
+                "runAsUser": {
+                    "type": "integer"
+                }
+            }
         },
         "replicaCount": {
             "type": "integer"
@@ -185,32 +231,6 @@
                     "type": "boolean"
                 },
                 "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "storage": {
-            "type": "object",
-            "properties": {
-                "accessModes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "annotations": {
-                    "type": "object"
-                },
-                "className": {
-                    "type": "string"
-                },
-                "keepPvc": {
-                    "type": "boolean"
-                },
-                "labels": {
-                    "type": "object"
-                },
-                "volumeName": {
                     "type": "string"
                 }
             }
