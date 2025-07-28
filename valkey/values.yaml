@@ -1,48 +1,67 @@
+# Number of Valkey pods to run
 replicaCount: 1
 
 image:
+  # Valkey Docker image to use
   repository: docker.io/valkey/valkey
+  # Image pull policy (Always, IfNotPresent, Never)
   pullPolicy: IfNotPresent
+  # Image tag (leave empty to use .Chart.AppVersion)
   tag: ""
 
+# List of image pull secrets (for private registries)
 imagePullSecrets: []
 
+# Override the default name or full name of resources
 nameOverride: ""
 fullnameOverride: ""
 
 serviceAccount:
+  # Create a service account for Valkey
   create: true
+  # Whether to automount the service account token
   automount: false
+  # Annotations to add to the service account
   annotations: {}
+  # Name of an existing service account to use (if create: false)
   name: ""
 
-
+# Annotations and labels for the pods
 podAnnotations: {}
 podLabels: {}
 
-podSecurityContext: {}
-  # fsGroup: 2000
+# Security context for the pod (applies to all containers)
+podSecurityContext:
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsGroup: 1000
 
+# Security context for the Valkey containers
 securityContext:
   capabilities:
     drop:
-    - ALL
+      - ALL
   readOnlyRootFilesystem: true
   runAsNonRoot: true
   runAsUser: 1000
 
 service:
+  # Type of Kubernetes service (ClusterIP, NodePort, LoadBalancer)
   type: ClusterIP
+  # Port on which Valkey will be exposed
   port: 6379
 
-# This is for setting up a network policy more information can be found here: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+# Network policy to control traffic to the pods
+# More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
 networkPolicy: {}
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+# Ingress configuration
+# More info: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
   enabled: false
   className: ""
   annotations: {}
+    # Example:
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
@@ -51,18 +70,13 @@ ingress:
         - path: /
           pathType: ImplementationSpecific
   tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
+    # - secretName: chart-example-tls
+    #   hosts:
+    #     - chart-example.local
 
+# Resource limits/requests for the main Valkey container
 resources: {}
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-initResources: {}
+  # Example:
   # limits:
   #   cpu: 100m
   #   memory: 128Mi
@@ -70,59 +84,94 @@ initResources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
-## Storage parameters
+# Resource limits/requests for init containers
+initResources: {}
+  # Example:
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Persistent storage configuration
 dataStorage:
+  # Enable persistent volume claim creation
   enable: false
-  ##  Set persistentVolumenClaimName to reference an existing PVC
+
+  # Use existing PVC by name (skip dynamic provisioning if set)
   persistentVolumeClaimName:
 
-  ## Internal volume name and prefix of a created PVC
+  # Name of the volume (referenced in deployment)
   volumeName: "valkey-data"
 
-  ## Alternative set requestedSize to define a size for a dynmaically created PVC
+  # Request size (e.g. 5Gi) for dynamically provisioned volume
   requestedSize:
 
-  ## the storage class name
+  # Name of the storage class to use
   className:
 
-  ## Default access mode (ReadWriteOnce)
+  # Access modes for the PVC (e.g., ReadWriteOnce, ReadWriteMany)
   accessModes:
     - ReadWriteOnce
 
-  ## Keep a created Persistent volume claim when uninstalling the helm chart
+  # If true, keep the PVC on Helm uninstall
   keepPvc: false
 
-  ## Additional storage annotations
+  # Optional annotations to add to the PVC
   annotations: {}
 
-  ## Additional storage labels
+  # Optional labels to add to the PVC
   labels: {}
+
+# Mount additional secrets into the Valkey container
 extraValkeySecrets: []
+
+# Mount additional configMaps into the Valkey container
 extraValkeyConfigs: []
+
+# Mount extra secrets as volume to init container (deprecated, use extraValkeySecrets)
 extraSecretValkeyConfigs: false
+
+# Mount additional emptyDir or hostPath volumes (advanced use)
 extraStorage: []
+
+# Content for valkey.conf (will be mounted via ConfigMap)
 valkeyConfig: ""
 
 auth:
+  # Enable ACL-based authentication
   enabled: false
+
+  # Default ACL rules (used only if auth.enabled is true)
   aclConfig: |
     # Users and permissions can be defined here
     # Example:
     # user default off
-    # user default on >defaultpassword ~* +@all 
+    # user default on >defaultpassword ~*  &* +@all 
 
+# Node selector for pod assignment
 nodeSelector: {}
 
+# Tolerations for pod assignment to tainted nodes
 tolerations: []
 
+# Affinity rules for pod scheduling
 affinity: {}
 
+# Valkey logging level: debug, verbose, notice, warning
 valkeyLogLevel: "notice"
 
 metrics:
+  # Enable Prometheus exporter sidecar
   enabled: false
+
   exporter:
+    # Additional secrets to mount for metrics exporter
     extraExporterSecrets: []
- 
+
+# Environment variables to inject into Valkey container
 env: {}
+  # Example:
+  # LOG_LEVEL: info
 

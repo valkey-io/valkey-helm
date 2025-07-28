@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: valkey-init
+  name: {{ include "valkey.fullname" . }}-init-scripts
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
 data:
