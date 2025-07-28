@@ -1,5 +1,6 @@
 {{- $fullname := include "valkey.fullname" . }}
-
+{{- $storage := .Values.dataStorage }}
+{{- $createPVC := and $storage.enable (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -80,7 +81,7 @@ spec:
             - name: VALKEY_LOGLEVEL
               value: "{{ .Values.valkeyLogLevel }}"
           ports:
-            - name: valkey
+            - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           startupProbe:
@@ -105,11 +106,13 @@ spec:
       volumes:
         - name: scripts
           configMap:
-            name: valkey-init
+            name: {{ include "valkey.fullname" . }}-init-scripts
             defaultMode: 0555
-        - name: config
+        {{- if .Values.valkeyConfig }}
+        - name: {{ include "valkey.fullname" . }}-config
           configMap:
             name: valkey-config
+        {{- end }}
         {{- range .Values.extraValkeySecrets }}
         - name: {{ .name }}-valkey
           secret:
@@ -130,17 +133,16 @@ spec:
             defaultMode: {{ .defaultMode | default 0440 }}
         {{- end }}
         {{- end }}
-      {{- with .Values.dataStorage }}
-        - name: {{ .volumeName }}
-        {{- if .persistentVolumeClaimName }}
+        - name: {{ $storage.volumeName }}
+        {{- if $storage.persistentVolumeClaimName }}
           persistentVolumeClaim:
-            claimName: {{ .persistentVolumeClaimName }}
+            claimName: {{ $storage.persistentVolumeClaimName }}
+        {{- else if $createPVC }}
+          persistentVolumeClaim:
+            claimName: {{ include "valkey.fullname" . }}
         {{- else }}
           emptyDir: {}
         {{- end }}
-      {{- end }}
-
-
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
