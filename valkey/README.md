@@ -4,7 +4,7 @@
 
 A Helm chart for Kubernetes
 
-**Homepage:** <https://github.com/mk-raven>
+**Homepage:** <https://valkey.io/valkey-helm/>
 
 ## Maintainers
 
@@ -14,7 +14,7 @@ A Helm chart for Kubernetes
 
 ## Source Code
 
-* <https://github.com/mk-raven/valkey-helm.git>
+* <https://github.com/valkey-io/valkey-helm.git>
 * <https://valkey.io>
 
 ## Values
@@ -80,7 +80,7 @@ A Helm chart for Kubernetes
 
 ## Source Code
 
-* <https://github.com/mk-raven/valkey-helm.git>
+* <https://github.com/valkey-io/valkey-helm.git>
 * <https://valkey.io>
 
 ## Maintainers
