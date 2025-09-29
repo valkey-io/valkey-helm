@@ -1,10 +1,10 @@
 # valkey
 
-![Version: 0.7.1](https://img.shields.io/badge/Version-0.7.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 8.1.3](https://img.shields.io/badge/AppVersion-8.1.3-informational?style=flat-square)
+![Version: 0.7.2](https://img.shields.io/badge/Version-0.7.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 8.1.3](https://img.shields.io/badge/AppVersion-8.1.3-informational?style=flat-square)
 
 A Helm chart for Kubernetes
 
-**Homepage:** <https://github.com/mk-raven>
+**Homepage:** <https://valkey.io/valkey-helm/>
 
 ## Maintainers
 
@@ -14,7 +14,7 @@ A Helm chart for Kubernetes
 
 ## Source Code
 
-* <https://github.com/mk-raven/valkey-helm.git>
+* <https://github.com/valkey-io/valkey-helm.git>
 * <https://valkey.io>
 
 ## Values
@@ -80,7 +80,7 @@ A Helm chart for Kubernetes
 
 ## Source Code
 
-* <https://github.com/mk-raven/valkey-helm.git>
+* <https://github.com/valkey-io/valkey-helm.git>
 * <https://valkey.io>
 
 ## Maintainers
