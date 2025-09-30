@@ -78,3 +78,38 @@ Creating Image Pull Secrets
 {{- end }}
 {{- end }}
 
+{{/*
+Validate auth configuration
+*/}}
+{{- define "valkey.validateAuthConfig" -}}
+{{- if .Values.auth.enabled }}
+  {{- $methodCount := 0 }}
+  {{- if .Values.auth.generateDefaultUser.enabled }}
+    {{- $methodCount = add $methodCount 1 }}
+  {{- end }}
+  {{- if .Values.auth.existingSecret }}
+    {{- $methodCount = add $methodCount 1 }}
+  {{- end }}
+  {{- /* Check if aclConfig has actual content (not just comments/whitespace) */}}
+  {{- if .Values.auth.aclConfig }}
+    {{- $trimmed := .Values.auth.aclConfig | trim }}
+    {{- $hasContent := false }}
+    {{- range $line := splitList "\n" $trimmed }}
+      {{- $line = trim $line }}
+      {{- if and $line (not (hasPrefix "#" $line)) }}
+        {{- $hasContent = true }}
+      {{- end }}
+    {{- end }}
+    {{- if $hasContent }}
+      {{- $methodCount = add $methodCount 1 }}
+    {{- end }}
+  {{- end }}
+  {{- if eq $methodCount 0 }}
+    {{- fail "auth.enabled is true but no authentication method is configured. Please enable one of: auth.generateDefaultUser.enabled, auth.existingSecret, or provide auth.aclConfig" }}
+  {{- end }}
+  {{- if gt $methodCount 1 }}
+    {{- fail "Multiple authentication methods are enabled. Please enable only ONE of: auth.generateDefaultUser.enabled, auth.existingSecret, or auth.aclConfig" }}
+  {{- end }}
+{{- end }}
+{{- end }}
+

@@ -1,6 +1,7 @@
 {{- $fullname := include "valkey.fullname" . }}
 {{- $storage := .Values.dataStorage }}
 {{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
+{{- include "valkey.validateAuthConfig" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -56,6 +57,11 @@ spec:
             {{- if .Values.extraSecretValkeyConfigs }}
             - name: extravalkeyconfigs-volume
               mountPath: /extravalkeyconfigs
+            {{- end }}
+            {{- if and .Values.auth.enabled (or .Values.auth.generateDefaultUser.enabled .Values.auth.existingSecret) }}
+            - name: valkey-auth
+              mountPath: /valkey-auth
+              readOnly: true
             {{- end }}
           {{- with .Values.initResources }}
           resources:
@@ -132,6 +138,16 @@ spec:
             secretName: {{ .name }}
             defaultMode: {{ .defaultMode | default 0440 }}
         {{- end }}
+        {{- end }}
+        {{- if and .Values.auth.enabled (or .Values.auth.generateDefaultUser.enabled .Values.auth.existingSecret) }}
+        - name: valkey-auth
+          secret:
+            {{- if .Values.auth.generateDefaultUser.enabled }}
+            secretName: {{ include "valkey.fullname" . }}-auth
+            {{- else }}
+            secretName: {{ .Values.auth.existingSecret }}
+            {{- end }}
+            defaultMode: 0440
         {{- end }}
         - name: {{ $storage.volumeName }}
         {{- if $storage.persistentVolumeClaimName }}
