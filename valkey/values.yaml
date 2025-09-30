@@ -143,12 +143,40 @@ auth:
   # Enable ACL-based authentication
   enabled: false
 
-  # Default ACL rules (used only if auth.enabled is true)
+  # IMPORTANT: Choose ONE of the following three configuration methods:
+  # Priority order (if multiple are enabled):
+  #   1. generateDefaultUser (highest priority)
+  #   2. existingSecret
+  #   3. aclConfig (lowest priority, inline configuration)
+  #
+  # WARNING: Only enable ONE method. Enabling multiple methods simultaneously
+  # may lead to unexpected behavior as generateDefaultUser takes precedence.
+
+  # Method 1: Generate a default user with random password
+  # This automatically creates a Kubernetes Secret with a random password
+  # Best for: Quick setup, development, testing
+  generateDefaultUser:
+    enabled: false
+    # Username for the generated default user
+    username: "default"
+    # Optional: Specify a password (if empty, one will be generated)
+    password: ""
+    # ACL permissions for the default user
+    permissions: "~* &* +@all"
+
+  # Method 2: Use an existing secret containing ACL configuration
+  # The secret must have a key named 'users.acl' with ACL rules
+  # Best for: Production, GitOps workflows, external secret management
+  # Example: existingSecret: "my-valkey-auth-secret"
+  existingSecret: ""
+
+  # Method 3: Inline ACL configuration (used only if the above two are not enabled)
+  # Best for: Simple deployments, version-controlled configurations
   aclConfig: |
     # Users and permissions can be defined here
     # Example:
     # user default off
-    # user default on >defaultpassword ~*  &* +@all 
+    # user default on >defaultpassword ~*  &* +@all
 
 # Node selector for pod assignment
 nodeSelector: {}

@@ -45,9 +45,21 @@ data:
 
     {{- if .Values.auth.enabled }}
     echo "aclfile /data/conf/users.acl" >>"$VALKEY_CONFIG"
+    {{- if or .Values.auth.generateDefaultUser.enabled .Values.auth.existingSecret }}
+    # Copy ACL from mounted secret
+    if [ -f /valkey-auth/users.acl ]; then
+      log "Using ACL configuration from secret"
+      cp /valkey-auth/users.acl /data/conf/users.acl
+    else
+      log "ERROR: auth.enabled is true but no ACL file found in secret"
+      exit 1
+    fi
+    {{- else }}
+    # Use inline ACL configuration
     cat <<EOF > /data/conf/users.acl
 {{ .Values.auth.aclConfig | indent 6 }}
     EOF
+    {{- end }}
     {{- end }}
 
     # Append extra configs if present

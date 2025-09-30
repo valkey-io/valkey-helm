@@ -1,0 +1,82 @@
+suite: init configuration
+templates:
+  - templates/init_config.yaml
+tests:
+  - it: should not configure ACL when auth disabled
+    set:
+      auth.enabled: false
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile"
+
+  - it: should copy ACL from secret with generateDefaultUser
+    set:
+      auth.enabled: true
+      auth.generateDefaultUser.enabled: true
+      auth.aclConfig: ""
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile /data/conf/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cp /valkey-auth/users\\.acl"
+
+  - it: should copy ACL from secret with existingSecret
+    set:
+      auth.enabled: true
+      auth.existingSecret: "my-secret"
+      auth.aclConfig: ""
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile /data/conf/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cp /valkey-auth/users\\.acl"
+
+  - it: should use inline ACL config
+    set:
+      auth.enabled: true
+      auth.aclConfig: |
+        user admin on >password ~* &* +@all
+        user readonly on >password ~* +@read
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile /data/conf/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cat <<EOF > /data/conf/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "user admin on >password"
+
+  - it: should have error handling for missing ACL file
+    set:
+      auth.enabled: true
+      auth.generateDefaultUser.enabled: true
+      auth.aclConfig: ""
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "ERROR.*ACL file"
+
+  - it: should have correct metadata
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey
