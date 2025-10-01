@@ -49,7 +49,7 @@ spec:
             - name: scripts
               mountPath: /scripts
             {{- if .Values.valkeyConfig }}
-            - name: config
+            - name: valkey-config
               mountPath: /usr/local/etc/valkey/valkey.conf
               subPath: valkey.conf
             {{- end }}
@@ -109,9 +109,9 @@ spec:
             name: {{ include "valkey.fullname" . }}-init-scripts
             defaultMode: 0555
         {{- if .Values.valkeyConfig }}
-        - name: {{ include "valkey.fullname" . }}-config
+        - name: valkey-config
           configMap:
-            name: valkey-config
+            name: {{ include "valkey.fullname" . }}-config
         {{- end }}
         {{- range .Values.extraValkeySecrets }}
         - name: {{ .name }}-valkey
