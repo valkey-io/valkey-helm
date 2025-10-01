@@ -235,6 +235,9 @@
                 }
             }
         },
+        "topologySpreadConstraints": {
+            "type": "object"
+        }
         "tolerations": {
             "type": "array"
         },
