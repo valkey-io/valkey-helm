@@ -6,17 +6,6 @@ A Helm chart for Kubernetes
 
 **Homepage:** <https://valkey.io/valkey-helm/>
 
-## Maintainers
-
-| Name | Email | Url |
-| ---- | ------ | --- |
-| raven |  | <https://github.com/mk-raven> |
-
-## Source Code
-
-* <https://github.com/valkey-io/valkey-helm.git>
-* <https://valkey.io>
-
 ## Values
 
 | Key | Type | Default | Description |
