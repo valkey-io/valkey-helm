@@ -1,0 +1,72 @@
+name: Lint & Test Helm Charts
+
+on: pull_request
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: ct lint + kind install
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Test against a couple of recent Kubernetes versions
+        k8s: ["v1.31.9", "v1.32.8"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python (required by ct for some checks)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.3
+
+      - name: Install chart-testing (ct)
+        uses: helm/chart-testing-action@v2
+        # action installs the ct CLI; config is picked up from .github/ct.yaml
+        # ref: marketplace docs
+
+      - name: List changed charts
+        id: list-changed
+        run: |
+          changed=$(ct list-changed --target-branch "${{ github.event.repository.default_branch }}")
+          if [[ -n "$changed" ]]; then
+            echo "changed=true" | tee -a "$GITHUB_OUTPUT"
+            echo "Changed charts:" && echo "$changed"
+          else
+            echo "changed=false" | tee -a "$GITHUB_OUTPUT"
+            echo "No chart changes."
+          fi
+
+      # Lint only when something changed
+      - name: Run chart-testing (lint)
+        if: steps.list-changed.outputs.changed == 'true'
+        run: |
+          ct lint \
+            --target-branch "${{ github.event.repository.default_branch }}"
+
+      # Spin up a kind cluster and run install tests
+      - name: Create kind cluster (${{ matrix.k8s }})
+        if: steps.list-changed.outputs.changed == 'true'
+        uses: helm/kind-action@v1
+        with:
+          node_image: "kindest/node:${{ matrix.k8s }}"
+          wait: 120s
+
+      - name: Run chart-testing (install)
+        if: steps.list-changed.outputs.changed == 'true'
+        env:
+          KUBECONFIG: /home/runner/.kube/config
+        run: |
+          # Increase timeout for slow image pulls/CRDs; pass any extra helm args you need
+          ct install \
+            --target-branch "${{ github.event.repository.default_branch }}" \
+            --helm-extra-args "--timeout 10m0s"
