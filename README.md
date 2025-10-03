@@ -34,6 +34,10 @@ This chart bootstraps a [Valkey](https://valkey.io) deployment using the Helm pa
 
 ---
 
+## Slack
+You can also provide feedback or join the conversation with other developers, users, and contributors on the #[Valkey-helm](https://valkey-oss-developer.slack.com/archives/C09JZ6N2AAV) Slack channel. 
+
+---
 ## License
 
 BSD 3-Clause License

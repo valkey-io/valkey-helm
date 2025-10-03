@@ -86,48 +86,6 @@
         "imagePullSecrets": {
             "type": "array"
         },
-        "ingress": {
-            "type": "object",
-            "properties": {
-                "annotations": {
-                    "type": "object"
-                },
-                "className": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "hosts": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "host": {
-                                "type": "string"
-                            },
-                            "paths": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "path": {
-                                            "type": "string"
-                                        },
-                                        "pathType": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "tls": {
-                    "type": "array"
-                }
-            }
-        },
         "initResources": {
             "type": "object"
         },
@@ -235,11 +193,11 @@
                 }
             }
         },
-        "topologySpreadConstraints": {
-            "type": "object"
-        }
         "tolerations": {
             "type": "array"
+        },
+        "topologySpreadConstraints": {
+            "type": "object"
         },
         "valkeyConfig": {
             "type": "string"
