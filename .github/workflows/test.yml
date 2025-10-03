@@ -1,58 +1,53 @@
-name: Helm Template All Charts
+name: Helm Template (valkey)
 
 on:
   push:
-    branches: [ main, master, '*' ]
+    branches: ["**"]
   pull_request:
-    branches: [ main, master, '*' ]
+    branches: ["**"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: helm-template-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  helm-template:
+  template:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        kube: ["1.31.0", "1.30.0"]
+        kube: ["1.31.0", "1.30.0"]  # K8s versions to render against
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1  # only current commit
+          fetch-depth: 1
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
           version: v3.15.3
 
-      - name: Build chart dependencies
+      - name: Build dependencies (if any)
         run: |
-          for chart in charts/*; do
-            if [ -f "$chart/Chart.yaml" ]; then
-              echo "Building deps for $chart"
-              helm dependency build "$chart" || true
-            fi
-          done
+          helm dependency build valkey || true
 
-      - name: Render charts with helm template
+      - name: Render manifests (helm template)
         run: |
-          mkdir -p /tmp/rendered
-          for chart in charts/*; do
-            if [ -f "$chart/Chart.yaml" ]; then
-              out="/tmp/rendered/$(basename "$chart")-k${{ matrix.kube }}.yaml"
-              echo "Rendering $chart -> $out"
-              helm template "tmpl-${RANDOM}" "$chart" \
-                --kube-version "${{ matrix.kube }}" \
-                > "$out"
-            fi
-          done
+          out="/tmp/valkey-k${{ matrix.kube }}.yaml"
+          helm template valkey-tmpl ./valkey \
+            --kube-version "${{ matrix.kube }}" \
+            > "$out"
+          echo "Rendered -> $out"
 
       - name: Upload rendered manifests
         uses: actions/upload-artifact@v4
         with:
-          name: helm-template-k${{ matrix.kube }}
-          path: /tmp/rendered/*.yaml
-  
+          name: valkey-template-k${{ matrix.kube }}
+          path: /tmp/valkey-*.yaml
+          if-no-files-found: error
