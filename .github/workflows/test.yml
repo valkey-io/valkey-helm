@@ -1,67 +1,58 @@
-name: Lint and Test Charts
+name: Helm Template All Charts
 
-on: push
+on:
+  push:
+    branches: [ main, master, '*' ]
+  pull_request:
+    branches: [ main, master, '*' ]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  lint-test:
+  helm-template:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
-        kube: ["1.31.0", "1.30.0"]  
+        kube: ["1.31.0", "1.30.0"]
+
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # only current commit
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
           version: v3.15.3
 
-      # Use ct just to figure out which charts changed
-      - name: Install chart-testing (ct)
-        uses: helm/chart-testing-action@v2
-
-      - name: List changed charts
-        id: changed
-        run: |
-          changed=$(ct list-changed --target-branch "${{ github.event.repository.default_branch }}")
-          if [[ -n "$changed" ]]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            printf "%s\n" "$changed" > /tmp/changed-charts.txt
-            echo "Changed charts:" && cat /tmp/changed-charts.txt
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No chart changes."
-          fi
-
       - name: Build chart dependencies
-        if: steps.changed.outputs.changed == 'true'
         run: |
-          while read -r chart; do
-            [[ -z "$chart" ]] && continue
-            helm dependency build "$chart"
-          done < /tmp/changed-charts.txt
+          for chart in charts/*; do
+            if [ -f "$chart/Chart.yaml" ]; then
+              echo "Building deps for $chart"
+              helm dependency build "$chart" || true
+            fi
+          done
 
-      - name: Render manifests (helm template)
-        if: steps.changed.outputs.changed == 'true'
+      - name: Render charts with helm template
         run: |
-          while read -r chart; do
-            [[ -z "$chart" ]] && continue
-            out="/tmp/$(basename "$chart")-k${{ matrix.kube }}.yaml"
-            helm template "tmpl-${RANDOM}" "$chart" \
-              --kube-version "${{ matrix.kube }}" \
-              > "$out"
-            echo "Rendered $chart -> $out"
-          done < /tmp/changed-charts.txt
+          mkdir -p /tmp/rendered
+          for chart in charts/*; do
+            if [ -f "$chart/Chart.yaml" ]; then
+              out="/tmp/rendered/$(basename "$chart")-k${{ matrix.kube }}.yaml"
+              echo "Rendering $chart -> $out"
+              helm template "tmpl-${RANDOM}" "$chart" \
+                --kube-version "${{ matrix.kube }}" \
+                > "$out"
+            fi
+          done
 
       - name: Upload rendered manifests
-        if: steps.changed.outputs.changed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: helm-template-k${{ matrix.kube }}
-          path: /tmp/*.yaml
-          if-no-files-found: ignore
+          path: /tmp/rendered/*.yaml
+  
