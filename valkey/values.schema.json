@@ -2,6 +2,20 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
+        "compat": {
+            "type": "object",
+            "properties": {
+                "openshift": {
+                    "type": "object",
+                    "properties": {
+                        "adaptSecurityContext": {
+                            "type": "string",
+                            "enum": ["auto", "force", "disabled"]
+                        }
+                    }
+                }
+            }
+        },
         "affinity": {
             "type": "object"
         },
@@ -123,6 +137,9 @@
         "podSecurityContext": {
             "type": "object",
             "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
                 "fsGroup": {
                     "type": "integer"
                 },
@@ -143,6 +160,9 @@
         "securityContext": {
             "type": "object",
             "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
                 "capabilities": {
                     "type": "object",
                     "properties": {

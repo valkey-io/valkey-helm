@@ -13,6 +13,7 @@ A Helm chart for Kubernetes
 | affinity | object | `{}` |  |
 | auth.aclConfig | string | `"# Users and permissions can be defined here\n# Example:\n# user default off\n# user default on >defaultpassword ~*  &* +@all \n"` |  |
 | auth.enabled | bool | `false` |  |
+| compat.openshift.adaptSecurityContext | string | `"auto"` |  |
 | dataStorage.accessModes[0] | string | `"ReadWriteOnce"` |  |
 | dataStorage.annotations | object | `{}` |  |
 | dataStorage.className | string | `nil` |  |
@@ -47,11 +48,13 @@ A Helm chart for Kubernetes
 | nodeSelector | object | `{}` |  |
 | podAnnotations | object | `{}` |  |
 | podLabels | object | `{}` |  |
+| podSecurityContext.enabled | bool | `true` |  |
 | podSecurityContext.fsGroup | int | `1000` |  |
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |
 | replicaCount | int | `1` |  |
 | resources | object | `{}` |  |
+| securityContext.enabled | bool | `true` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
 | securityContext.runAsNonRoot | bool | `true` |  |

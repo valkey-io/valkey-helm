@@ -19,10 +19,10 @@ spec:
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
       annotations:
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
         checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 }}
     spec:
       {{- with .Values.imagePullSecrets }}
@@ -31,16 +31,26 @@ spec:
       {{- end }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+      {{- $psc := include "valkey.compat.renderSecurityContext" (dict "secContext" .Values.podSecurityContext "context" $) | trim -}}
+      {{- $pscVals := .Values.podSecurityContext -}}
+      {{- $pscHasEnabled := hasKey $pscVals "enabled" -}}
+      {{- $pscEnabled := ternary true (get $pscVals "enabled") (not $pscHasEnabled) -}}
+      {{- if and $pscEnabled ($psc) }}
       securityContext:
-      {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      
+      {{- $psc | nindent 8 }}
+      {{- end }}
+
       initContainers:
         - name: {{ .Chart.Name }}-init
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.securityContext }}
+          {{- $cscInit := include "valkey.compat.renderSecurityContext" (dict "secContext" .Values.securityContext "context" $) | trim -}}
+          {{- $cscVals := .Values.securityContext -}}
+          {{- $cscHasEnabled := hasKey $cscVals "enabled" -}}
+          {{- $cscEnabled := ternary true (get $cscVals "enabled") (not $cscHasEnabled) -}}
+          {{- if and $cscEnabled ($cscInit) }}
           securityContext:
-            {{- toYaml . | nindent 12 }}
+            {{- $cscInit | nindent 12 }}
           {{- end }}
           command: [ "/scripts/init.sh" ]
           volumeMounts:
@@ -71,8 +81,14 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           command: [ "valkey-server" ]
           args: [ "/data/conf/valkey.conf" ]
+          {{- $csc := include "valkey.compat.renderSecurityContext" (dict "secContext" .Values.securityContext "context" $) | trim -}}
+          {{- $cscVals2 := .Values.securityContext -}}
+          {{- $cscHasEnabled2 := hasKey $cscVals2 "enabled" -}}
+          {{- $cscEnabled2 := ternary true (get $cscVals2 "enabled") (not $cscHasEnabled2) -}}
+          {{- if and $cscEnabled2 ($csc) }}
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
+            {{- $csc | nindent 12 }}
+          {{- end }}
           env:
             {{- range $key, $val := .Values.env }}
             - name: {{ $key }}
