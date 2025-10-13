@@ -36,14 +36,19 @@ Port:         {{ .Values.service.port }}
 
 {{ if .Values.auth.enabled }}
 🔐 Authentication is ENABLED (ACL)
-- Provide the username and password from `.auth.aclConfig`.
+- Source of ACLs:
+  {{- if .Values.auth.existingACLSecret.name }}
+  - From Secret: `{{ .Values.auth.existingACLSecret.name }}`, key: `{{ default "users.acl" .Values.auth.existingACLSecret.key }}`
+  {{- else }}
+  - From values: `.auth.aclConfig`
+  {{- end }}
 - Default user:
   $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} -a <password> PING
 - Named user:
   $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user <user> -a <password> PING
 {{ else }}
 🔓 Authentication is DISABLED
-- Enable with: `--set auth.enabled=true` and provide `.auth.aclConfig`.
+- Enable with: `--set auth.enabled=true` and provide `.auth.aclConfig`, or use `auth.existingACLSecret`.
 {{ end }}
 
 ✅ Quick test

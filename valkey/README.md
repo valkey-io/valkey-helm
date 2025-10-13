@@ -13,6 +13,8 @@ A Helm chart for Kubernetes
 | affinity | object | `{}` |  |
 | auth.aclConfig | string | `"# Users and permissions can be defined here\n# Example:\n# user default off\n# user default on >defaultpassword ~*  &* +@all \n"` |  |
 | auth.enabled | bool | `false` |  |
+| auth.existingACLSecret.key | string | `"users.acl"` |  |
+| auth.existingACLSecret.name | string | `""` |  |
 | dataStorage.accessModes[0] | string | `"ReadWriteOnce"` |  |
 | dataStorage.annotations | object | `{}` |  |
 | dataStorage.className | string | `nil` |  |

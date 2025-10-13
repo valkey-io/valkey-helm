@@ -48,6 +48,10 @@ spec:
               mountPath: /data
             - name: scripts
               mountPath: /scripts
+            {{- if and .Values.auth.enabled .Values.auth.existingACLSecret.name }}
+            - name: authacl
+              mountPath: /authacl
+            {{- end }}
             {{- if .Values.valkeyConfig }}
             - name: valkey-config
               mountPath: /usr/local/etc/valkey/valkey.conf
@@ -108,6 +112,11 @@ spec:
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts
             defaultMode: 0555
+        {{- if and .Values.auth.enabled .Values.auth.existingACLSecret.name }}
+        - name: authacl
+          secret:
+            secretName: {{ .Values.auth.existingACLSecret.name }}
+        {{- end }}
         {{- if .Values.valkeyConfig }}
         - name: valkey-config
           configMap:

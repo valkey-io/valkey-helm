@@ -131,6 +131,21 @@ auth:
     # user default off
     # user default on >defaultpassword ~*  &* +@all 
 
+  # Load ACLs from an existing Secret. If provided, takes precedence over `aclConfig`.
+  # The Secret should contain a key with the ACL file content as expected by Valkey.
+  #
+  # Example:
+  #   kind: Secret
+  #   type: Opaque
+  #   stringData:
+  #     users.acl: |
+  #       user username on >password ~* &* +@read -@write -@dangerous
+  existingACLSecret:
+    # Name of the Secret containing the ACL content
+    name: ""
+    # Key within the Secret that holds the ACL content
+    key: "users.acl"
+
 # Node selector for pod assignment
 nodeSelector: {}
 

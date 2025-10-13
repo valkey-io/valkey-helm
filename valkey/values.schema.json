@@ -11,6 +11,13 @@
                 "aclConfig": {
                     "type": "string"
                 },
+                "existingACLSecret": {
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string" },
+                        "key": { "type": "string" }
+                    }
+                },
                 "enabled": {
                     "type": "boolean"
                 }

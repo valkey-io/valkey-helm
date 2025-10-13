@@ -45,9 +45,19 @@ data:
 
     {{- if .Values.auth.enabled }}
     echo "aclfile /data/conf/users.acl" >>"$VALKEY_CONFIG"
+    {{- if .Values.auth.existingACLSecret.name }}
+    # Load ACLs from mounted secret
+    if [ -f "/authacl/{{ default "users.acl" .Values.auth.existingACLSecret.key }}" ]; then
+      cp "/authacl/{{ default "users.acl" .Values.auth.existingACLSecret.key }}" /data/conf/users.acl
+    else
+      echo "Expected key '{{ default "users.acl" .Values.auth.existingACLSecret.key }}' not found in secret volume /authacl" | tee -a "$LOGFILE"
+      exit 1
+    fi
+    {{- else }}
     cat <<EOF > /data/conf/users.acl
 {{ .Values.auth.aclConfig | indent 6 }}
     EOF
+    {{- end }}
     {{- end }}
 
     # Append extra configs if present
