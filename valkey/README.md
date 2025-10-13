@@ -63,6 +63,7 @@ A Helm chart for Kubernetes
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
 | tolerations | list | `[]` |  |
+| topologySpreadConstraints | list | `[]` |  |
 | valkeyConfig | string | `""` |  |
 | valkeyLogLevel | string | `"notice"` |  |
 
