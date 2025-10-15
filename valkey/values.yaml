@@ -140,6 +140,9 @@ tolerations: []
 # Affinity rules for pod scheduling
 affinity: {}
 
+# Set Deployment strategy. See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
+deploymentStrategy: RollingUpdate
+
 # See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
 topologySpreadConstraints: {}
 
