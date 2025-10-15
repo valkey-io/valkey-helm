@@ -89,22 +89,6 @@
         "initResources": {
             "type": "object"
         },
-        "metrics": {
-            "type": "object",
-            "properties": {
-                "enabled": {
-                    "type": "boolean"
-                },
-                "exporter": {
-                    "type": "object",
-                    "properties": {
-                        "extraExporterSecrets": {
-                            "type": "array"
-                        }
-                    }
-                }
-            }
-        },
         "nameOverride": {
             "type": "string"
         },
