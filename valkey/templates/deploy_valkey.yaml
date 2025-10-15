@@ -125,14 +125,6 @@ spec:
             name: {{ .name }}
             defaultMode: {{ .defaultMode | default 0440 }}
         {{- end }}
-        {{- if .Values.metrics.enabled }}
-        {{- range .Values.metrics.exporter.extraExporterSecrets }}
-        - name: {{ .name }}-exporter
-          secret:
-            secretName: {{ .name }}
-            defaultMode: {{ .defaultMode | default 0440 }}
-        {{- end }}
-        {{- end }}
         - name: {{ $storage.volumeName }}
         {{- if $storage.persistentVolumeClaimName }}
           persistentVolumeClaim:

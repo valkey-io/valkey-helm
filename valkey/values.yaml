@@ -146,14 +146,6 @@ topologySpreadConstraints: {}
 # Valkey logging level: debug, verbose, notice, warning
 valkeyLogLevel: "notice"
 
-metrics:
-  # Enable Prometheus exporter sidecar
-  enabled: false
-
-  exporter:
-    # Additional secrets to mount for metrics exporter
-    extraExporterSecrets: []
-
 # Environment variables to inject into Valkey container
 env: {}
   # Example:
