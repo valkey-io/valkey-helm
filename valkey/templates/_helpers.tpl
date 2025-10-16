@@ -93,13 +93,8 @@ Validate auth configuration
   {{- /* Check if aclConfig has actual content (not just comments/whitespace) */}}
   {{- if .Values.auth.aclConfig }}
     {{- $trimmed := .Values.auth.aclConfig | trim }}
-    {{- $hasContent := false }}
-    {{- range $line := splitList "\n" $trimmed }}
-      {{- $line = trim $line }}
-      {{- if and $line (not (hasPrefix "#" $line)) }}
-        {{- $hasContent = true }}
-      {{- end }}
-    {{- end }}
+    {{- /* Use regex to check for any non-empty, non-comment line */}}
+    {{- $hasContent := regexMatch "(?m)^(\\s*[^#\\s].*)$" $trimmed }}
     {{- if $hasContent }}
       {{- $methodCount = add $methodCount 1 }}
     {{- end }}
