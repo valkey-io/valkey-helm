@@ -94,7 +94,7 @@ Validate auth configuration
   {{- if .Values.auth.aclConfig }}
     {{- $trimmed := .Values.auth.aclConfig | trim }}
     {{- /* Use regex to check for any non-empty, non-comment line */}}
-    {{- $hasContent := regexMatch "(?m)^(\\s*[^#\\s].*)$" $trimmed }}
+    {{- $hasContent := regexMatch "(?m)^(\s*[^#\s].*)$" $trimmed }}
     {{- if $hasContent }}
       {{- $methodCount = add $methodCount 1 }}
     {{- end }}
