@@ -59,6 +59,7 @@ A Helm chart for Kubernetes
 | securityContext.runAsUser | int | `1000` |  |
 | service.port | int | `6379` |  |
 | service.type | string | `"ClusterIP"` |  |
+| service.nodePort | int | `0` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.automount | bool | `false` |  |
 | serviceAccount.create | bool | `true` |  |

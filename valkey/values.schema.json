@@ -177,6 +177,9 @@
                 },
                 "type": {
                     "type": "string"
+                },
+                "nodePort": {
+                    "type": "integer"
                 }
             }
         },
