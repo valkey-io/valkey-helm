@@ -22,6 +22,7 @@ A Helm chart for Kubernetes
 | dataStorage.persistentVolumeClaimName | string | `nil` |  |
 | dataStorage.requestedSize | string | `nil` |  |
 | dataStorage.volumeName | string | `"valkey-data"` |  |
+| deploymentStrategy | string | `RollingUpdate` | |
 | env | object | `{}` |  |
 | extraSecretValkeyConfigs | bool | `false` |  |
 | extraStorage | list | `[]` |  |
@@ -65,7 +66,6 @@ A Helm chart for Kubernetes
 | tolerations | list | `[]` |  |
 | valkeyConfig | string | `""` |  |
 | valkeyLogLevel | string | `"notice"` |  |
-
 
 ## Source Code
 

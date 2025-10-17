@@ -51,6 +51,10 @@
                 }
             }
         },
+        "deploymentStrategy": {
+            "type": "string",
+             "enum": ["RollingUpdate", "Recreate"]
+        },
         "env": {
             "type": "object"
         },

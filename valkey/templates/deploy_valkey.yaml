@@ -9,6 +9,8 @@ metadata:
     {{- include "valkey.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ .Values.deploymentStrategy }}
   selector:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
