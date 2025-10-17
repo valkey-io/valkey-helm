@@ -16,6 +16,20 @@
                 }
             }
         },
+        "commonLabels": {
+            "type": "object"
+        },
+        "containerPorts": {
+            "type": "object",
+            "properties": {
+                "bus": {
+                    "type": "integer"
+                },
+                "valkey": {
+                    "type": "integer"
+                }
+            }
+        },
         "dataStorage": {
             "type": "object",
             "properties": {
@@ -32,9 +46,6 @@
                     "type": "string"
                 },
                 "enabled": {
-                    "type": "boolean"
-                },
-                "keepPvc": {
                     "type": "boolean"
                 },
                 "labels": {
@@ -54,6 +65,12 @@
         "env": {
             "type": "object"
         },
+        "existingSecret": {
+            "type": "string"
+        },
+        "existingSecretPasswordKey": {
+            "type": "string"
+        },
         "extraSecretValkeyConfigs": {
             "type": "boolean"
         },
@@ -69,9 +86,20 @@
         "fullnameOverride": {
             "type": "string"
         },
+        "global": {
+            "type": "object",
+            "properties": {
+                "imageRegistry": {
+                    "type": "string"
+                }
+            }
+        },
         "image": {
             "type": "object",
             "properties": {
+                "registry": {
+                    "type": "string"
+                },
                 "pullPolicy": {
                     "type": "string"
                 },
@@ -89,9 +117,20 @@
         "initResources": {
             "type": "object"
         },
+        "lifecycleHooks": {
+            "type": "object"
+        },
         "metrics": {
             "type": "object",
             "properties": {
+                "containerPorts": {
+                    "type": "object",
+                    "properties": {
+                        "http": {
+                            "type": "integer"
+                        }
+                    }
+                },
                 "enabled": {
                     "type": "boolean"
                 },
@@ -100,6 +139,37 @@
                     "properties": {
                         "extraExporterSecrets": {
                             "type": "array"
+                        }
+                    }
+                },
+                "extraArgs": {
+                    "type": "object"
+                },
+                "image": {
+                    "type": "object",
+                    "properties": {
+                        "registry": {
+                            "type": "string"
+                        },
+                        "repository": {
+                            "type": "string"
+                        },
+                        "tag": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "resources": {
+                    "type": "object"
+                },
+                "service": {
+                    "type": "object",
+                    "properties": {
+                        "clusterIP": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string"
                         }
                     }
                 }
@@ -114,7 +184,24 @@
         "nodeSelector": {
             "type": "object"
         },
+        "pdb": {
+            "type": "object",
+            "properties": {
+                "create": {
+                    "type": "boolean"
+                },
+                "maxUnavailable": {
+                    "type": "string"
+                },
+                "minAvailable": {
+                    "type": "string"
+                }
+            }
+        },
         "podAnnotations": {
+            "type": "object"
+        },
+        "podDisruptionBudget": {
             "type": "object"
         },
         "podLabels": {
@@ -168,9 +255,6 @@
         "service": {
             "type": "object",
             "properties": {
-                "port": {
-                    "type": "integer"
-                },
                 "type": {
                     "type": "string"
                 }
@@ -190,6 +274,14 @@
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "tls": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
                 }
             }
         },

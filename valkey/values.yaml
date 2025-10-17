@@ -1,7 +1,32 @@
 # Number of Valkey pods to run
+# For cluster mode, set this to at least to 6
 replicaCount: 1
 
+global:
+  imageRegistry: ""
+
+existingSecretPasswordKey: ""
+
+existingSecret: ""
+
+# The same values will be used for service creation
+containerPorts:
+  # Port on which Valkey will be exposed
+  valkey: 6379
+  bus: 16379
+
+podDisruptionBudget: {}
+
+podLabels: {}
+
+commonLabels: {}
+
+pdb:
+  create: true
+  minAvailable: ""
+  maxUnavailable: ""
 image:
+  registry: docker.io
   # Valkey Docker image to use
   repository: docker.io/valkey/valkey
   # Image pull policy (Always, IfNotPresent, Never)
@@ -48,8 +73,6 @@ securityContext:
 service:
   # Type of Kubernetes service (ClusterIP, NodePort, LoadBalancer)
   type: ClusterIP
-  # Port on which Valkey will be exposed
-  port: 6379
 
 # Network policy to control traffic to the pods
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
@@ -96,9 +119,6 @@ dataStorage:
   accessModes:
     - ReadWriteOnce
 
-  # If true, keep the PVC on Helm uninstall
-  keepPvc: false
-
   # Optional annotations to add to the PVC
   annotations: {}
 
@@ -107,6 +127,84 @@ dataStorage:
 
 # Mount additional secrets into the Valkey container
 extraValkeySecrets: []
+
+# Kubernetes lifecycle hooks. 
+# The default includes a preStop script for graceful master node failover in a cluster,
+# ensuring high availability during updates or scaling events.
+# Example of default value: lifecycleHooks: {}
+lifecycleHooks:
+    preStop:
+      exec:
+        command:
+          - /bin/bash
+          - -ec
+          - |
+            #!/bin/bash
+
+            REDIS_CLI="/usr/local/bin/valkey-cli"
+            HOSTNAME=$(hostname)
+            POD_NAME=${POD_NAME:-$HOSTNAME}
+            REDIS_PORT=${REDIS_PORT_NUMBER:-6379}
+            AUTH_OPTION=""
+
+            if [ -n "$REDISCLI_AUTH" ]; then
+              AUTH_OPTION="-a $REDISCLI_AUTH"
+            fi
+
+            # Get current node ID
+            NODE_ID=$($REDIS_CLI $AUTH_OPTION -p $REDIS_PORT CLUSTER NODES | grep myself | awk '{print $1}')
+
+            # Check if the current node is a master
+            ROLE=$($REDIS_CLI $AUTH_OPTION -p $REDIS_PORT INFO replication | grep role | awk -F: '{print $2}' | tr -d '\r')
+
+            if [ "$ROLE" == "master" ]; then
+              echo "Current node is a master. Initiating failover..."
+
+              # Get the slave of the current master
+              SLAVE_NODE=$($REDIS_CLI $AUTH_OPTION -p $REDIS_PORT CLUSTER NODES | grep -v myself | grep slave | grep $NODE_ID | awk '{print $2}' | awk -F@ '{print $1}' | head -n 1)
+
+              if [ -z "$SLAVE_NODE" ]; then
+                echo "No slave found for the current master. Aborting failover."
+                $REDIS_CLI $AUTH_OPTION -p $REDIS_PORT PUBLISH redis-cluster-events "Goodbye from $POD_NAME"
+                $REDIS_CLI $AUTH_OPTION -p $REDIS_PORT SHUTDOWN SAVE
+                exit 1
+              fi
+
+              SLAVE_HOST=$(echo $SLAVE_NODE | awk -F: '{print $1}')
+              SLAVE_PORT=$(echo $SLAVE_NODE | awk -F: '{print $2}')
+
+              # Initiate failover on the slave node
+              $REDIS_CLI $AUTH_OPTION -h $SLAVE_HOST -p $SLAVE_PORT CLUSTER FAILOVER TAKEOVER
+              echo "Failover command executed on slave $SLAVE_HOST:$SLAVE_PORT."
+
+              # Wait for a few seconds to allow failover to complete
+              echo "Waiting for new master to be promoted..."
+              SUCCESS=false
+              for i in {1..10}; do
+                sleep 2
+                NEW_MASTER=$($REDIS_CLI $AUTH_OPTION -h $SLAVE_HOST -p $SLAVE_PORT CLUSTER NODES | grep myself | grep master)
+                if [ ! -z "$NEW_MASTER" ]; then
+                  echo "Failover succeeded. New master is $SLAVE_HOST:$SLAVE_PORT."
+                  SUCCESS=true
+                  break
+                fi
+              done
+
+              if [ "$SUCCESS" != "true" ]; then
+                echo "Failover failed. The slave was not promoted to master."
+                $REDIS_CLI $AUTH_OPTION -p $REDIS_PORT PUBLISH redis-cluster-events "Goodbye from $POD_NAME"
+                $REDIS_CLI $AUTH_OPTION -p $REDIS_PORT SHUTDOWN SAVE
+                exit 1
+              fi
+
+              # Broadcast goodbye message
+              $REDIS_CLI $AUTH_OPTION -p $REDIS_PORT PUBLISH redis-cluster-events "Goodbye from $POD_NAME"
+
+              # Gracefully shutdown the current master
+              $REDIS_CLI $AUTH_OPTION -p $REDIS_PORT SHUTDOWN SAVE
+            else
+              echo "Current node is not a master. No failover needed."
+            fi
 
 # Mount additional configMaps into the Valkey container
 extraValkeyConfigs: []
@@ -146,9 +244,31 @@ topologySpreadConstraints: {}
 # Valkey logging level: debug, verbose, notice, warning
 valkeyLogLevel: "notice"
 
-metrics:
-  # Enable Prometheus exporter sidecar
+tls:
   enabled: false
+
+metrics:
+  image:
+    registry: docker.io
+    repository: oliver006/redis_exporter
+    tag: v1.78.0-alpine
+
+  resources: {}
+
+  extraArgs:
+    # Use the redis.addr flag to set the connection string
+    redis.addr: "redis://127.0.0.1:6379"
+    # Use the is-cluster flag to enable cluster mode
+    is-cluster: "true"
+
+  enabled: false
+  service:
+    type: ClusterIP
+    clusterIP: ""
+
+
+  containerPorts:
+    http: 9121
 
   exporter:
     # Additional secrets to mount for metrics exporter
