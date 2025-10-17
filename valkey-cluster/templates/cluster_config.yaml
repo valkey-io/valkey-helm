@@ -19,8 +19,8 @@ data:
     PRIMARIES=$(( (REPLICAS + 1) / 2 ))
     REPLICA_COUNT=$(( (REPLICAS - PRIMARIES) / PRIMARIES ))
     AUTH_OPTION=""
-    if [ -n "${REDISCLI_AUTH}" ]; then
-      AUTH_OPTION="-a ${REDISCLI_AUTH}"
+    if [ -n "${VALKEYCLI_AUTH}" ]; then
+      AUTH_OPTION="-a ${VALKEYCLI_AUTH}"
     fi
     echo "Auth option: ${AUTH_OPTION}"
     echo "Initializing as ordinal ${ORDINAL}. Total primaries: ${PRIMARIES}, Replicas per primary: ${REPLICA_COUNT}"

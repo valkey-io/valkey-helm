@@ -1,0 +1,31 @@
+{{- $createPVC := and .Values.dataStorage.enabled (not (empty .Values.dataStorage.requestedSize)) (empty .Values.dataStorage.persistentVolumeClaimName) }}
+{{- if $createPVC }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "valkey.fullname" . }}
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    {{- with .Values.dataStorage.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if or .Values.dataStorage.keepPvc .Values.dataStorage.annotations }}
+  annotations:
+    {{- if .Values.dataStorage.keepPvc }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
+    {{- with .Values.dataStorage.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.dataStorage.accessModes | nindent 4 }}
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: {{ .Values.dataStorage.requestedSize }}
+  {{- if .Values.dataStorage.className }}
+  storageClassName: {{ .Values.dataStorage.className }}
+  {{- end }}
+{{- end }}

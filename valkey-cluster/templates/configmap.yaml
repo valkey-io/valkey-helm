@@ -1,4 +1,3 @@
-{{- if .Values.valkeyConfig }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,6 +5,5 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
 data:
-  valkey.conf: |
-    {{- .Values.valkeyConfig | nindent 4 }}
-{{- end }}
+  valkey.conf: |-
+{{ include "valkey.generateConfig" . | indent 4 }}

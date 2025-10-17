@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-init-scripts
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+data:
+  init.sh: |-
+    #!/bin/sh
+    set -euo pipefail
+
+    # Default config paths
+    VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
+
+    LOGFILE="/data/init.log"
+    DATA_DIR="/data/conf"
+
+    # Logging function
+    log() {
+      echo "$(date) $1" | tee -a "$LOGFILE"
+    }
+
+    # Clean old log if requested
+    if [ "${KEEP_OLD_LOGS:-false}" != "true" ]; then
+      rm -f "$LOGFILE"
+    fi
+
+    if [ -f "$LOGFILE" ]; then
+      log "Detected restart of this instance ($HOSTNAME)"
+    fi
+
+    log "Creating configuration in $DATA_DIR..."
+    mkdir -p "$DATA_DIR"
+    rm -f "$VALKEY_CONFIG" 
+
+ 
+    # Base valkey.conf
+    log "Generating base valkey.conf"
+    {
+      echo "port 6379"
+      echo "protected-mode no"
+      echo "bind 0.0.0.0"
+      echo "dir /data"
+    } >>"$VALKEY_CONFIG"
+
+    {{- if .Values.auth.enabled }}
+    echo "aclfile /data/conf/users.acl" >>"$VALKEY_CONFIG"
+    cat <<EOF > /data/conf/users.acl
+{{ .Values.auth.aclConfig | indent 6 }}
+    EOF
+    {{- end }}
+
+    # Append extra configs if present
+    if [ -f /usr/local/etc/valkey/valkey.conf ]; then
+      log "Appending /usr/local/etc/valkey/valkey.conf"
+      cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONFIG"
+    fi
+    if [ -d /extravalkeyconfigs ]; then
+      log "Appending files in /extravalkeyconfigs/"
+      cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
+    fi
+

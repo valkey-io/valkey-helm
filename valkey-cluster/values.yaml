@@ -1,0 +1,280 @@
+# Number of Valkey pods to run
+# For cluster mode, set this to at least to 6
+replicaCount: 1
+
+global:
+  imageRegistry: ""
+
+existingSecretPasswordKey: ""
+
+existingSecret: ""
+
+# The same values will be used for service creation
+containerPorts:
+  # Port on which Valkey will be exposed
+  valkey: 6379
+  bus: 16379
+
+podDisruptionBudget: {}
+
+podLabels: {}
+
+commonLabels: {}
+
+pdb:
+  create: true
+  minAvailable: ""
+  maxUnavailable: ""
+image:
+  registry: docker.io
+  # Valkey Docker image to use
+  repository: docker.io/valkey/valkey
+  # Image pull policy (Always, IfNotPresent, Never)
+  pullPolicy: IfNotPresent
+  # Image tag (leave empty to use .Chart.AppVersion)
+  tag: ""
+
+# List of image pull secrets (for private registries)
+imagePullSecrets: []
+
+# Override the default name or full name of resources
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Create a service account for Valkey
+  create: true
+  # Whether to automount the service account token
+  automount: false
+  # Annotations to add to the service account
+  annotations: {}
+  # Name of an existing service account to use (if create: false)
+  name: ""
+
+# Annotations and labels for the pods
+podAnnotations: {}
+podLabels: {}
+
+# Security context for the pod (applies to all containers)
+podSecurityContext:
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsGroup: 1000
+
+# Security context for the Valkey containers
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  # Type of Kubernetes service (ClusterIP, NodePort, LoadBalancer)
+  type: ClusterIP
+
+# Network policy to control traffic to the pods
+# More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+networkPolicy: {}
+
+# Resource limits/requests for the main Valkey container
+resources: {}
+  # Example:
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Resource limits/requests for init containers
+initResources: {}
+  # Example:
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Persistent storage configuration
+dataStorage:
+  # Enable persistent volume claim creation
+  enabled: false
+
+  # Use existing PVC by name (skip dynamic provisioning if set)
+  persistentVolumeClaimName: ""
+
+  # Name of the volume (referenced in deployment)
+  volumeName: "valkey-data"
+
+  # Request size (e.g. 5Gi) for dynamically provisioned volume
+  requestedSize: ""
+
+  # Name of the storage class to use
+  className: ""
+
+  # Access modes for the PVC (e.g., ReadWriteOnce, ReadWriteMany)
+  accessModes:
+    - ReadWriteOnce
+
+  # Optional annotations to add to the PVC
+  annotations: {}
+
+  # Optional labels to add to the PVC
+  labels: {}
+
+# Mount additional secrets into the Valkey container
+extraValkeySecrets: []
+
+# Kubernetes lifecycle hooks. 
+# The default includes a preStop script for graceful master node failover in a cluster,
+# ensuring high availability during updates or scaling events.
+# Example of default value: lifecycleHooks: {}
+lifecycleHooks:
+    preStop:
+      exec:
+        command:
+          - /bin/bash
+          - -ec
+          - |
+            #!/bin/bash
+
+            VALKEY_CLI="/usr/local/bin/valkey-cli"
+            HOSTNAME=$(hostname)
+            POD_NAME=${POD_NAME:-$HOSTNAME}
+            VALKEY_PORT=${REDIS_PORT_NUMBER:-6379}
+            AUTH_OPTION=""
+
+            if [ -n "$VALKEYCLI_AUTH" ]; then
+              AUTH_OPTION="-a $VALKEYCLI_AUTH"
+            fi
+
+            # Get current node ID
+            NODE_ID=$($VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT CLUSTER NODES | grep myself | awk '{print $1}')
+
+            # Check if the current node is a master
+            ROLE=$($VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT INFO replication | grep role | awk -F: '{print $2}' | tr -d '\r')
+
+            if [ "$ROLE" == "master" ]; then
+              echo "Current node is a master. Initiating failover..."
+
+              # Get the slave of the current master
+              SLAVE_NODE=$($VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT CLUSTER NODES | grep -v myself | grep slave | grep $NODE_ID | awk '{print $2}' | awk -F@ '{print $1}' | head -n 1)
+
+              if [ -z "$SLAVE_NODE" ]; then
+                echo "No slave found for the current master. Aborting failover."
+                $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT PUBLISH VALKEY-cluster-events "Goodbye from $POD_NAME"
+                $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT SHUTDOWN SAVE
+                exit 1
+              fi
+
+              SLAVE_HOST=$(echo $SLAVE_NODE | awk -F: '{print $1}')
+              SLAVE_PORT=$(echo $SLAVE_NODE | awk -F: '{print $2}')
+
+              # Initiate failover on the slave node
+              $VALKEY_CLI $AUTH_OPTION -h $SLAVE_HOST -p $SLAVE_PORT CLUSTER FAILOVER TAKEOVER
+              echo "Failover command executed on slave $SLAVE_HOST:$SLAVE_PORT."
+
+              # Wait for a few seconds to allow failover to complete
+              echo "Waiting for new master to be promoted..."
+              SUCCESS=false
+              for i in {1..10}; do
+                sleep 2
+                NEW_MASTER=$($VALKEY_CLI $AUTH_OPTION -h $SLAVE_HOST -p $SLAVE_PORT CLUSTER NODES | grep myself | grep master)
+                if [ ! -z "$NEW_MASTER" ]; then
+                  echo "Failover succeeded. New master is $SLAVE_HOST:$SLAVE_PORT."
+                  SUCCESS=true
+                  break
+                fi
+              done
+
+              if [ "$SUCCESS" != "true" ]; then
+                echo "Failover failed. The slave was not promoted to master."
+                $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT PUBLISH VALKEY-cluster-events "Goodbye from $POD_NAME"
+                $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT SHUTDOWN SAVE
+                exit 1
+              fi
+
+              # Broadcast goodbye message
+              $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT PUBLISH VALKEY-cluster-events "Goodbye from $POD_NAME"
+
+              # Gracefully shutdown the current master
+              $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT SHUTDOWN SAVE
+            else
+              echo "Current node is not a master. No failover needed."
+            fi
+
+# Mount additional configMaps into the Valkey container
+extraValkeyConfigs: []
+
+# Mount extra secrets as volume to init container (deprecated, use extraValkeySecrets)
+extraSecretValkeyConfigs: false
+
+# Mount additional emptyDir or hostPath volumes (advanced use)
+extraStorage: []
+
+# Content for valkey.conf (will be mounted via ConfigMap)
+valkeyConfig: ""
+
+auth:
+  # Enable ACL-based authentication
+  enabled: false
+
+  # Default ACL rules (used only if auth.enabled is true)
+  aclConfig: |
+    # Users and permissions can be defined here
+    # Example:
+    # user default off
+    # user default on >defaultpassword ~*  &* +@all 
+
+# Node selector for pod assignment
+nodeSelector: {}
+
+# Tolerations for pod assignment to tainted nodes
+tolerations: []
+
+# Affinity rules for pod scheduling
+affinity: {}
+
+# See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
+topologySpreadConstraints: {}
+
+# Valkey logging level: debug, verbose, notice, warning
+valkeyLogLevel: "notice"
+
+tls:
+  enabled: false
+
+metrics:
+  image:
+    registry: docker.io
+    repository: oliver006/redis_exporter
+    tag: v1.78.0-alpine
+
+  resources: {}
+
+  extraArgs:
+    # Use the redis.addr flag to set the connection string
+    redis.addr: "redis://127.0.0.1:6379"
+    # Use the is-cluster flag to enable cluster mode
+    is-cluster: "true"
+
+  enabled: false
+  service:
+    type: ClusterIP
+    clusterIP: ""
+
+
+  containerPorts:
+    http: 9121
+
+  exporter:
+    # Additional secrets to mount for metrics exporter
+    extraExporterSecrets: []
+
+# Environment variables to inject into Valkey container
+env: {}
+  # Example:
+  # LOG_LEVEL: info
