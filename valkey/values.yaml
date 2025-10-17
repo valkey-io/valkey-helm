@@ -197,11 +197,17 @@ metrics:
 
   # Service configuration for the metrics exporter
   service:
-    enabled: true  # Enable a separate service for the metrics exporter
-    type: ClusterIP  # Service type (ClusterIP, NodePort, LoadBalancer)
+    # Enable a separate service for the metrics exporter
+    enabled: true  
+    # Service type (ClusterIP, NodePort, LoadBalancer)
+    type: ClusterIP  
+    # Port on which the metrics exporter service will be exposed
     ports:
-      http: 9121  # Port on which the metrics exporter service will be exposed
-    annotations: {}  # Optional annotations for the metrics exporter service
+      http: 9121  
+    # Optional annotations for the metrics exporter service
+    annotations: {}  
+    # Optional labels for the metrics exporter service
+    extraLabels: {}  
     # ServiceMonitor configuration for Prometheus Operator
   serviceMonitor:
     # Enable ServiceMonitor resource for scraping service metrics
