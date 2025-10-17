@@ -32,18 +32,29 @@ podLabels: {}
 
 # Security context for the pod (applies to all containers)
 podSecurityContext:
+  enabled: true
   fsGroup: 1000
   runAsUser: 1000
   runAsGroup: 1000
 
 # Security context for the Valkey containers
 securityContext:
+  enabled: true
   capabilities:
     drop:
       - ALL
   readOnlyRootFilesystem: true
   runAsNonRoot: true
   runAsUser: 1000
+
+# Compatibility adaptations for Kubernetes platforms
+compat:
+  # Adaptations for OpenShift
+  openshift:
+    # Adapt the securityContext sections to make them compatible with OpenShift restricted-v2 SCC.
+    # Removes runAsUser, runAsGroup and fsGroup to let the platform use allowed default IDs.
+    # Possible values: auto (detect OpenShift), force (always adapt), disabled (never adapt).
+    adaptSecurityContext: auto
 
 service:
   # Type of Kubernetes service (ClusterIP, NodePort, LoadBalancer)
