@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "valkey.fullname" . }}-cluster-script
+  name: {{ include "valkey-cluster.fullname" . }}-cluster-script
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
+    {{- include "valkey-cluster.labels" . | nindent 4 }}
 data:
   init-cluster.sh: |-
     #!/bin/sh
@@ -24,7 +24,7 @@ data:
     fi
     echo "Auth option: ${AUTH_OPTION}"
     echo "Initializing as ordinal ${ORDINAL}. Total primaries: ${PRIMARIES}, Replicas per primary: ${REPLICA_COUNT}"
-    HEADLESS_SVC="{{ include "valkey.fullname" . }}-headless"
+    HEADLESS_SVC="{{ include "valkey-cluster.fullname" . }}-headless"
     NAMESPACE="{{ .Values.namespace }}"
     MY_IP=$(hostname -i)
 
@@ -39,7 +39,7 @@ data:
     HEALTHY_NODE=""
     for i in $(seq 0 $((REPLICAS - 1))); do
       if [ "${i}" != "${ORDINAL}" ]; then
-        NODE_HOST="{{ include "valkey.fullname" . }}-${i}.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
+        NODE_HOST="{{ include "valkey-cluster.fullname" . }}-${i}.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
         if valkey-cli ${AUTH_OPTION} -h "${NODE_HOST}" -p 6379 cluster info 2>/dev/null | grep -q "cluster_state:ok"; then
           HEALTHY_NODE="${NODE_HOST}"
           echo "Found healthy cluster node: ${HEALTHY_NODE}"
@@ -111,7 +111,7 @@ data:
       echo "This is the primary-0 node, creating a new cluster..."
       NODES=""
       for i in $(seq 0 $((REPLICAS - 1))); do
-        NODE_HOST="{{ include "valkey.fullname" . }}-${i}.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
+        NODE_HOST="{{ include "valkey-cluster.fullname" . }}-${i}.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
         until valkey-cli ${AUTH_OPTION} -h "${NODE_HOST}" -p 6379 ping 2>/dev/null | grep -q "PONG"; do
           echo "Waiting for ${NODE_HOST} to be ready..."
           sleep 2
@@ -124,7 +124,7 @@ data:
       echo "Cluster created successfully."
     else
       echo "Waiting for pod-0 to initialize the cluster..."
-      PRIMARY_HOST="{{ include "valkey.fullname" . }}-0.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
+      PRIMARY_HOST="{{ include "valkey-cluster.fullname" . }}-0.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
       until valkey-cli ${AUTH_OPTION} -h "${PRIMARY_HOST}" -p 6379 cluster info 2>/dev/null | grep -q "cluster_state:ok"; do
         echo "Waiting for cluster to be initialized by pod-0..."
         sleep 5

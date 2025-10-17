@@ -1,7 +1,7 @@
 {{/*
 Return the appropriate apiVersion for poddisruptionbudget.
 */}}
-{{- define "valkey.capabilities.policy.apiVersion" -}}
+{{- define "valkey-cluster.capabilities.policy.apiVersion" -}}
 {{- print "policy/v1" -}}
 {{- end -}}
 
@@ -9,7 +9,7 @@ Return the appropriate apiVersion for poddisruptionbudget.
 Returns a custom namespace from `.Values.namespace` if set, otherwise defaults to
 the release namespace (`.Release.Namespace`).
 */}}
-{{- define "valkey.names.namespace" -}}
+{{- define "valkey-cluster.names.namespace" -}}
 {{- default .Release.Namespace .Values.namespaceOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
@@ -19,7 +19,7 @@ the release namespace (`.Release.Namespace`).
 This allows a value from `values.yaml` to be either static (e.g., `port: 80`)
 or dynamic (e.g., `port: "{{ .Values.global.port }}"`).
 */}}
-{{- define "valkey.tplvalues.render" -}}
+{{- define "valkey-cluster.tplvalues.render" -}}
 {{- $value := typeIs "string" .value | ternary .value (.value | toYaml) }}
 {{- if contains "{{" (toJson .value) }}
   {{- if .scope }}
@@ -40,12 +40,12 @@ The merge order gives precedence to the last item in the list ("last one wins"),
 making it ideal for layering configurations like defaults and overrides.
 
 Usage:
-{{ include "valkey.tplvalues.merge" (dict "values" (list .Values.defaults .Values.overrides) "context" $) }}
+{{ include "valkey-cluster.tplvalues.merge" (dict "values" (list .Values.defaults .Values.overrides) "context" $) }}
 */}}
-{{- define "valkey.tplvalues.merge" -}}
+{{- define "valkey-cluster.tplvalues.merge" -}}
 {{- $dst := dict -}}
 {{- range .values -}}
-{{- $dst = include "valkey.tplvalues.render" (dict "value" . "context" $.context "scope" $.scope) | fromYaml | merge $dst -}}
+{{- $dst = include "valkey-cluster.tplvalues.render" (dict "value" . "context" $.context "scope" $.scope) | fromYaml | merge $dst -}}
 {{- end -}}
 {{ $dst | toYaml }}
 {{- end -}}
@@ -56,8 +56,8 @@ Generates the full image name for the metrics exporter.
 It combines the values from `.Values.metrics.image` with global settings
 (like `.Values.global.imageRegistry`) to create a complete, pullable image name.
 */}}
-{{- define "valkey.metrics.image" -}}
-{{ include "valkey.images.image" (dict "imageRoot" .Values.metrics.image "global" .Values.global) }}
+{{- define "valkey-cluster.metrics.image" -}}
+{{ include "valkey-cluster.images.image" (dict "imageRoot" .Values.metrics.image "global" .Values.global) }}
 {{- end -}}
 
 {{/*
@@ -73,9 +73,9 @@ This helper function constructs the full image identifier by combining a registr
     - If neither is set, it falls back to using the chart's `.Chart.AppVersion` as the tag.
 
 Example Usage:
-{{ include "valkey.images.image" ( dict "imageRoot" .Values.myApp.image "global" .Values.global "chart" .Chart ) }}
+{{ include "valkey-cluster.images.image" ( dict "imageRoot" .Values.myApp.image "global" .Values.global "chart" .Chart ) }}
 */}}
-{{- define "valkey.images.image" -}}
+{{- define "valkey-cluster.images.image" -}}
 {{- $registryName := default .imageRoot.registry .global.imageRegistry -}}
 {{- $repositoryName := .imageRoot.repository -}}
 {{- $separator := ":" -}}
@@ -103,7 +103,7 @@ Generate Valkey configuration.
 - If auth is enabled, it appends the 'requirepass' and 'masterauth' lines.
 - If replicaCount > 1, it appends cluster settings using ports from .Values.containerPorts.
 */}}
-{{- define "valkey.generateConfig" -}}
+{{- define "valkey-cluster.generateConfig" -}}
 {{- $useAuth := false -}}
 {{- if and .Values.existingSecret .Values.existingSecretPasswordKey -}}
   {{- if and (ne .Values.existingSecret "") (ne .Values.existingSecretPasswordKey "") -}}
@@ -129,7 +129,7 @@ cluster-port {{ .Values.containerPorts.bus }}
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "valkey.name" -}}
+{{- define "valkey-cluster.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -138,7 +138,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "valkey.fullname" -}}
+{{- define "valkey-cluster.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -154,16 +154,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "valkey.chart" -}}
+{{- define "valkey-cluster.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "valkey.labels" -}}
-helm.sh/chart: {{ include "valkey.chart" . }}
-{{ include "valkey.selectorLabels" . }}
+{{- define "valkey-cluster.labels" -}}
+helm.sh/chart: {{ include "valkey-cluster.chart" . }}
+{{ include "valkey-cluster.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -173,8 +173,8 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "valkey.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "valkey.name" . }}
+{{- define "valkey-cluster.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "valkey-cluster.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
@@ -182,8 +182,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Standard labels for all resources.
 Merges in custom labels provided via the 'customLabels' dictionary.
 */}}
-{{- define "valkey.standardlabels" -}}
-{{- $standardLabels := include "valkey.labels" .context | fromYaml }}
+{{- define "valkey-cluster.standardlabels" -}}
+{{- $standardLabels := include "valkey-cluster.labels" .context | fromYaml }}
 {{- $customLabels := .customLabels | fromYaml }}
 {{- $merged := merge $customLabels $standardLabels }}
 {{- toYaml $merged }}
@@ -193,8 +193,8 @@ Merges in custom labels provided via the 'customLabels' dictionary.
 Generates selector labels for services and other resources.
 Merges custom labels with the chart's standard selector labels.
 */}}
-{{- define "valkey.matchLabels" -}}
-{{- $selectorLabels := include "valkey.selectorLabels" .context | fromYaml }}
+{{- define "valkey-cluster.matchLabels" -}}
+{{- $selectorLabels := include "valkey-cluster.selectorLabels" .context | fromYaml }}
 {{- $customLabels := .customLabels | fromYaml }}
 {{- $merged := merge $customLabels $selectorLabels }}
 {{- toYaml $merged }}
@@ -203,9 +203,9 @@ Merges custom labels with the chart's standard selector labels.
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "valkey.serviceAccountName" -}}
+{{- define "valkey-cluster.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "valkey.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "valkey-cluster.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
@@ -220,7 +220,7 @@ Creating Image Pull Secrets
 {{- end }}
 {{- end }}
 
-{{- define "valkey.secretName" -}}
+{{- define "valkey-cluster.secretName" -}}
 {{- if .Values.imagePullSecrets.nameOverride }}
 {{- .Values.imagePullSecrets.nameOverride }}
 {{- else }}

@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "valkey.fullname" . }}-init-scripts
+  name: {{ include "valkey-cluster.fullname" . }}-init-scripts
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
+    {{- include "valkey-cluster.labels" . | nindent 4 }}
 data:
   init.sh: |-
     #!/bin/sh

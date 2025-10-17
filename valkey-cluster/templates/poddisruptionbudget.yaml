@@ -1,17 +1,17 @@
 {{- if or .Values.podDisruptionBudget .Values.pdb.create }}
-apiVersion: {{ include "valkey.capabilities.policy.apiVersion" . }}
+apiVersion: {{ include "valkey-cluster.capabilities.policy.apiVersion" . }}
 kind: PodDisruptionBudget
 metadata:
-  name: {{ template "valkey.fullname" . }}
+  name: {{ template "valkey-cluster.fullname" . }}
   namespace: {{ .Release.Namespace | quote }}
   {{- /* FIX: Pass the top-level context '.' directly */}}
-  labels: {{- include "valkey.labels" . | nindent 4 }}
+  labels: {{- include "valkey-cluster.labels" . | nindent 4 }}
   {{- if .Values.valkeyAnnotations }}
-  annotations: {{- include "valkey.tplvalues.render" ( dict "value" .Values.valkeyAnnotations "context" $ ) | nindent 4 }}
+  annotations: {{- include "valkey-cluster.tplvalues.render" ( dict "value" .Values.valkeyAnnotations "context" $ ) | nindent 4 }}
   {{- end }}
 spec:
   {{- if .Values.podDisruptionBudget }}
-  {{- include "valkey.tplvalues.render" (dict "value" .Values.podDisruptionBudget "context" $) | nindent 2 }}
+  {{- include "valkey-cluster.tplvalues.render" (dict "value" .Values.podDisruptionBudget "context" $) | nindent 2 }}
   {{- else }}
   {{- if .Values.pdb.minAvailable }}
   minAvailable: {{ .Values.pdb.minAvailable }}
@@ -21,8 +21,8 @@ spec:
   {{- end  }}
   selector:
     {{- /* FIX: Pass the top-level context '.' directly */}}
-    matchLabels: {{- include "valkey.selectorLabels" . | nindent 6 }}
+    matchLabels: {{- include "valkey-cluster.selectorLabels" . | nindent 6 }}
     matchExpressions:
-      - {key: job-name, operator: NotIn, values: [{{ template "valkey.fullname" . }}-cluster-update]}
+      - {key: job-name, operator: NotIn, values: [{{ template "valkey-cluster.fullname" . }}-cluster-update]}
   {{- end }}
 {{- end }}
