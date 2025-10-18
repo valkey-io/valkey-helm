@@ -41,8 +41,6 @@ A Helm chart for Kubernetes
 | ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
 | ingress.tls | list | `[]` |  |
 | initResources | object | `{}` |  |
-| metrics.enabled | bool | `false` |  |
-| metrics.exporter.extraExporterSecrets | list | `[]` |  |
 | nameOverride | string | `""` |  |
 | networkPolicy | object | `{}` |  |
 | nodeSelector | object | `{}` |  |
