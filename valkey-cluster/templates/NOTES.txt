@@ -1,5 +1,5 @@
 {{/*
-  NOTES for Valkey Helm Chart
+  NOTES for Valkey Cluster Helm Chart
   This file is rendered after `helm install` / `helm upgrade`.
 */}}
 
@@ -34,20 +34,20 @@ Port:         {{ .Values.service.port }}
    $ valkey-cli -h $NODE_IP -p $NODE_PORT PING
 {{ end }}
 
-{{ if .Values.auth.enabled }}
-🔐 Authentication is ENABLED (ACL)
-- Provide the username and password from `.auth.aclConfig`.
+{{ if .Values.existingSecretPasswordKey }}
+🔐 Authentication is ENABLED
+- Provide the username and password
 - Default user:
-  $ valkey-cli -h {{ include "valkey-cluster.fullname" . }} -p {{ .Values.service.port }} -a <password> PING
+  $ valkey-cli -h {{ include "valkey-cluster.fullname" . }}-headless -p {{ .Values.containerPorts.valkey }} -a <password> PING
 - Named user:
-  $ valkey-cli -h {{ include "valkey-cluster.fullname" . }} -p {{ .Values.service.port }} --user <user> -a <password> PING
+  $ valkey-cli -h {{ include "valkey-cluster.fullname" . }}-headless -p {{ .Values.containerPorts.valkey }} --user <user> -a <password> PING
 {{ else }}
 🔓 Authentication is DISABLED
 - Enable with: `--set auth.enabled=true` and provide `.auth.aclConfig`.
 {{ end }}
 
 ✅ Quick test
-$ valkey-cli -h {{ include "valkey-cluster.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
+$ valkey-cli -h {{ include "valkey-cluster.fullname" . }}-headless -p {{ .Values.containerPorts.valkey }}{{ if .Values.existingSecretPasswordKey }} --user <user> -a <password>{{ end }} -c
 valkey> SET foo bar
 valkey> GET foo
 "bar"
