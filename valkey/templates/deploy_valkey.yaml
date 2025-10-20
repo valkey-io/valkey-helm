@@ -132,7 +132,7 @@ spec:
             httpGet:
               path: /
               port: metrics
-          {{- if .Values.metrics.resources }}
+          {{- if .Values.metrics.exporter.resources }}
           resources: {{- toYaml .Values.metrics.exporter.resources | nindent 12 }}
           {{- end }}
           {{- with .Values.metrics.exporter.extraVolumeMounts }}
