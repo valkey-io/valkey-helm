@@ -1,6 +1,6 @@
 # Number of Valkey pods to run
-# For cluster mode, set this to at least to 6
-replicaCount: 1
+# For cluster mode, the number has to be more than 6
+replicaCount: 6
 
 global:
   imageRegistry: ""
