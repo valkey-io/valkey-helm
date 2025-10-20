@@ -1,5 +1,5 @@
 # Number of Valkey pods to run
-replicaCount: 6
+replicaCount: 1
 
 image:
   # Valkey Docker image to use
