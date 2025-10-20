@@ -38,12 +38,15 @@ podSecurityContext:
 
 # Security context for the Valkey containers
 securityContext:
+  allowPrivilegeEscalation: false
   capabilities:
     drop:
       - ALL
   readOnlyRootFilesystem: true
   runAsNonRoot: true
   runAsUser: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
 service:
   # Type of Kubernetes service (ClusterIP, NodePort, LoadBalancer)
