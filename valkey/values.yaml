@@ -181,8 +181,8 @@ metrics:
       #   memory: 128Mi
     # Extra volume mounts for metrics exporter container
     extraVolumeMounts: []
-    # Environment variables to inject into Valkey container
-    extraEnvs: []
+    # Environment variables to inject into the metrics exporter container
+    extraEnvs: {}
     # Example:
     # LOG_LEVEL: info
     securityContext: {}
