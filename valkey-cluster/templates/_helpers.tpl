@@ -10,7 +10,7 @@ Returns a custom namespace from `.Values.namespace` if set, otherwise defaults t
 the release namespace (`.Release.Namespace`).
 */}}
 {{- define "valkey-cluster.names.namespace" -}}
-{{- default .Release.Namespace .Values.namespaceOverride | trunc 63 | trimSuffix "-" -}}
+{{- default .Release.Namespace .Values.namespace | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/* vim: set filetype=mustache: */}}

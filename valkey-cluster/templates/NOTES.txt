@@ -6,7 +6,7 @@
 ⭐ Valkey has been deployed!
 
 Release:      {{ .Release.Name }}
-Namespace:    {{ .Release.Namespace }}
+Namespace:    {{ include "valkey-cluster.names.namespace" . }}
 Chart:        {{ .Chart.Name }} {{ .Chart.Version }}
 App version:  {{ .Chart.AppVersion }}
 
@@ -55,7 +55,7 @@ valkey> GET foo
 {{ if .Values.dataStorage.enabled }}
 💾 Persistence
 - A PVC is enabled. To see it:
-  $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name={{ include "valkey-cluster.name" . }}
+  $ kubectl -n {{ include "valkey-cluster.names.namespace" . }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name={{ include "valkey-cluster.name" . }}
 - Note: `dataStorage.keepPvc={{ .Values.dataStorage.keepPvc }}` controls whether the PVC is kept on uninstall.
 {{ else }}
 💾 Persistence
@@ -64,4 +64,4 @@ valkey> GET foo
 {{ end }}
 
 🧹 Uninstall
-$ helm -n {{ .Release.Namespace }} uninstall {{ .Release.Name }}
+$ helm -n {{ include "valkey-cluster.names.namespace" . }} uninstall {{ .Release.Name }}

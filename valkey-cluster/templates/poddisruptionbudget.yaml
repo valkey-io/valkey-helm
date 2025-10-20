@@ -3,7 +3,7 @@ apiVersion: {{ include "valkey-cluster.capabilities.policy.apiVersion" . }}
 kind: PodDisruptionBudget
 metadata:
   name: {{ template "valkey-cluster.fullname" . }}
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "valkey-cluster.names.namespace" . }}
   {{- /* FIX: Pass the top-level context '.' directly */}}
   labels: {{- include "valkey-cluster.labels" . | nindent 4 }}
   {{- if .Values.valkeyAnnotations }}

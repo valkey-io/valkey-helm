@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "valkey-cluster.fullname" . }}-cluster-script
+  namespace: {{ include "valkey-cluster.names.namespace" . }}
   labels:
     {{- include "valkey-cluster.labels" . | nindent 4 }}
 data:
@@ -25,7 +26,7 @@ data:
     echo "Auth option: ${AUTH_OPTION}"
     echo "Initializing as ordinal ${ORDINAL}. Total primaries: ${PRIMARIES}, Replicas per primary: ${REPLICA_COUNT}"
     HEADLESS_SVC="{{ include "valkey-cluster.fullname" . }}-headless"
-    NAMESPACE="{{ .Values.namespace }}"
+    NAMESPACE="{{ include "valkey-cluster.names.namespace" . }}"
     MY_IP=$(hostname -i)
 
     # Wait for the local Valkey server process to start

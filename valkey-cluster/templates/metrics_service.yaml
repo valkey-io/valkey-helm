@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "valkey-cluster.fullname" . }}-metrics
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "valkey-cluster.names.namespace" . }}
   {{- $labels := include "valkey-cluster.tplvalues.merge" ( dict "values" ( list .Values.metrics.service.labels .Values.commonLabels ) "context" . ) }}
   labels: {{- include "valkey-cluster.standardlabels" ( dict "customLabels" $labels "context" $ ) | nindent 4 }}
     app.kubernetes.io/component: "metrics"

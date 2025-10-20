@@ -3,6 +3,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "valkey-cluster.fullname" $ }}
+  namespace: {{ include "valkey-cluster.names.namespace" $ }}
   {{- with .labels }}
   labels:
     {{- toYaml . | nindent 4 }}

@@ -8,7 +8,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "valkey-cluster.fullname" . }}
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "valkey-cluster.names.namespace" . }}
   labels:
     {{- include "valkey-cluster.labels" . | nindent 4 }}
 spec:
