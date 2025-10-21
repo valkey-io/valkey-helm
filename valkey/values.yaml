@@ -50,6 +50,7 @@ service:
   type: ClusterIP
   # Port on which Valkey will be exposed
   port: 6379
+  annotations: {}
 
 # Network policy to control traffic to the pods
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
