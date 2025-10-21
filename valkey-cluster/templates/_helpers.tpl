@@ -119,9 +119,8 @@ protected-mode yes
 {{- if gt (int .Values.replicaCount) 1 }}
 cluster-enabled yes
 cluster-config-file nodes.conf
-cluster-node-timeout 5000
-cluster-allow-reads-when-down yes
-cluster-port {{ .Values.containerPorts.bus }}
+cluster-preferred-endpoint-type ip
+port {{ .Values.containerPorts.valkey }}
 {{- end }}
 {{- end -}}
 
