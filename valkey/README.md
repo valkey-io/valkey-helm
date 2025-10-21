@@ -43,7 +43,7 @@ A Helm chart for Kubernetes
 | metrics.enabled | bool | `false` |  |
 | metrics.exporter.args | list | `[]` |  |
 | metrics.exporter.command | list | `[]` |  |
-| metrics.exporter.extraEnvs | object | `{}` |  |
+| metrics.exporter.extraEnvs | list | `[]` |  |
 | metrics.exporter.extraVolumeMounts | list | `[]` |  |
 | metrics.exporter.image.pullPolicy | string | `"IfNotPresent"` |  |
 | metrics.exporter.image.repository | string | `"docker.io/oliver006/redis_exporter"` |  |

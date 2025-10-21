@@ -32,7 +32,7 @@ spec:
       {{- if .Values.metrics.podMonitor.metricRelabelings }}
       metricRelabelings: {{- toYaml .Values.metrics.podMonitor.metricRelabelings | nindent 6 }}
       {{- end }}
-  {{- if .Values.metrics.podMonitor.podTargetLabels }}
+  {{- if .Values.metrics.serviceMonitor.podTargetLabels }}
   podTargetLabels: {{- toYaml .Values.metrics.podMonitor.podTargetLabels | nindent 4 }}
   {{- end }}
   {{- with .Values.metrics.podMonitor.sampleLimit -}}

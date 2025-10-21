@@ -117,7 +117,7 @@
                             "type": "array"
                         },
                         "extraEnvs": {
-                            "type": "object"
+                            "type": "array"
                         },
                         "securityContext": {
                             "type": "object"
