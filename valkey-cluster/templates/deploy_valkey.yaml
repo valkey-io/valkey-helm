@@ -85,11 +85,17 @@ spec:
               sed -i "s|{dynamically-substituted-dont-change-manually}|${VALKEY_PASSWORD}|g" {{ $configFile }}
               {{- end }}
 
+              {{- if gt (int .Values.replicaCount) 5 }}
+              echo "\ncluster-announce-ip ${POD_IP}" >> {{ $configFile }}
+              {{- end }}
+
               /cluster-script/init-cluster.sh &
               valkey-server {{ $configFile }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
+            - name: VALKEY_NODES
+              value: "{{ $count := .Values.replicaCount | int }}{{ range $i, $v := until $count }}{{ include "valkey-cluster.fullname" $ }}-{{ $i }}.{{ template "valkey-cluster.fullname" $ }}-headless {{ end }}"
             - name: POD_IP
               valueFrom:
                 fieldRef:
@@ -125,6 +131,9 @@ spec:
           ports:
             - name: tcp
               containerPort: {{ .Values.containerPorts.valkey }}
+              protocol: TCP
+            - name: tcp-redis-bus
+              containerPort: {{ .Values.containerPorts.bus }}
               protocol: TCP
           startupProbe:
             exec:

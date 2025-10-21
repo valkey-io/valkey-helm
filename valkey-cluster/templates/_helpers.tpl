@@ -112,6 +112,7 @@ Generate Valkey configuration.
 {{- end -}}
 {{- .Values.valkeyConfig | nindent 0 }}
 {{- if $useAuth }}
+masterauth {dynamically-substituted-dont-change-manually}
 requirepass {dynamically-substituted-dont-change-manually}
 protected-mode yes
 {{- end }}
@@ -120,8 +121,6 @@ cluster-enabled yes
 cluster-config-file nodes.conf
 cluster-node-timeout 5000
 cluster-allow-reads-when-down yes
-cluster-announce-port {{ .Values.containerPorts.valkey }}
-cluster-announce-bus-port {{ .Values.containerPorts.bus }}
 cluster-port {{ .Values.containerPorts.bus }}
 {{- end }}
 {{- end -}}

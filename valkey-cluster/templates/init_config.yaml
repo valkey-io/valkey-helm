@@ -8,7 +8,7 @@ metadata:
 data:
   init.sh: |-
     #!/bin/sh
-    set -euo pipefail
+    set -eu pipefail
 
     # Default config paths
     VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
