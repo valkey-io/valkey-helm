@@ -70,20 +70,24 @@ data:
       # 3. Find an orphaned master and become its replica
       echo "Searching for a master to replicate..."
 
-      # *** FIX: Get our own node ID first ***
       MY_NODE_ID=$(valkey-cli ${AUTH_OPTION} -h localhost -p 6379 cluster myid)
       echo "My Node ID is ${MY_NODE_ID}"
 
-      # *** FIX: Pass our ID to awk and exclude it from the search ***
+      # This version reads all lines first, then finds a master in the END block
+      # This prevents race conditions from the order of 'cluster nodes' output
       TARGET_MASTER_ID=$(valkey-cli ${AUTH_OPTION} -h "${HEALTHY_NODE}" -p 6379 cluster nodes | awk -v replicas_needed="${REPLICA_COUNT}" -v my_id="${MY_NODE_ID}" '
-        # Count existing replicas for each master
+        # Pass 1: Build maps of masters and replica counts
+        /master/ && !/fail/ { masters[$1] = 1 }
         /slave/ && !/fail/ { master_replicas[$4]++ }
-        # Find a master that needs a replica and is NOT us
-        /master/ && !/fail/ {
-          master_id = $1
-          if ( (master_replicas[master_id] < replicas_needed || master_replicas[master_id] == "") && master_id != my_id ) {
-            print master_id
-            exit
+
+        END {
+          # Pass 2: Iterate over the masters we found
+          for (master_id in masters) {
+            # Check if it needs a replica AND it is not ourself
+            if ( master_id != my_id && (master_replicas[master_id] < replicas_needed || master_replicas[master_id] == "") ) {
+              print master_id
+              exit # Found a suitable master
+            }
           }
         }
       ')
@@ -92,12 +96,10 @@ data:
         echo "Found target master ${TARGET_MASTER_ID} that needs a replica."
         echo "Sending CLUSTER REPLICATE command..."
         
-        # *** FIX: Add proper error handling for the replicate command ***
         if valkey-cli ${AUTH_OPTION} -h localhost -p 6379 cluster replicate "${TARGET_MASTER_ID}"; then
           echo "Successfully configured as a replica for ${TARGET_MASTER_ID}."
         else
           echo "ERROR: Failed to replicate master ${TARGET_MASTER_ID}. Manual intervention required."
-          # Exit with an error code to make the failure visible in Kubernetes
           exit 1
         fi
       else
@@ -106,7 +108,6 @@ data:
       exit 0
     fi
 
-    # --- Fallback: Logic for Initial Cluster Creation ---
     echo "No healthy cluster found. Proceeding with initial creation logic."
     if [ "${ORDINAL}" = "0" ]; then
       echo "This is the primary-0 node, creating a new cluster..."

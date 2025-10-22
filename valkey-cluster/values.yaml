@@ -133,47 +133,51 @@ extraValkeySecrets: []
 # ensuring high availability during updates or scaling events.
 # Example of default value: lifecycleHooks: {}
 lifecycleHooks:
-    preStop:
-      exec:
-        command:
-          - /bin/bash
-          - -ec
-          - |
-            #!/bin/bash
+  preStop:
+    exec:
+      command:
+        - /bin/bash
+        - -ec
+        - |
+          #!/bin/bash
 
-            VALKEY_CLI="/usr/local/bin/valkey-cli"
-            HOSTNAME=$(hostname)
-            POD_NAME=${POD_NAME:-$HOSTNAME}
-            VALKEY_PORT=${REDIS_PORT_NUMBER:-6379}
-            AUTH_OPTION=""
+          VALKEY_CLI="/usr/local/bin/valkey-cli"
+          HOSTNAME=$(hostname)
+          POD_NAME=${POD_NAME:-$HOSTNAME}
+          VALKEY_PORT=${REDIS_PORT_NUMBER:-6379}
+          AUTH_OPTION=""
 
-            if [ -n "$VALKEYCLI_AUTH" ]; then
-              AUTH_OPTION="-a $VALKEYCLI_AUTH"
-            fi
+          if [ -n "$VALKEYCLI_AUTH" ]; then
+            AUTH_OPTION="-a $VALKEYCLI_AUTH"
+          fi
 
-            # Get current node ID
-            NODE_ID=$($VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT CLUSTER NODES | grep myself | awk '{print $1}')
+          # Get current node ID
+          NODE_ID=$($VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT CLUSTER NODES | grep myself | awk '{print $1}')
+          
+          if [ -z "$NODE_ID" ]; then
+            echo "Could not get NODE_ID. Shutting down forcefully."
+            exit 0 # Exit gracefully so Kubernetes terminates the pod
+          fi
 
-            # Check if the current node is a master
-            ROLE=$($VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT INFO replication | grep role | awk -F: '{print $2}' | tr -d '\r')
+          # Check if the current node is a master
+          ROLE=$($VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT INFO replication | grep role | awk -F: '{print $2}' | tr -d '\r')
 
-            if [ "$ROLE" == "master" ]; then
-              echo "Current node is a master. Initiating failover..."
+          if [ "$ROLE" == "master" ]; then
+            echo "Current node is a master. Initiating failover..."
 
-              # Get the slave of the current master
-              SLAVE_NODE=$($VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT CLUSTER NODES | grep -v myself | grep slave | grep $NODE_ID | awk '{print $2}' | awk -F@ '{print $1}' | head -n 1)
+            # Get the slave of the current master
+            SLAVE_NODE=$($VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT CLUSTER NODES | grep -v myself | grep slave | grep $NODE_ID | awk '{print $2}' | awk -F@ '{print $1}' | head -n 1)
 
-              if [ -z "$SLAVE_NODE" ]; then
-                echo "No slave found for the current master. Aborting failover."
-                $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT PUBLISH VALKEY-cluster-events "Goodbye from $POD_NAME"
-                $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT SHUTDOWN SAVE
-                exit 1
-              fi
-
+            if [ -z "$SLAVE_NODE" ]; then
+              echo "No slave found for the current master. Aborting failover."
+              # No failover possible, just publish and prepare to be forgotten
+              $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT PUBLISH VALKEY-cluster-events "Goodbye from $POD_NAME (master, no slave)"
+            else
               SLAVE_HOST=$(echo $SLAVE_NODE | awk -F: '{print $1}')
               SLAVE_PORT=$(echo $SLAVE_NODE | awk -F: '{print $2}')
 
               # Initiate failover on the slave node
+              echo "Issuing CLUSTER FAILOVER TAKEOVER to $SLAVE_HOST:$SLAVE_PORT"
               $VALKEY_CLI $AUTH_OPTION -h $SLAVE_HOST -p $SLAVE_PORT CLUSTER FAILOVER TAKEOVER
               echo "Failover command executed on slave $SLAVE_HOST:$SLAVE_PORT."
 
@@ -192,19 +196,41 @@ lifecycleHooks:
 
               if [ "$SUCCESS" != "true" ]; then
                 echo "Failover failed. The slave was not promoted to master."
-                $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT PUBLISH VALKEY-cluster-events "Goodbye from $POD_NAME"
-                $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT SHUTDOWN SAVE
-                exit 1
               fi
-
-              # Broadcast goodbye message
-              $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT PUBLISH VALKEY-cluster-events "Goodbye from $POD_NAME"
-
-              # Gracefully shutdown the current master
-              $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT SHUTDOWN SAVE
-            else
-              echo "Current node is not a master. No failover needed."
             fi
+            
+          else
+            echo "Current node is a slave. No failover needed."
+          fi
+
+          # This runs for both masters (after failover attempt) and slaves.
+          
+          echo "Telling all other nodes to forget this node ($NODE_ID)..."
+          
+          # Get all nodes *except* myself
+          OTHER_NODES=$($VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT CLUSTER NODES | grep -v myself | awk '{print $2}' | awk -F@ '{print $1}')
+
+          for node in $OTHER_NODES; do
+            HOST=$(echo $node | awk -F: '{print $1}')
+            PORT=$(echo $node | awk -F: '{print $2}')
+            
+            echo "Telling $HOST:$PORT to forget node $NODE_ID"
+            # Run in background to speed it up. We don't need to wait for a reply.
+            $VALKEY_CLI $AUTH_OPTION -h $HOST -p $PORT CLUSTER FORGET $NODE_ID &
+          done
+
+          echo "Waiting for forget commands to be sent..."
+          wait # Wait for all backgrounded CLUSTER FORGET commands to finish
+          
+          # Give gossip a moment
+          sleep 2
+
+          # Broadcast goodbye message
+          $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT PUBLISH VALKEY-cluster-events "Goodbye from $POD_NAME"
+
+          # Gracefully shutdown the current node
+          echo "Gracefully shutting down..."
+          $VALKEY_CLI $AUTH_OPTION -p $VALKEY_PORT SHUTDOWN SAVE
 
 # Mount additional configMaps into the Valkey container
 extraValkeyConfigs: []
