@@ -36,8 +36,8 @@ Common labels
 {{- define "valkey.labels" -}}
 helm.sh/chart: {{ include "valkey.chart" . }}
 {{ include "valkey.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- if or .Values.image.tag .Chart.AppVersion }}
+app.kubernetes.io/version: {{ mustRegexReplaceAllLiteral "@sha.*" .Values.image.tag "" | default .Chart.AppVersion | trunc 63 | trimSuffix "-" | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
