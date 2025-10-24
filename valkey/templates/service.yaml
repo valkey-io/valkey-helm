@@ -15,5 +15,8 @@ spec:
       targetPort: tcp
       protocol: TCP
       name: tcp
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
   selector:
     {{- include "valkey.selectorLabels" . | nindent 4 }}

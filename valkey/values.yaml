@@ -51,6 +51,8 @@ service:
   # Port on which Valkey will be exposed
   port: 6379
   annotations: {}
+  # NodePort value (if service.type is NodePort)
+  nodePort: 0
 
 # Network policy to control traffic to the pods
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
