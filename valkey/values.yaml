@@ -147,7 +147,7 @@ affinity: {}
 deploymentStrategy: RollingUpdate
 
 # See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
-topologySpreadConstraints: {}
+topologySpreadConstraints: []
 
 # Valkey logging level: debug, verbose, notice, warning
 valkeyLogLevel: "notice"

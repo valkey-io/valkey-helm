@@ -204,7 +204,10 @@
             "type": "array"
         },
         "topologySpreadConstraints": {
-            "type": "object"
+            "type": "array",
+            "items": {
+                "type": "object"
+            }
         },
         "valkeyConfig": {
             "type": "string"
