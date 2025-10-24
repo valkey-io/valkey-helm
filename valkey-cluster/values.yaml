@@ -28,11 +28,11 @@ pdb:
 image:
   registry: docker.io
   # Valkey Docker image to use
-  repository: docker.io/valkey/valkey
+  repository: valkey/valkey
   # Image pull policy (Always, IfNotPresent, Never)
   pullPolicy: IfNotPresent
   # Image tag (leave empty to use .Chart.AppVersion)
-  tag: ""
+  tag: "8.1.4"
 
 # List of image pull secrets (for private registries)
 imagePullSecrets: []
