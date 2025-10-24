@@ -34,6 +34,7 @@ This minimum of 6 nodes typically represents:
 | dataStorage.persistentVolumeClaimName | string | `nil` |  |
 | dataStorage.requestedSize | string | `nil` |  |
 | dataStorage.volumeName | string | `"valkey-data"` |  |
+| extraInitContainers | list | `[]` |  |
 | env | object | `{}` |  |
 | existingSecret | string | `""` |  |
 | existingSecretPasswordKey | string | `""` |  |

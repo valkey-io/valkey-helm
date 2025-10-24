@@ -17,7 +17,7 @@ containerPorts:
 
 podDisruptionBudget: {}
 
-podLabels: {}
+valkeyAnnotations: {}
 
 commonLabels: {}
 
@@ -235,6 +235,8 @@ lifecycleHooks:
 # Mount additional configMaps into the Valkey container
 extraValkeyConfigs: []
 
+extraInitContainers: []
+
 # Mount extra secrets as volume to init container (deprecated, use extraValkeySecrets)
 extraSecretValkeyConfigs: false
 
@@ -291,6 +293,7 @@ metrics:
   service:
     type: ClusterIP
     clusterIP: ""
+    labels: {}
 
 
   containerPorts:

@@ -120,6 +120,7 @@ data:
         done
         NODES="${NODES} ${NODE_HOST}:6379"
       done
+      sleep 6
 
       echo "Creating cluster with nodes: ${NODES}"
       echo "yes" | valkey-cli ${AUTH_OPTION} --cluster create ${NODES} --cluster-replicas "${REPLICA_COUNT}"

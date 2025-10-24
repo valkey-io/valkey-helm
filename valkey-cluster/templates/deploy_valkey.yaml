@@ -1,7 +1,7 @@
 {{- $fullname := include "valkey-cluster.fullname" . }}
 {{- $storage := .Values.dataStorage }}
 {{- $useExistingPVC := and $storage.enabled (not (empty $storage.persistentVolumeClaimName)) }}
-{{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}{{- $useConfigMap := or (not (empty .Values.valkeyConfig)) (gt (int .Values.replicaCount) 1) -}}
+{{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}{{- $useConfigMap := or (not (empty .Values.valkeyConfig | default "")) (gt (int .Values.replicaCount) 1) -}}
 {{- $configFile := "/data/conf/valkey.conf" -}}
 
 apiVersion: apps/v1
@@ -195,7 +195,7 @@ spec:
             - name: http-metrics
               containerPort: {{ .Values.metrics.containerPorts.http }}
           {{- if .Values.metrics.resources }}
-          resources: {{- toYaml .Values.metrics.resources | nindent 12 }}}
+          resources: {{- toYaml .Values.metrics.resources | nindent 12 }}
           {{- end }}
         {{- end }}
 

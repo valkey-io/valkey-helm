@@ -31,7 +31,7 @@ To deploy the cluster mode using the local chart files:
 
 ```bash
 # Navigate to the directory containing the chart
-cd fork_valkey_helm/valkey-helm
+cd ./valkey-helm
 
 # Install the chart from local files
 helm install valkey-cluster ./valkey-cluster
@@ -41,7 +41,7 @@ helm install valkey-cluster ./valkey-cluster
 You can customize the installation by providing values:
 
 ```bash
-helm install valkey-cluster ./valkey-cluster --values my-values.yaml
+helm install valkey-cluster ./valkey-cluster -f my-values.yaml
 ```
 
 Cluster mode features:
