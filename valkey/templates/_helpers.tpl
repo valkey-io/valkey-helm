@@ -78,3 +78,31 @@ Creating Image Pull Secrets
 {{- end }}
 {{- end }}
 
+{{/*
+Detect if running on OpenShift by checking for the security.openshift.io/v1 API
+*/}}
+{{- define "valkey.compat.isOpenshift" -}}
+{{- if .Capabilities.APIVersions.Has "security.openshift.io/v1" -}}
+{{- true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Render a securityContext that is compatible with the target
+Returns nothing if the resulting map is empty after adaptation
+*/}}
+{{- define "valkey.compat.renderSecurityContext" -}}
+{{- $adaptedContext := .secContext -}}
+{{- if (((.context.Values).compat).openshift) -}}
+  {{- if or (eq .context.Values.compat.openshift.adaptSecurityContext "force") (and (eq .context.Values.compat.openshift.adaptSecurityContext "auto") (include "valkey.compat.isOpenshift" .context)) -}}
+    {{- $adaptedContext = omit $adaptedContext "fsGroup" "runAsUser" "runAsGroup" -}}
+    {{- if not .secContext.seLinuxOptions -}}
+      {{- $adaptedContext = omit $adaptedContext "seLinuxOptions" -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $final := omit $adaptedContext "enabled" -}}
+{{- if gt (len $final) 0 -}}
+{{- $final | toYaml -}}
+{{- end -}}
+{{- end -}}
