@@ -36,7 +36,7 @@ spec:
       
       initContainers:
         - name: {{ .Chart.Name }}-init
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.securityContext }}
           securityContext:
@@ -132,7 +132,7 @@ spec:
             httpGet:
               path: /
               port: metrics
-          {{- if .Values.metrics.resources }}
+          {{- if .Values.metrics.exporter.resources }}
           resources: {{- toYaml .Values.metrics.exporter.resources | nindent 12 }}
           {{- end }}
           {{- with .Values.metrics.exporter.extraVolumeMounts }}

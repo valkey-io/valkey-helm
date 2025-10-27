@@ -166,11 +166,11 @@ metrics:
     # Image configuration
     image:
       # Prometheus exporter Docker image
-      repository: docker.io/oliver006/redis_exporter
+      repository: ghcr.io/oliver006/redis_exporter
       # Image pull policy (Always, IfNotPresent, Never)
       pullPolicy: IfNotPresent
       # Image tag (leave empty to use latest)
-      tag: "v1.78.0"
+      tag: "v1.79.0"
     resources: {}
       # Example:
       # limits:
@@ -181,7 +181,7 @@ metrics:
       #   memory: 128Mi
     # Extra volume mounts for metrics exporter container
     extraVolumeMounts: []
-    # Environment variables to inject into Valkey container
+    # Environment variables to inject into the metrics exporter container
     extraEnvs: []
     # Example:
     # LOG_LEVEL: info
