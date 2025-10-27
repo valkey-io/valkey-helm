@@ -182,7 +182,7 @@ metrics:
     # Extra volume mounts for metrics exporter container
     extraVolumeMounts: []
     # Environment variables to inject into the metrics exporter container
-    extraEnvs: []
+    extraEnvs: {}
     # Example:
     # LOG_LEVEL: info
     securityContext: {}
@@ -264,46 +264,46 @@ metrics:
     # Maximum number of pods to scrape
     targetLimit: false
 
-    # PrometheusRule configuration for alerting rules (used by kube-prometheus-stack)
-    prometheusRule:
-      # Enable creation of PrometheusRule resource
-      enabled: false
-      # Extra labels to add to the PrometheusRule resource
-      extraLabels: {}
-      # Extra annotations to add to the PrometheusRule resource
-      extraAnnotations: {}
-      # List of Prometheus alerting rules
-      rules: []
+  # PrometheusRule configuration for alerting rules (used by kube-prometheus-stack)
+  prometheusRule:
+    # Enable creation of PrometheusRule resource
+    enabled: false
+    # Extra labels to add to the PrometheusRule resource
+    extraLabels: {}
+    # Extra annotations to add to the PrometheusRule resource
+    extraAnnotations: {}
+    # List of Prometheus alerting rules
+    rules: []
     # Example alerting rules:
-      # - alert: ValkeyDown
-      #   annotations:
-      #     summary: Valkey instance {{ "{{ $labels.instance }}" }} down
-      #     description: Valkey instance {{ "{{ $labels.instance }}" }} is down.
-      #   expr: |
-      #     redis_up{service="{{ include "valkey.fullname" . }}-metrics"} == 0
-      #   for: 2m
-      #   labels:
-      #     severity: error
-      # - alert: ValkeyMemoryHigh
-      #   annotations:
-      #     summary: Valkey instance {{ "{{ $labels.instance }}" }} is using too much memory
-      #     description: |
-      #        Valkey instance {{ "{{ $labels.instance }}" }} is using {{ "{{ $value }}" }}% of its available memory.
-      #   expr: |
-      #      redis_memory_used_bytes{service="{{ include "valkey.fullname" . }}-metrics"} * 100
-      #      /
-      #      redis_memory_max_bytes{service="{{ include "valkey.fullname" . }}-metrics"}
-      #      > 90 <= 100
-      #   for: 2m
-      #   labels:
-      #     severity: error
-      # - alert: ValkeyKeyEviction
-      #   annotations:
-      #     summary: Valkey instance {{ "{{ $labels.instance }}" }} has evicted keys
-      #     description: |
-      #        Valkey instance {{ "{{ $labels.instance }}" }} has evicted {{ "{{ $value }}" }} keys in the last 5 minutes.
-      #   expr: |
-      #     increase(redis_evicted_keys_total{service="{{ include "valkey.fullname" . }}-metrics"}[5m]) > 0
-      #   for: 1s
-      #   labels:
-      #     severity: error
+    # - alert: ValkeyDown
+    #   annotations:
+    #     summary: Valkey instance {{ "{{ $labels.instance }}" }} down
+    #     description: Valkey instance {{ "{{ $labels.instance }}" }} is down.
+    #   expr: |
+    #     redis_up{service="{{ include "valkey.fullname" . }}-metrics"} == 0
+    #   for: 2m
+    #   labels:
+    #     severity: error
+    # - alert: ValkeyMemoryHigh
+    #   annotations:
+    #     summary: Valkey instance {{ "{{ $labels.instance }}" }} is using too much memory
+    #     description: |
+    #        Valkey instance {{ "{{ $labels.instance }}" }} is using {{ "{{ $value }}" }}% of its available memory.
+    #   expr: |
+    #      redis_memory_used_bytes{service="{{ include "valkey.fullname" . }}-metrics"} * 100
+    #      /
+    #      redis_memory_max_bytes{service="{{ include "valkey.fullname" . }}-metrics"}
+    #      > 90 <= 100
+    #   for: 2m
+    #   labels:
+    #     severity: error
+    # - alert: ValkeyKeyEviction
+    #   annotations:
+    #     summary: Valkey instance {{ "{{ $labels.instance }}" }} has evicted keys
+    #     description: |
+    #        Valkey instance {{ "{{ $labels.instance }}" }} has evicted {{ "{{ $value }}" }} keys in the last 5 minutes.
+    #   expr: |
+    #     increase(redis_evicted_keys_total{service="{{ include "valkey.fullname" . }}-metrics"}[5m]) > 0
+    #   for: 1s
+    #   labels:
+    #     severity: error
