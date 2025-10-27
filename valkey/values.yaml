@@ -1,166 +1,206 @@
-# Number of Valkey pods to run
-replicaCount: 1
+# Number of Valkey replicas (minimum 3 for sentinel mode)
+replicaCount: 3
+
+standalone:
+  enabled: true
+
+sentinel:
+  enabled: false
+
+  # Sentinel port
+  port: 26379
+
+  # Quorum: number of Sentinels that must agree primary is down
+  # Recommendation: (replicas / 2) + 1
+  quorum: 2
+
+  # Time before instance considered down (milliseconds)
+  downAfterMilliseconds: 30000
+
+  # Failover timeout in milliseconds
+  failoverTimeout: 180000
+
+  # Number of replicas syncing simultaneously during failover
+  parallelSyncs: 1
+
+  # Sentinel authentication (recommended for production)
+  auth:
+    enabled: true
+    password: "SuperSecret1"  # Use same password as Valkey for simplicity
+    existingSecret: ""
+    existingSecretPasswordKey: "sentinel-password"
+
+  # Sentinel resources
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # Sentinel pod anti-affinity (spread across nodes)
+  antiAffinity:
+    enabled: true
+    type: hard  # hard or soft
+    topologyKey: kubernetes.io/hostname
+
+replication:
+  # Replica configuration
+  readOnly: true
+
+  # Write safety: minimum replicas that must be connected
+  # for primary to accept writes
+  minReplicas:
+    toWrite: 1
+    maxLag: 10  # seconds
+
+  # Replication behavior
+  disklessSync: true
+  disklessSyncDelay: 5  # seconds
+
+  # Valkey pod anti-affinity (spread across nodes)
+  antiAffinity:
+    enabled: true
+    type: hard  # hard or soft
+    topologyKey: kubernetes.io/hostname
+
+networkPolicy:
+  enabled: true
+  ingress:
+    # Allow all traffic from same namespace to Valkey and Sentinel ports
+    - from:
+      - podSelector: {}
+      ports:
+      - protocol: TCP
+        port: 6379
+      - protocol: TCP
+        port: 26379
 
 image:
-  # Valkey Docker image to use
   repository: docker.io/valkey/valkey
-  # Image pull policy (Always, IfNotPresent, Never)
   pullPolicy: IfNotPresent
-  # Image tag (leave empty to use .Chart.AppVersion)
-  tag: ""
-
-# List of image pull secrets (for private registries)
-imagePullSecrets: []
-
-# Override the default name or full name of resources
-nameOverride: ""
-fullnameOverride: ""
-
-serviceAccount:
-  # Create a service account for Valkey
-  create: true
-  # Whether to automount the service account token
-  automount: false
-  # Annotations to add to the service account
-  annotations: {}
-  # Name of an existing service account to use (if create: false)
-  name: ""
-
-# Annotations and labels for the pods
-podAnnotations: {}
-podLabels: {}
-
-# Security context for the pod (applies to all containers)
-podSecurityContext:
-  fsGroup: 1000
-  runAsUser: 1000
-  runAsGroup: 1000
-
-# Security context for the Valkey containers
-securityContext:
-  capabilities:
-    drop:
-      - ALL
-  readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 1000
+  tag: ""  # Uses chart appVersion
 
 service:
-  # Type of Kubernetes service (ClusterIP, NodePort, LoadBalancer)
   type: ClusterIP
-  # Port on which Valkey will be exposed
   port: 6379
-  annotations: {}
-  # NodePort value (if service.type is NodePort)
   nodePort: 0
-
-# Network policy to control traffic to the pods
-# More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
-networkPolicy: {}
-
-# Resource limits/requests for the main Valkey container
-resources: {}
-  # Example:
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-# Resource limits/requests for init containers
-initResources: {}
-  # Example:
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-# Persistent storage configuration
-dataStorage:
-  # Enable persistent volume claim creation
-  enabled: false
-
-  # Use existing PVC by name (skip dynamic provisioning if set)
-  persistentVolumeClaimName: ""
-
-  # Name of the volume (referenced in deployment)
-  volumeName: "valkey-data"
-
-  # Request size (e.g. 5Gi) for dynamically provisioned volume
-  requestedSize: ""
-
-  # Name of the storage class to use
-  className: ""
-
-  # Access modes for the PVC (e.g., ReadWriteOnce, ReadWriteMany)
-  accessModes:
-    - ReadWriteOnce
-
-  # If true, keep the PVC on Helm uninstall
-  keepPvc: false
-
-  # Optional annotations to add to the PVC
   annotations: {}
-
-  # Optional labels to add to the PVC
   labels: {}
 
-# Mount additional secrets into the Valkey container
-extraValkeySecrets: []
-
-# Mount additional configMaps into the Valkey container
-extraValkeyConfigs: []
-
-# Mount extra secrets as volume to init container (deprecated, use extraValkeySecrets)
-extraSecretValkeyConfigs: false
-
-# Mount additional emptyDir or hostPath volumes (advanced use)
-extraStorage: []
-
-# Content for valkey.conf (will be mounted via ConfigMap)
-valkeyConfig: ""
+dataStorage:
+  enabled: true
+  className: ""
+  requestedSize: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  # Keep PVCs on deletion for data safety
+  keepPvc: true
+  # Sentinel storage size
+  sentinelSize: 1Gi
 
 auth:
-  # Enable ACL-based authentication
-  enabled: false
+  enabled: true
+  password: "SuperSecret1"
+  # For production, use existingSecret instead of password
+  existingSecret: ""
+  existingSecretPasswordKey: "password"
 
-  # Default ACL rules (used only if auth.enabled is true)
+  # Default ACL rules (legacy - used only if auth.enabled is true)
   aclConfig: |
     # Users and permissions can be defined here
     # Example:
     # user default off
-    # user default on >defaultpassword ~*  &* +@all 
+    # user default on >defaultpassword ~*  &* +@all
 
-# Node selector for pod assignment
-nodeSelector: {}
-
-# Tolerations for pod assignment to tainted nodes
-tolerations: []
-
-# Affinity rules for pod scheduling
-affinity: {}
-
-# Set Deployment strategy. See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
-deploymentStrategy: RollingUpdate
-
-# See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
-topologySpreadConstraints: []
-
-# Valkey logging level: debug, verbose, notice, warning
-valkeyLogLevel: "notice"
+# Resources for Valkey data nodes
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
 
 metrics:
-  # Enable Prometheus exporter sidecar
-  enabled: false
+  enabled: true
 
   exporter:
-    # Additional secrets to mount for metrics exporter
-    extraExporterSecrets: []
+    resources:
+      limits:
+        cpu: 50m
+        memory: 64Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
 
-# Environment variables to inject into Valkey container
-env: {}
-  # Example:
-  # LOG_LEVEL: info
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+  # maxUnavailable: 1
+
+backup:
+  # Enable automated backups
+  enabled: false
+
+  # Hourly backups
+  schedule: "0 * * * *"
+
+  # Retention policy: keep last N backups
+  # With hourly backups, 240 = 10 days of history
+  # Adjust based on your storage capacity
+  retention:
+    hourly: 96  # Keep last 96 backups (3 days with hourly schedule)
+
+  # S3/MinIO storage configuration
+  storage:
+    type: s3  # or "minio" for MinIO
+
+    s3:
+      # Bucket name (required)
+      bucket: "valkey-backups"
+
+      # Region (for AWS S3)
+      region: "us-east-1"
+
+      # MinIO endpoint (leave empty for AWS S3)
+      # Example: "https://minio.example.com" or "http://minio:9000"
+      endpoint: ""
+
+      # Path within bucket
+      prefix: "production/valkey/"
+
+      # Use path-style addressing (required for MinIO)
+      pathStyle: false
+
+      # Credentials via existing Secret (recommended)
+      # Create secret with: kubectl create secret generic s3-backup-creds \
+      #   --from-literal=access-key-id=AKIAIOSFODNN7EXAMPLE \
+      #   --from-literal=secret-access-key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+      existingSecret: "s3-backup-creds"
+
+      # Or specify credentials directly (not recommended for production)
+      # accessKeyId: ""
+      # secretAccessKey: ""
+
+  # Compression (enabled by default)
+  compression:
+    enabled: true
+    level: 6
+
+  # Resources for backup job
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Add custom valkey.conf directives here
+valkeyConfig: ""

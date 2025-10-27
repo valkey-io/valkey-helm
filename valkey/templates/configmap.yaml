@@ -9,3 +9,109 @@ data:
   valkey.conf: |
     {{- .Values.valkeyConfig | nindent 4 }}
 {{- end }}
+---
+{{- if .Values.sentinel.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-valkey-base-config
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+data:
+  valkey.conf: |
+    # Network
+    port 6379
+    bind 0.0.0.0
+    protected-mode no
+
+    # Directories
+    dir /data
+
+    # Logging
+    loglevel {{ .Values.logging.level }}
+    logfile ""
+
+    # Slowlog
+    slowlog-log-slower-than {{ .Values.logging.slowlogLogSlowerThan }}
+    slowlog-max-len {{ .Values.logging.slowlogMaxLen }}
+
+    {{- if .Values.persistence.enabled }}
+    # Persistence
+    save 900 1
+    save 300 10
+    save 60 10000
+    appendonly yes
+    appendfsync everysec
+    {{- end }}
+
+    {{- if .Values.auth.enabled }}
+    # Authentication
+    {{- if .Values.auth.existingSecret }}
+    requirepass "PLACEHOLDER"
+    masterauth "PLACEHOLDER"
+    {{- else }}
+    requirepass {{ .Values.auth.password | quote }}
+    masterauth {{ .Values.auth.password | quote }}
+    {{- end }}
+    {{- end }}
+
+    # Replication
+    replica-read-only {{ if .Values.replication.readOnly }}yes{{ else }}no{{ end }}
+    min-replicas-to-write {{ .Values.replication.minReplicas.toWrite }}
+    min-replicas-max-lag {{ .Values.replication.minReplicas.maxLag }}
+
+    {{- if .Values.replication.disklessSync }}
+    repl-diskless-sync yes
+    repl-diskless-sync-delay {{ .Values.replication.disklessSyncDelay }}
+    {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-sentinel-base-config
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sentinel
+data:
+  sentinel.conf: |
+    # Sentinel port
+    port 26379
+    bind 0.0.0.0
+
+    # Monitoring
+    # Note: Primary host will be resolved to IP by init script
+    sentinel monitor {{ include "valkey.fullname" . }} PRIMARY_HOST_PLACEHOLDER 6379 {{ .Values.sentinel.quorum }}
+
+    # Timings
+    sentinel down-after-milliseconds {{ include "valkey.fullname" . }} {{ .Values.sentinel.downAfterMilliseconds }}
+    sentinel failover-timeout {{ include "valkey.fullname" . }} {{ .Values.sentinel.failoverTimeout }}
+    sentinel parallel-syncs {{ include "valkey.fullname" . }} {{ .Values.sentinel.parallelSyncs }}
+
+    {{- if .Values.auth.enabled }}
+    # Valkey authentication
+    {{- if .Values.auth.existingSecret }}
+    sentinel auth-pass {{ include "valkey.fullname" . }} "PLACEHOLDER"
+    {{- else }}
+    sentinel auth-pass {{ include "valkey.fullname" . }} {{ .Values.auth.password | quote }}
+    {{- end }}
+    {{- end }}
+
+    {{- if .Values.sentinel.auth.enabled }}
+    # Sentinel authentication
+    {{- if .Values.sentinel.auth.existingSecret }}
+    requirepass "PLACEHOLDER"
+    {{- else }}
+    requirepass {{ .Values.sentinel.auth.password | quote }}
+    {{- end }}
+    {{- end }}
+
+    # Logging
+    loglevel {{ .Values.logging.level }}
+    logfile ""
+
+    {{- if .Values.sentinel.customConfig }}
+    # Custom configuration
+    {{ .Values.sentinel.customConfig | nindent 4 }}
+    {{- end }}
+{{- end }}

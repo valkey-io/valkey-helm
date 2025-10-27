@@ -5,6 +5,7 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
 data:
+  {{- if .Values.standalone.enabled }}
   init.sh: |-
     #!/bin/sh
     set -euo pipefail
@@ -31,9 +32,8 @@ data:
 
     log "Creating configuration in $DATA_DIR..."
     mkdir -p "$DATA_DIR"
-    rm -f "$VALKEY_CONFIG" 
+    rm -f "$VALKEY_CONFIG"
 
- 
     # Base valkey.conf
     log "Generating base valkey.conf"
     {
@@ -59,4 +59,88 @@ data:
       log "Appending files in /extravalkeyconfigs/"
       cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
     fi
+  {{- end }}
+
+  {{- if .Values.sentinel.enabled }}
+  init-valkey.sh: |-
+    #!/bin/bash
+    set -euo pipefail
+
+    HOSTNAME=$(hostname)
+    POD_INDEX=${HOSTNAME##*-}
+    PRIMARY_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.fullname" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local"
+
+    echo "Initializing Valkey on $HOSTNAME (pod index: $POD_INDEX)"
+
+    # Copy base config
+    cp /config-base/valkey.conf /data/valkey.conf
+
+    # Determine role and configure replication
+    if [ "$POD_INDEX" = "0" ]; then
+      echo "Configured as INITIAL PRIMARY"
+    else
+      echo "Configured as REPLICA of $PRIMARY_HOST"
+      echo "replicaof $PRIMARY_HOST 6379" >> /data/valkey.conf
+    fi
+
+    # Kubernetes announcements
+    ANNOUNCE_IP=$(hostname -i)
+    cat <<EOF >> /data/valkey.conf
+    replica-announce-ip $ANNOUNCE_IP
+    replica-announce-port 6379
+    EOF
+
+    {{- if .Values.valkeyConfig }}
+    # Custom config
+    cat <<'CUSTOM_EOF' >> /data/valkey.conf
+    {{ .Values.valkeyConfig }}
+    CUSTOM_EOF
+    {{- end }}
+
+    echo "Valkey configuration complete"
+
+  init-sentinel.sh: |-
+    #!/bin/bash
+    set -euo pipefail
+
+    HOSTNAME=$(hostname)
+    PRIMARY_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.fullname" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local"
+
+    echo "Initializing Sentinel on $HOSTNAME"
+
+    # Copy base config
+    cp /config-base/sentinel.conf /data/sentinel.conf
+
+    # Resolve primary host to IP (required for Sentinel to start)
+    echo "Resolving primary host: $PRIMARY_HOST"
+    PRIMARY_IP=""
+    for i in {1..30}; do
+      PRIMARY_IP=$(getent hosts "$PRIMARY_HOST" | awk '{print $1}' | head -n1)
+      if [ -n "$PRIMARY_IP" ]; then
+        echo "Resolved $PRIMARY_HOST to $PRIMARY_IP"
+        break
+      fi
+      echo "Waiting for primary DNS resolution... (attempt $i/30)"
+      sleep 2
+    done
+
+    if [ -z "$PRIMARY_IP" ]; then
+      echo "ERROR: Failed to resolve primary host $PRIMARY_HOST"
+      exit 1
+    fi
+
+    # Replace placeholder with actual IP
+    sed -i "s/PRIMARY_HOST_PLACEHOLDER/$PRIMARY_IP/g" /data/sentinel.conf
+
+    {{- if .Values.sentinel.announce.enabled }}
+    # Kubernetes announcements (critical for Sentinel)
+    ANNOUNCE_IP=$(hostname -i)
+    cat <<EOF >> /data/sentinel.conf
+    sentinel announce-ip $ANNOUNCE_IP
+    sentinel announce-port 26379
+    EOF
+    {{- end }}
+
+    echo "Sentinel configuration complete"
+  {{- end }}
 

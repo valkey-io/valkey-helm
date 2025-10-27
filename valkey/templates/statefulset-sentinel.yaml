@@ -1,0 +1,218 @@
+{{- include "valkey.validateMode" . }}
+{{- if .Values.sentinel.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "valkey.fullname" . }}-sentinel
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sentinel
+spec:
+  serviceName: {{ include "valkey.fullname" . }}-sentinel-headless
+  replicas: {{ .Values.sentinel.replicas }}
+  {{- if .Values.updateStrategy }}
+  updateStrategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "valkey.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sentinel
+  template:
+    metadata:
+      labels:
+        {{- include "valkey.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: sentinel
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/init-scripts: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.sentinel.antiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          {{- if eq .Values.sentinel.antiAffinity.type "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: {{ .Values.sentinel.antiAffinity.topologyKey }}
+              labelSelector:
+                matchLabels:
+                  {{- include "valkey.selectorLabels" . | nindent 18 }}
+                  app.kubernetes.io/component: sentinel
+          {{- else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: {{ .Values.sentinel.antiAffinity.topologyKey }}
+                labelSelector:
+                  matchLabels:
+                    {{- include "valkey.selectorLabels" . | nindent 20 }}
+                    app.kubernetes.io/component: sentinel
+          {{- end }}
+        {{- with .Values.sentinel.affinity }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- else }}
+        {{- with .Values.sentinel.affinity }}
+        affinity:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.sentinel.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sentinel.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: init-sentinel
+          image: "{{ .Values.sentinel.image.repository | default .Values.image.repository }}:{{ .Values.sentinel.image.tag | default (.Values.image.tag | default .Chart.AppVersion) }}"
+          imagePullPolicy: {{ .Values.sentinel.image.pullPolicy | default .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command: ["/bin/bash", "/scripts/init-sentinel.sh"]
+          {{- if .Values.env }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: init-scripts
+              mountPath: /scripts
+            - name: sentinel-base-config
+              mountPath: /config-base
+            {{- if .Values.auth.enabled }}
+            {{- if .Values.auth.existingSecret }}
+            - name: valkey-password
+              mountPath: /secrets
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.sentinel.auth.enabled }}
+            {{- if .Values.sentinel.auth.existingSecret }}
+            - name: sentinel-password
+              mountPath: /sentinel-secrets
+              readOnly: true
+            {{- end }}
+            {{- end }}
+          {{- with .Values.initResources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- with .Values.extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: sentinel
+          image: "{{ .Values.sentinel.image.repository | default .Values.image.repository }}:{{ .Values.sentinel.image.tag | default (.Values.image.tag | default .Chart.AppVersion) }}"
+          imagePullPolicy: {{ .Values.sentinel.image.pullPolicy | default .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command:
+            - valkey-sentinel
+            - /data/sentinel.conf
+          ports:
+            - name: sentinel
+              containerPort: 26379
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: sentinel
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - valkey-cli -p 26379 ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          {{- if .Values.env }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- with .Values.sentinel.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: {{ include "valkey.fullname" . }}-init-scripts
+            defaultMode: 0755
+        - name: sentinel-base-config
+          configMap:
+            name: {{ include "valkey.fullname" . }}-sentinel-base-config
+        {{- if .Values.auth.enabled }}
+        {{- if .Values.auth.existingSecret }}
+        - name: valkey-password
+          secret:
+            secretName: {{ .Values.auth.existingSecret }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.sentinel.auth.enabled }}
+        {{- if .Values.sentinel.auth.existingSecret }}
+        - name: sentinel-password
+          secret:
+            secretName: {{ .Values.sentinel.auth.existingSecret }}
+        {{- end }}
+        {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        {{- with .Values.dataStorage.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.dataStorage.labels }}
+        labels:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.dataStorage.accessModes | nindent 10 }}
+        {{- if .Values.dataStorage.className }}
+        storageClassName: {{ .Values.dataStorage.className }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.dataStorage.sentinelSize }}
+{{- end }}

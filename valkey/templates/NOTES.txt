@@ -9,59 +9,139 @@ Release:      {{ .Release.Name }}
 Namespace:    {{ .Release.Namespace }}
 Chart:        {{ .Chart.Name }} {{ .Chart.Version }}
 App version:  {{ .Chart.AppVersion }}
+{{- if .Values.standalone.enabled }}
+Mode:         Standalone
+{{- else if .Values.sentinel.enabled }}
+Mode:         Sentinel (High Availability)
+{{- end }}
+
+{{- if .Values.standalone.enabled }}
+===============================================================================
+STANDALONE MODE
+===============================================================================
 
 Service:      {{ include "valkey.fullname" . }}
 Type:         {{ .Values.service.type }}
 Port:         {{ .Values.service.port }}
+Replicas:     {{ .Values.replicaCount }}
 
 1) In-cluster access
    From another Pod:
-   $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} PING
+   $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.auth.enabled }} -a <password>{{ end }} PING
 
 2) Local access via kubectl port-forward
    $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }} 6379:{{ .Values.service.port }}
    In another terminal:
-   $ valkey-cli -h 127.0.0.1 -p 6379 PING
+   $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.auth.enabled }} -a <password>{{ end }} PING
 
 {{ if eq .Values.service.type "LoadBalancer" }}
 3) External access (LoadBalancer)
    $ export SERVICE_IP=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-   $ valkey-cli -h $SERVICE_IP -p {{ .Values.service.port }} PING
+   $ valkey-cli -h $SERVICE_IP -p {{ .Values.service.port }}{{ if .Values.auth.enabled }} -a <password>{{ end }} PING
 {{ else if eq .Values.service.type "NodePort" }}
 3) External access (NodePort)
    $ export NODE_PORT=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
    $ export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-   $ valkey-cli -h $NODE_IP -p $NODE_PORT PING
+   $ valkey-cli -h $NODE_IP -p $NODE_PORT{{ if .Values.auth.enabled }} -a <password>{{ end }} PING
 {{ end }}
+{{- end }}
 
+{{- if .Values.sentinel.enabled }}
+===============================================================================
+SENTINEL MODE (High Availability)
+===============================================================================
+
+Valkey Service:    {{ include "valkey.fullname" . }}
+Sentinel Service:  {{ include "valkey.fullname" . }}-sentinel
+Sentinels:         {{ .Values.replicaCount }}
+Valkey Replicas:   {{ .Values.replicaCount }} (1 primary + {{ sub .Values.replicaCount 1 }} replicas)
+Quorum:            {{ .Values.sentinel.quorum }}
+
+🔍 CONNECTING TO VALKEY (via Sentinel)
+
+1) Discover current primary using Sentinel
+   $ kubectl -n {{ .Release.Namespace }} exec -it {{ include "valkey.fullname" . }}-sentinel-0 -- \
+     valkey-cli -p 26379{{ if .Values.sentinel.auth.enabled }} -a <sentinel-password>{{ end }} \
+     SENTINEL get-master-addr-by-name {{ include "valkey.fullname" . }}
+
+2) Connect to primary (clients should use Sentinel for discovery)
+   Application configuration:
+   - Sentinel endpoints: {{ include "valkey.fullname" . }}-sentinel:26379
+   - Primary name: {{ include "valkey.fullname" . }}
+   {{- if .Values.auth.enabled }}
+   - Password: <your-valkey-password>
+   {{- end }}
+
+3) Manual connection to current primary
+   First find the primary:
+   $ PRIMARY=$(kubectl -n {{ .Release.Namespace }} exec {{ include "valkey.fullname" . }}-sentinel-0 -- \
+     valkey-cli -p 26379{{ if .Values.sentinel.auth.enabled }} -a <sentinel-password>{{ end }} \
+     SENTINEL get-master-addr-by-name {{ include "valkey.fullname" . }} | head -1)
+
+   Then connect:
+   $ kubectl -n {{ .Release.Namespace }} exec -it {{ include "valkey.fullname" . }}-0 -- \
+     valkey-cli -h $PRIMARY -p 6379{{ if .Values.auth.enabled }} -a <password>{{ end }} PING
+
+4) Port-forward to Sentinel (for client testing)
+   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }}-sentinel 26379:26379
+
+📊 MONITORING SENTINEL
+
+Check Sentinel status:
+$ kubectl -n {{ .Release.Namespace }} exec -it {{ include "valkey.fullname" . }}-sentinel-0 -- \
+  valkey-cli -p 26379{{ if .Values.sentinel.auth.enabled }} -a <sentinel-password>{{ end }} SENTINEL masters
+
+Check replicas:
+$ kubectl -n {{ .Release.Namespace }} exec -it {{ include "valkey.fullname" . }}-sentinel-0 -- \
+  valkey-cli -p 26379{{ if .Values.sentinel.auth.enabled }} -a <sentinel-password>{{ end }} SENTINEL replicas {{ include "valkey.fullname" . }}
+
+Check Sentinels:
+$ kubectl -n {{ .Release.Namespace }} exec -it {{ include "valkey.fullname" . }}-sentinel-0 -- \
+  valkey-cli -p 26379{{ if .Values.sentinel.auth.enabled }} -a <sentinel-password>{{ end }} SENTINEL sentinels {{ include "valkey.fullname" . }}
+
+🔄 TESTING FAILOVER
+
+Manual failover:
+$ kubectl -n {{ .Release.Namespace }} exec -it {{ include "valkey.fullname" . }}-sentinel-0 -- \
+  valkey-cli -p 26379{{ if .Values.sentinel.auth.enabled }} -a <sentinel-password>{{ end }} SENTINEL failover {{ include "valkey.fullname" . }}
+
+Simulate primary failure:
+$ kubectl -n {{ .Release.Namespace }} delete pod {{ include "valkey.fullname" . }}-0
+{{- end }}
+
+===============================================================================
 {{ if .Values.auth.enabled }}
-🔐 Authentication is ENABLED (ACL)
-- Provide the username and password from `.auth.aclConfig`.
-- Default user:
-  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} -a <password> PING
-- Named user:
-  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user <user> -a <password> PING
+🔐 Authentication is ENABLED
+{{- if .Values.auth.existingSecret }}
+- Password stored in secret: {{ .Values.auth.existingSecret }}
+{{- else }}
+- Password: {{ .Values.auth.password }}
+{{- end }}
 {{ else }}
 🔓 Authentication is DISABLED
-- Enable with: `--set auth.enabled=true` and provide `.auth.aclConfig`.
+- Enable with: `--set auth.enabled=true --set auth.password=<secure-password>`
 {{ end }}
-
-✅ Quick test
-$ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
-valkey> SET foo bar
-valkey> GET foo
-"bar"
 
 {{ if .Values.dataStorage.enabled }}
-💾 Persistence
-- A PVC is enabled. To see it:
-  $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name={{ include "valkey.name" . }}
-- Note: `dataStorage.keepPvc={{ .Values.dataStorage.keepPvc }}` controls whether the PVC is kept on uninstall.
+💾 Persistence is ENABLED
+- View PVCs:
+  $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }}
+{{- if .Values.dataStorage.requestedSize }}
+- Size: {{ .Values.dataStorage.requestedSize }}
+{{- end }}
+- Keep on delete: {{ .Values.dataStorage.keepPvc }}
 {{ else }}
-💾 Persistence
-- Persistence is DISABLED. Data will not survive Pod restarts.
-- Enable with: `--set dataStorage.enabled=true --set dataStorage.requestedSize=5Gi` (optionally set `dataStorage.className`).
+💾 Persistence is DISABLED
+- Data will not survive Pod restarts
+- Enable with: `--set dataStorage.enabled=true --set dataStorage.requestedSize=10Gi`
 {{ end }}
 
+===============================================================================
 🧹 Uninstall
 $ helm -n {{ .Release.Namespace }} uninstall {{ .Release.Name }}
+
+📚 Documentation
+- Valkey: https://valkey.io/docs/
+{{- if .Values.sentinel.enabled }}
+- Sentinel: https://valkey.io/topics/sentinel/
+{{- end }}

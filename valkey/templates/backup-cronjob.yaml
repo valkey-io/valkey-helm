@@ -1,0 +1,395 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "valkey.fullname" . }}-backup
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+    {{- with .Values.backup.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.backup.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "valkey.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backup
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            {{- include "valkey.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.backup.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.backup.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.backup.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          containers:
+          - name: backup
+            image: "{{ .Values.backup.image.repository }}:{{ .Values.backup.image.tag }}"
+            imagePullPolicy: {{ .Values.backup.image.pullPolicy }}
+
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -euo pipefail
+
+              echo "========================================"
+              echo "Valkey Backup Job Started"
+              echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+              echo "========================================"
+
+              # Generate backup filename with timestamp
+              TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+              BACKUP_NAME="valkey-backup-${TIMESTAMP}.rdb"
+              BACKUP_PATH="/tmp/${BACKUP_NAME}"
+
+              echo ""
+              echo "Step 1: Triggering RDB snapshot..."
+
+              {{- if .Values.auth.enabled }}
+              # Trigger BGSAVE with authentication
+              if ! valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} \
+                {{- if .Values.tls.enabled }}
+                --tls \
+                --cacert /tls/{{ .Values.tls.certCAFilename }} \
+                {{- end }}
+                -a "${VALKEY_PASSWORD}" BGSAVE; then
+                echo "ERROR: Failed to trigger BGSAVE"
+                exit 1
+              fi
+              {{- else }}
+              # Trigger BGSAVE without authentication
+              if ! valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} \
+                {{- if .Values.tls.enabled }}
+                --tls \
+                --cacert /tls/{{ .Values.tls.certCAFilename }} \
+                {{- end }}
+                BGSAVE; then
+                echo "ERROR: Failed to trigger BGSAVE"
+                exit 1
+              fi
+              {{- end }}
+
+              echo "BGSAVE triggered successfully"
+
+              echo ""
+              echo "Step 2: Waiting for snapshot to complete..."
+
+              # Wait for BGSAVE to complete (check every 2 seconds, timeout after 5 minutes)
+              TIMEOUT=150
+              ELAPSED=0
+              while [ $ELAPSED -lt $TIMEOUT ]; do
+                {{- if .Values.auth.enabled }}
+                SAVE_STATUS=$(valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} \
+                  {{- if .Values.tls.enabled }}
+                  --tls \
+                  --cacert /tls/{{ .Values.tls.certCAFilename }} \
+                  {{- end }}
+                  -a "${VALKEY_PASSWORD}" INFO persistence | grep rdb_bgsave_in_progress | cut -d: -f2 | tr -d '\r')
+                {{- else }}
+                SAVE_STATUS=$(valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} \
+                  {{- if .Values.tls.enabled }}
+                  --tls \
+                  --cacert /tls/{{ .Values.tls.certCAFilename }} \
+                  {{- end }}
+                  INFO persistence | grep rdb_bgsave_in_progress | cut -d: -f2 | tr -d '\r')
+                {{- end }}
+
+                if [ "$SAVE_STATUS" = "0" ]; then
+                  echo "Snapshot completed!"
+                  break
+                fi
+
+                sleep 2
+                ELAPSED=$((ELAPSED + 2))
+
+                if [ $((ELAPSED % 10)) -eq 0 ]; then
+                  echo "Still waiting... (${ELAPSED}s elapsed)"
+                fi
+              done
+
+              if [ $ELAPSED -ge $TIMEOUT ]; then
+                echo "ERROR: Snapshot timeout after ${TIMEOUT} seconds"
+                exit 1
+              fi
+
+              echo ""
+              echo "Step 3: Copying RDB file from primary pod..."
+
+              # Copy RDB file from the primary Valkey pod
+              if [ -f /data/dump.rdb ]; then
+                cp /data/dump.rdb "${BACKUP_PATH}"
+                echo "RDB file copied successfully ($(du -h ${BACKUP_PATH} | cut -f1))"
+              else
+                echo "ERROR: RDB file not found at /data/dump.rdb"
+                exit 1
+              fi
+
+              {{- if .Values.backup.compression.enabled }}
+              echo ""
+              echo "Step 4: Compressing backup..."
+              gzip -{{ .Values.backup.compression.level }} "${BACKUP_PATH}"
+              BACKUP_PATH="${BACKUP_PATH}.gz"
+              echo "Compression completed ($(du -h ${BACKUP_PATH} | cut -f1))"
+              {{- end }}
+
+              {{- if .Values.backup.encryption.enabled }}
+              echo ""
+              echo "Step 5: Encrypting backup..."
+              gpg --batch --yes --recipient {{ .Values.backup.encryption.gpgRecipient }} \
+                --encrypt "${BACKUP_PATH}"
+              rm "${BACKUP_PATH}"
+              BACKUP_PATH="${BACKUP_PATH}.gpg"
+              echo "Encryption completed"
+              {{- end }}
+
+              echo ""
+              echo "Step 6: Uploading to {{ .Values.backup.storage.type }} storage..."
+
+              {{- if or (eq .Values.backup.storage.type "s3") (eq .Values.backup.storage.type "minio") }}
+              # S3/MinIO upload
+              {{- if .Values.backup.storage.s3.endpoint }}
+              # Configure custom endpoint for MinIO or S3-compatible storage
+              aws configure set default.s3.endpoint_url {{ .Values.backup.storage.s3.endpoint }}
+              {{- if .Values.backup.storage.s3.pathStyle }}
+              aws configure set default.s3.addressing_style path
+              {{- end }}
+              {{- end }}
+
+              S3_PATH="s3://{{ .Values.backup.storage.s3.bucket }}/{{ .Values.backup.storage.s3.prefix }}$(basename ${BACKUP_PATH})"
+
+              if aws s3 cp "${BACKUP_PATH}" "${S3_PATH}" \
+                --region {{ .Values.backup.storage.s3.region }} \
+                --server-side-encryption AES256; then
+                echo "Upload successful: ${S3_PATH}"
+              else
+                echo "ERROR: Failed to upload backup to S3"
+                exit 1
+              fi
+
+              # Verify upload
+              if aws s3 ls "${S3_PATH}" --region {{ .Values.backup.storage.s3.region }} > /dev/null 2>&1; then
+                echo "Backup verified in S3"
+              else
+                echo "ERROR: Backup verification failed"
+                exit 1
+              fi
+
+              {{- else if eq .Values.backup.storage.type "gcs" }}
+              # GCS upload
+              GCS_PATH="gs://{{ .Values.backup.storage.gcs.bucket }}/{{ .Values.backup.storage.gcs.prefix }}$(basename ${BACKUP_PATH})"
+
+              if gsutil cp "${BACKUP_PATH}" "${GCS_PATH}"; then
+                echo "Upload successful: ${GCS_PATH}"
+              else
+                echo "ERROR: Failed to upload backup to GCS"
+                exit 1
+              fi
+
+              {{- else if eq .Values.backup.storage.type "azure" }}
+              # Azure Blob upload
+              AZURE_PATH="{{ .Values.backup.storage.azure.prefix }}$(basename ${BACKUP_PATH})"
+
+              if az storage blob upload \
+                --account-name {{ .Values.backup.storage.azure.storageAccount }} \
+                --container-name {{ .Values.backup.storage.azure.container }} \
+                --name "${AZURE_PATH}" \
+                --file "${BACKUP_PATH}"; then
+                echo "Upload successful: ${AZURE_PATH}"
+              else
+                echo "ERROR: Failed to upload backup to Azure"
+                exit 1
+              fi
+              {{- end }}
+
+              echo ""
+              echo "Step 7: Cleanup old backups (retention policy)..."
+
+              {{- if or (eq .Values.backup.storage.type "s3") (eq .Values.backup.storage.type "minio") }}
+              # Keep only the last N backups based on retention policy
+              RETENTION_COUNT={{ .Values.backup.retention.hourly }}
+
+              echo "Retention policy: Keep last ${RETENTION_COUNT} backups"
+
+              # List all backups, sort by date (newest first), and delete old ones
+              BACKUP_COUNT=$(aws s3 ls s3://{{ .Values.backup.storage.s3.bucket }}/{{ .Values.backup.storage.s3.prefix }} \
+                --region {{ .Values.backup.storage.s3.region }} | \
+                grep "valkey-backup-" | \
+                wc -l)
+
+              echo "Current backup count: ${BACKUP_COUNT}"
+
+              if [ "${BACKUP_COUNT}" -gt "${RETENTION_COUNT}" ]; then
+                TO_DELETE=$((BACKUP_COUNT - RETENTION_COUNT))
+                echo "Deleting ${TO_DELETE} old backup(s)..."
+
+                aws s3 ls s3://{{ .Values.backup.storage.s3.bucket }}/{{ .Values.backup.storage.s3.prefix }} \
+                  --region {{ .Values.backup.storage.s3.region }} | \
+                  grep "valkey-backup-" | \
+                  sort | \
+                  head -n ${TO_DELETE} | \
+                  awk '{print $4}' | \
+                  while read -r old_backup; do
+                    if [ -n "${old_backup}" ]; then
+                      echo "  Deleting: ${old_backup}"
+                      aws s3 rm "s3://{{ .Values.backup.storage.s3.bucket }}/{{ .Values.backup.storage.s3.prefix }}${old_backup}" \
+                        --region {{ .Values.backup.storage.s3.region }} || echo "  Warning: Failed to delete ${old_backup}"
+                    fi
+                  done
+                echo "Cleanup completed"
+              else
+                echo "No cleanup needed (${BACKUP_COUNT} <= ${RETENTION_COUNT})"
+              fi
+              {{- end }}
+
+              echo ""
+              echo "========================================"
+              echo "Backup Job Completed Successfully!"
+              echo "Backup: $(basename ${BACKUP_PATH})"
+              echo "Size: $(du -h ${BACKUP_PATH} 2>/dev/null | cut -f1 || echo 'N/A')"
+              echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+              echo "========================================"
+
+            env:
+            {{- if .Values.auth.enabled }}
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.auth.existingSecret }}
+                  name: {{ .Values.auth.existingSecret }}
+                  key: {{ .Values.auth.existingSecretPasswordKey }}
+                  {{- else }}
+                  name: {{ include "valkey.fullname" . }}-auth
+                  key: password
+                  {{- end }}
+            {{- end }}
+
+            {{- if or (eq .Values.backup.storage.type "s3") (eq .Values.backup.storage.type "minio") }}
+            - name: AWS_REGION
+              value: {{ .Values.backup.storage.s3.region | quote }}
+
+            {{- if .Values.backup.storage.s3.existingSecret }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backup.storage.s3.existingSecret }}
+                  key: access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backup.storage.s3.existingSecret }}
+                  key: secret-access-key
+            {{- else if .Values.backup.storage.s3.accessKeyId }}
+            - name: AWS_ACCESS_KEY_ID
+              value: {{ .Values.backup.storage.s3.accessKeyId | quote }}
+            - name: AWS_SECRET_ACCESS_KEY
+              value: {{ .Values.backup.storage.s3.secretAccessKey | quote }}
+            {{- end }}
+            {{- end }}
+
+            {{- if eq .Values.backup.storage.type "gcs" }}
+            {{- if .Values.backup.storage.gcs.existingSecret }}
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /secrets/gcs/service-account.json
+            {{- end }}
+            - name: GCP_PROJECT_ID
+              value: {{ .Values.backup.storage.gcs.projectId | quote }}
+            {{- end }}
+
+            {{- if eq .Values.backup.storage.type "azure" }}
+            {{- if .Values.backup.storage.azure.existingSecret }}
+            - name: AZURE_STORAGE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backup.storage.azure.existingSecret }}
+                  key: storage-account-key
+            {{- end }}
+            {{- end }}
+
+            {{- with .Values.backup.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+
+            {{- if .Values.tls.enabled }}
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+            {{- end }}
+
+            {{- if and (eq .Values.backup.storage.type "gcs") .Values.backup.storage.gcs.existingSecret }}
+            - name: gcs-credentials
+              mountPath: /secrets/gcs
+              readOnly: true
+            {{- end }}
+
+            {{- with .Values.backup.resources }}
+            resources:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              {{- if .Values.sentinel.enabled }}
+              claimName: data-{{ include "valkey.fullname" . }}-0
+              {{- else }}
+              {{- if .Values.persistence.enabled }}
+              {{- if .Values.persistence.existingClaim }}
+              claimName: {{ .Values.persistence.existingClaim }}
+              {{- else }}
+              claimName: data-{{ include "valkey.fullname" . }}-0
+              {{- end }}
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
+              {{- end }}
+
+          {{- if .Values.tls.enabled }}
+          - name: tls
+            secret:
+              secretName: {{ .Values.tls.certificatesSecret }}
+          {{- end }}
+
+          {{- if and (eq .Values.backup.storage.type "gcs") .Values.backup.storage.gcs.existingSecret }}
+          - name: gcs-credentials
+            secret:
+              secretName: {{ .Values.backup.storage.gcs.existingSecret }}
+          {{- end }}
+{{- end }}

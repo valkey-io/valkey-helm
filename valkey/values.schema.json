@@ -1,151 +1,107 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://valkey.io/valkey-helm/values.schema.json",
+    "title": "Valkey Helm Chart Values",
+    "description": "Schema for Valkey Helm chart configuration supporting standalone and sentinel deployment modes",
     "type": "object",
     "properties": {
-        "affinity": {
-            "type": "object"
-        },
-        "auth": {
-            "type": "object",
-            "properties": {
-                "aclConfig": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "dataStorage": {
-            "type": "object",
-            "properties": {
-                "accessModes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "annotations": {
-                    "type": "object"
-                },
-                "className": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "keepPvc": {
-                    "type": "boolean"
-                },
-                "labels": {
-                    "type": "object"
-                },
-                "persistentVolumeClaimName": {
-                    "type": "string"
-                },
-                "requestedSize": {
-                    "type": "string"
-                },
-                "volumeName": {
-                    "type": "string"
-                }
-            }
-        },
-        "deploymentStrategy": {
-            "type": "string",
-             "enum": ["RollingUpdate", "Recreate"]
-        },
-        "env": {
-            "type": "object"
-        },
-        "extraSecretValkeyConfigs": {
-            "type": "boolean"
-        },
-        "extraStorage": {
-            "type": "array"
-        },
-        "extraValkeyConfigs": {
-            "type": "array"
-        },
-        "extraValkeySecrets": {
-            "type": "array"
-        },
-        "fullnameOverride": {
-            "type": "string"
-        },
         "image": {
             "type": "object",
+            "description": "Container image configuration",
             "properties": {
-                "pullPolicy": {
-                    "type": "string"
-                },
                 "repository": {
-                    "type": "string"
+                    "type": "string",
+                    "default": "docker.io/valkey/valkey",
+                    "description": "Valkey Docker image repository"
+                },
+                "pullPolicy": {
+                    "type": "string",
+                    "enum": ["Always", "IfNotPresent", "Never"],
+                    "default": "IfNotPresent",
+                    "description": "Image pull policy"
                 },
                 "tag": {
-                    "type": "string"
+                    "type": "string",
+                    "default": "",
+                    "description": "Image tag (defaults to Chart.AppVersion if empty)"
                 }
             }
         },
         "imagePullSecrets": {
-            "type": "array"
+            "type": "array",
+            "items": {
+                "type": "object"
+            },
+            "default": [],
+            "description": "List of image pull secrets for private registries"
         },
-        "initResources": {
-            "type": "object"
+        "nameOverride": {
+            "type": "string",
+            "default": "",
+            "description": "Override the chart name"
         },
-        "metrics": {
+        "fullnameOverride": {
+            "type": "string",
+            "default": "",
+            "description": "Override the full resource name"
+        },
+        "serviceAccount": {
             "type": "object",
+            "description": "Service account configuration",
             "properties": {
-                "enabled": {
-                    "type": "boolean"
+                "create": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Create a service account"
                 },
-                "exporter": {
+                "automount": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Automount service account token"
+                },
+                "annotations": {
                     "type": "object",
-                    "properties": {
-                        "extraExporterSecrets": {
-                            "type": "array"
-                        }
-                    }
+                    "default": {},
+                    "description": "Service account annotations"
+                },
+                "name": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Name of existing service account to use"
                 }
             }
         },
-        "nameOverride": {
-            "type": "string"
-        },
-        "networkPolicy": {
-            "type": "object"
-        },
-        "nodeSelector": {
-            "type": "object"
-        },
         "podAnnotations": {
-            "type": "object"
+            "type": "object",
+            "default": {},
+            "description": "Annotations to add to pods"
         },
         "podLabels": {
-            "type": "object"
+            "type": "object",
+            "default": {},
+            "description": "Labels to add to pods"
         },
         "podSecurityContext": {
             "type": "object",
+            "description": "Pod-level security context",
             "properties": {
                 "fsGroup": {
-                    "type": "integer"
-                },
-                "runAsGroup": {
-                    "type": "integer"
+                    "type": "integer",
+                    "default": 1000
                 },
                 "runAsUser": {
-                    "type": "integer"
+                    "type": "integer",
+                    "default": 1000
+                },
+                "runAsGroup": {
+                    "type": "integer",
+                    "default": 1000
                 }
             }
         },
-        "replicaCount": {
-            "type": "integer"
-        },
-        "resources": {
-            "type": "object"
-        },
         "securityContext": {
             "type": "object",
+            "description": "Container-level security context",
             "properties": {
                 "capabilities": {
                     "type": "object",
@@ -154,66 +110,857 @@
                             "type": "array",
                             "items": {
                                 "type": "string"
-                            }
+                            },
+                            "default": ["ALL"]
                         }
                     }
                 },
                 "readOnlyRootFilesystem": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "default": true
                 },
                 "runAsNonRoot": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "default": true
                 },
                 "runAsUser": {
-                    "type": "integer"
+                    "type": "integer",
+                    "default": 1000
                 }
             }
         },
         "service": {
             "type": "object",
+            "description": "Service configuration",
             "properties": {
-                "port": {
-                    "type": "integer"
-                },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+                    "default": "ClusterIP",
+                    "description": "Kubernetes service type"
+                },
+                "port": {
+                    "type": "integer",
+                    "default": 6379,
+                    "minimum": 1,
+                    "maximum": 65535,
+                    "description": "Service port for Valkey"
                 },
                 "nodePort": {
-                    "type": "integer"
+                    "type": "integer",
+                    "default": 0,
+                    "minimum": 0,
+                    "maximum": 65535,
+                    "description": "NodePort value (0 for auto-assignment)"
+                },
+                "annotations": {
+                    "type": "object",
+                    "default": {},
+                    "description": "Annotations to add to all services"
+                },
+                "labels": {
+                    "type": "object",
+                    "default": {},
+                    "description": "Labels to add to all services"
                 }
             }
         },
-        "serviceAccount": {
+        "networkPolicy": {
             "type": "object",
+            "description": "Network policy configuration",
             "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable NetworkPolicy"
+                },
+                "labels": {
+                    "type": "object",
+                    "default": {},
+                    "description": "Labels to add to NetworkPolicy"
+                },
                 "annotations": {
-                    "type": "object"
+                    "type": "object",
+                    "default": {},
+                    "description": "Annotations to add to NetworkPolicy"
                 },
-                "automount": {
-                    "type": "boolean"
+                "policyTypes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["Ingress", "Egress"]
+                    },
+                    "default": [],
+                    "description": "Policy types (automatically set based on ingress/egress if empty)"
                 },
-                "create": {
-                    "type": "boolean"
+                "ingress": {
+                    "type": "array",
+                    "default": [],
+                    "description": "Ingress rules - allow traffic to Valkey pods"
                 },
-                "name": {
-                    "type": "string"
+                "egress": {
+                    "type": "array",
+                    "default": [],
+                    "description": "Egress rules"
                 }
             }
+        },
+        "resources": {
+            "type": "object",
+            "default": {},
+            "description": "Resource limits and requests for Valkey container"
+        },
+        "initResources": {
+            "type": "object",
+            "default": {},
+            "description": "Resource limits and requests for init containers"
+        },
+        "dataStorage": {
+            "type": "object",
+            "description": "Persistent storage configuration",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable persistent storage"
+                },
+                "persistentVolumeClaimName": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Name of existing PVC to use"
+                },
+                "volumeName": {
+                    "type": "string",
+                    "default": "valkey-data",
+                    "description": "Name of the volume (referenced in deployment)"
+                },
+                "requestedSize": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Request size (e.g. 8Gi) for dynamically provisioned volume"
+                },
+                "className": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Name of the storage class to use"
+                },
+                "accessModes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": ["ReadWriteOnce"],
+                    "description": "Access modes for the PVC"
+                },
+                "keepPvc": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "If true, keep the PVC on Helm uninstall"
+                },
+                "annotations": {
+                    "type": "object",
+                    "default": {},
+                    "description": "Optional annotations to add to the PVC"
+                },
+                "labels": {
+                    "type": "object",
+                    "default": {},
+                    "description": "Optional labels to add to the PVC"
+                },
+                "sentinelSize": {
+                    "type": "string",
+                    "default": "1Gi",
+                    "description": "Sentinel mode storage size (only used when sentinel.enabled=true)"
+                }
+            }
+        },
+        "auth": {
+            "type": "object",
+            "description": "Authentication configuration",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable authentication"
+                },
+                "password": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Password for authentication (use existingSecret in production)"
+                },
+                "existingSecret": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Name of existing secret containing password"
+                },
+                "existingSecretPasswordKey": {
+                    "type": "string",
+                    "default": "password",
+                    "description": "Key in existing secret containing password"
+                },
+                "aclConfig": {
+                    "type": "string",
+                    "default": "",
+                    "description": "ACL configuration for advanced authentication"
+                },
+                "acl": {
+                    "type": "object",
+                    "description": "ACL-based authentication (advanced)",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": false
+                        },
+                        "config": {
+                            "type": "string",
+                            "default": ""
+                        },
+                        "existingSecret": {
+                            "type": "string",
+                            "default": ""
+                        },
+                        "existingSecretKey": {
+                            "type": "string",
+                            "default": "acl.conf"
+                        }
+                    }
+                }
+            }
+        },
+        "tls": {
+            "type": "object",
+            "description": "TLS/SSL encryption configuration",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "certificatesSecret": {
+                    "type": "string",
+                    "default": ""
+                },
+                "certFilename": {
+                    "type": "string",
+                    "default": "tls.crt"
+                },
+                "certKeyFilename": {
+                    "type": "string",
+                    "default": "tls.key"
+                },
+                "certCAFilename": {
+                    "type": "string",
+                    "default": "ca.crt"
+                }
+            }
+        },
+        "metrics": {
+            "type": "object",
+            "description": "Metrics and monitoring configuration",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable metrics exporter sidecar"
+                },
+                "exporter": {
+                    "type": "object",
+                    "properties": {
+                        "image": {
+                            "type": "object",
+                            "properties": {
+                                "repository": {
+                                    "type": "string",
+                                    "default": "oliver006/redis_exporter"
+                                },
+                                "tag": {
+                                    "type": "string",
+                                    "default": "v1.55.0"
+                                },
+                                "pullPolicy": {
+                                    "type": "string",
+                                    "default": "IfNotPresent"
+                                }
+                            }
+                        },
+                        "resources": {
+                            "type": "object",
+                            "default": {}
+                        },
+                        "extraExporterSecrets": {
+                            "type": "array",
+                            "default": []
+                        }
+                    }
+                },
+                "serviceMonitor": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": false
+                        },
+                        "namespace": {
+                            "type": "string",
+                            "default": ""
+                        },
+                        "interval": {
+                            "type": "string",
+                            "default": "30s"
+                        },
+                        "labels": {
+                            "type": "object",
+                            "default": {}
+                        },
+                        "annotations": {
+                            "type": "object",
+                            "default": {}
+                        }
+                    }
+                }
+            }
+        },
+        "logging": {
+            "type": "object",
+            "description": "Logging configuration",
+            "properties": {
+                "level": {
+                    "type": "string",
+                    "enum": ["debug", "verbose", "notice", "warning"],
+                    "default": "notice"
+                },
+                "slowlogLogSlowerThan": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Slowlog threshold in microseconds"
+                },
+                "slowlogMaxLen": {
+                    "type": "integer",
+                    "default": 128,
+                    "description": "Maximum slowlog entries"
+                }
+            }
+        },
+        "valkeyConfig": {
+            "type": "string",
+            "default": "",
+            "description": "Raw valkey.conf configuration (appended to generated config)"
+        },
+        "valkeyLogLevel": {
+            "type": "string",
+            "enum": ["debug", "verbose", "notice", "warning"],
+            "default": "notice",
+            "deprecated": true,
+            "description": "DEPRECATED: Use logging.level instead"
+        },
+        "extraValkeyConfigs": {
+            "type": "array",
+            "default": [],
+            "description": "Additional ConfigMaps to mount"
+        },
+        "extraValkeySecrets": {
+            "type": "array",
+            "default": [],
+            "description": "Additional Secrets to mount"
+        },
+        "extraSecretValkeyConfigs": {
+            "type": "boolean",
+            "default": false,
+            "deprecated": true,
+            "description": "DEPRECATED: Use extraValkeySecrets instead"
+        },
+        "extraStorage": {
+            "type": "array",
+            "default": [],
+            "description": "Additional volumes to mount"
+        },
+        "extraVolumes": {
+            "type": "array",
+            "default": []
+        },
+        "extraVolumeMounts": {
+            "type": "array",
+            "default": []
+        },
+        "env": {
+            "type": "object",
+            "default": {},
+            "description": "Environment variables for Valkey container"
+        },
+        "extraInitContainers": {
+            "type": "array",
+            "default": []
+        },
+        "extraContainers": {
+            "type": "array",
+            "default": []
+        },
+        "nodeSelector": {
+            "type": "object",
+            "default": {}
         },
         "tolerations": {
-            "type": "array"
+            "type": "array",
+            "default": []
+        },
+        "affinity": {
+            "type": "object",
+            "default": {}
         },
         "topologySpreadConstraints": {
             "type": "array",
             "items": {
                 "type": "object"
+            },
+            "default": []
+        },
+        "podDisruptionBudget": {
+            "type": "object",
+            "description": "Pod disruption budget for high availability",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "minAvailable": {
+                    "type": ["integer", "string"],
+                    "description": "Minimum available pods"
+                },
+                "maxUnavailable": {
+                    "type": ["integer", "string"],
+                    "description": "Maximum unavailable pods"
+                }
             }
         },
-        "valkeyConfig": {
-            "type": "string"
+        "deploymentStrategy": {
+            "type": "string",
+            "enum": ["RollingUpdate", "Recreate"],
+            "default": "RollingUpdate",
+            "description": "Deployment strategy (only for standalone mode)"
         },
-        "valkeyLogLevel": {
-            "type": "string"
+        "updateStrategy": {
+            "type": "object",
+            "description": "StatefulSet update strategy (for sentinel mode)",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["RollingUpdate", "OnDelete"],
+                    "default": "RollingUpdate"
+                },
+                "rollingUpdate": {
+                    "type": "object",
+                    "properties": {
+                        "maxUnavailable": {
+                            "type": ["integer", "string"],
+                            "default": 1
+                        }
+                    }
+                }
+            }
+        },
+        "replicaCount": {
+            "type": "integer",
+            "default": 1,
+            "minimum": 1,
+            "description": "Number of Valkey replicas. Applies to both modes: standalone (typically 1) and sentinel (minimum 3 required)"
+        },
+        "standalone": {
+            "type": "object",
+            "description": "Standalone mode configuration",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable standalone mode (single or multiple independent instances)"
+                }
+            }
+        },
+        "sentinel": {
+            "type": "object",
+            "description": "Sentinel mode configuration (HA with automatic failover)",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable Sentinel mode for high availability with automatic failover"
+                },
+                "quorum": {
+                    "type": "integer",
+                    "default": 2,
+                    "minimum": 2,
+                    "description": "Quorum for failover decision"
+                },
+                "downAfterMilliseconds": {
+                    "type": "integer",
+                    "default": 30000,
+                    "minimum": 1000,
+                    "description": "Time before instance considered down"
+                },
+                "failoverTimeout": {
+                    "type": "integer",
+                    "default": 180000,
+                    "minimum": 1000,
+                    "description": "Failover timeout in milliseconds"
+                },
+                "parallelSyncs": {
+                    "type": "integer",
+                    "default": 1,
+                    "minimum": 1,
+                    "description": "Number of replicas syncing simultaneously"
+                },
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": false
+                        },
+                        "password": {
+                            "type": "string",
+                            "default": ""
+                        },
+                        "existingSecret": {
+                            "type": "string",
+                            "default": ""
+                        },
+                        "existingSecretPasswordKey": {
+                            "type": "string",
+                            "default": "sentinel-password"
+                        }
+                    }
+                },
+                "resources": {
+                    "type": "object",
+                    "default": {}
+                },
+                "image": {
+                    "type": "object",
+                    "properties": {
+                        "repository": {
+                            "type": "string",
+                            "default": ""
+                        },
+                        "tag": {
+                            "type": "string",
+                            "default": ""
+                        },
+                        "pullPolicy": {
+                            "type": "string",
+                            "default": ""
+                        }
+                    }
+                },
+                "port": {
+                    "type": "integer",
+                    "default": 26379,
+                    "minimum": 1,
+                    "maximum": 65535,
+                    "description": "Sentinel service port"
+                },
+                "announce": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                },
+                "customConfig": {
+                    "type": "string",
+                    "default": ""
+                },
+                "nodeSelector": {
+                    "type": "object",
+                    "default": {}
+                },
+                "tolerations": {
+                    "type": "array",
+                    "default": []
+                },
+                "affinity": {
+                    "type": "object",
+                    "default": {}
+                },
+                "antiAffinity": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "type": {
+                            "type": "string",
+                            "enum": ["hard", "soft"],
+                            "default": "hard"
+                        },
+                        "topologyKey": {
+                            "type": "string",
+                            "default": "kubernetes.io/hostname"
+                        }
+                    }
+                }
+            }
+        },
+        "replication": {
+            "type": "object",
+            "description": "Replication configuration (for Sentinel mode)",
+            "properties": {
+                "readOnly": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Replicas are read-only"
+                },
+                "minReplicas": {
+                    "type": "object",
+                    "properties": {
+                        "toWrite": {
+                            "type": "integer",
+                            "default": 1,
+                            "minimum": 0
+                        },
+                        "maxLag": {
+                            "type": "integer",
+                            "default": 10,
+                            "minimum": 0,
+                            "description": "Maximum lag in seconds"
+                        }
+                    }
+                },
+                "disklessSync": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "disklessSyncDelay": {
+                    "type": "integer",
+                    "default": 5,
+                    "minimum": 0
+                },
+                "antiAffinity": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "type": {
+                            "type": "string",
+                            "enum": ["hard", "soft"],
+                            "default": "hard"
+                        },
+                        "topologyKey": {
+                            "type": "string",
+                            "default": "kubernetes.io/hostname"
+                        }
+                    }
+                }
+            }
+        },
+        "backup": {
+            "type": "object",
+            "description": "Automated backup configuration",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable automated backups using CronJob"
+                },
+                "schedule": {
+                    "type": "string",
+                    "default": "0 * * * *",
+                    "description": "Backup schedule in cron format"
+                },
+                "successfulJobsHistoryLimit": {
+                    "type": "integer",
+                    "default": 3,
+                    "minimum": 0
+                },
+                "failedJobsHistoryLimit": {
+                    "type": "integer",
+                    "default": 3,
+                    "minimum": 0
+                },
+                "retention": {
+                    "type": "object",
+                    "properties": {
+                        "hourly": {
+                            "type": "integer",
+                            "default": 240,
+                            "minimum": 1,
+                            "description": "Number of hourly backups to keep (default 240 = 10 days)"
+                        }
+                    }
+                },
+                "storage": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": ["s3", "minio", "gcs", "azure"],
+                            "default": "s3",
+                            "description": "Storage backend type"
+                        },
+                        "s3": {
+                            "type": "object",
+                            "properties": {
+                                "bucket": {
+                                    "type": "string",
+                                    "default": "",
+                                    "description": "S3 bucket name"
+                                },
+                                "region": {
+                                    "type": "string",
+                                    "default": "us-east-1",
+                                    "description": "S3 region"
+                                },
+                                "endpoint": {
+                                    "type": "string",
+                                    "default": "",
+                                    "description": "Custom S3 endpoint (for MinIO or S3-compatible storage). When set, MinIO's mc tool will be used instead of AWS CLI"
+                                },
+                                "prefix": {
+                                    "type": "string",
+                                    "default": "backups/",
+                                    "description": "Prefix/path within bucket"
+                                },
+                                "pathStyle": {
+                                    "type": "boolean",
+                                    "default": false,
+                                    "description": "Use path-style addressing (required for MinIO)"
+                                },
+                                "existingSecret": {
+                                    "type": "string",
+                                    "default": ""
+                                },
+                                "accessKeyId": {
+                                    "type": "string",
+                                    "default": ""
+                                },
+                                "secretAccessKey": {
+                                    "type": "string",
+                                    "default": ""
+                                }
+                            }
+                        },
+                        "gcs": {
+                            "type": "object",
+                            "properties": {
+                                "bucket": {
+                                    "type": "string",
+                                    "default": ""
+                                },
+                                "projectId": {
+                                    "type": "string",
+                                    "default": ""
+                                },
+                                "prefix": {
+                                    "type": "string",
+                                    "default": "backups/"
+                                },
+                                "existingSecret": {
+                                    "type": "string",
+                                    "default": ""
+                                }
+                            }
+                        },
+                        "azure": {
+                            "type": "object",
+                            "properties": {
+                                "storageAccount": {
+                                    "type": "string",
+                                    "default": ""
+                                },
+                                "container": {
+                                    "type": "string",
+                                    "default": ""
+                                },
+                                "prefix": {
+                                    "type": "string",
+                                    "default": "backups/"
+                                },
+                                "existingSecret": {
+                                    "type": "string",
+                                    "default": ""
+                                }
+                            }
+                        }
+                    }
+                },
+                "compression": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "level": {
+                            "type": "integer",
+                            "default": 6,
+                            "minimum": 1,
+                            "maximum": 9
+                        }
+                    }
+                },
+                "encryption": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": false
+                        },
+                        "gpgRecipient": {
+                            "type": "string",
+                            "default": ""
+                        }
+                    }
+                },
+                "image": {
+                    "type": "object",
+                    "properties": {
+                        "repository": {
+                            "type": "string",
+                            "default": "amazon/aws-cli"
+                        },
+                        "tag": {
+                            "type": "string",
+                            "default": "latest"
+                        },
+                        "pullPolicy": {
+                            "type": "string",
+                            "default": "IfNotPresent"
+                        }
+                    }
+                },
+                "resources": {
+                    "type": "object",
+                    "default": {}
+                },
+                "nodeSelector": {
+                    "type": "object",
+                    "default": {}
+                },
+                "tolerations": {
+                    "type": "array",
+                    "default": []
+                },
+                "affinity": {
+                    "type": "object",
+                    "default": {}
+                },
+                "extraEnv": {
+                    "type": "array",
+                    "default": []
+                },
+                "annotations": {
+                    "type": "object",
+                    "default": {}
+                },
+                "labels": {
+                    "type": "object",
+                    "default": {}
+                }
+            }
         }
-    }
+    },
+    "required": [],
+    "additionalProperties": true
 }
