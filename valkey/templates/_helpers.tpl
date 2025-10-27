@@ -62,19 +62,41 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-Creating Image Pull Secrets
+Returns the valkey container image
 */}}
-{{- define "imagePullSecret" }}
-{{- with .Values.imageCredentials }}
-{{- printf "{\"auths\":{\"%s\":{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\",\"auth\":\"%s\"}}}" .registry .username .password .email (printf "%s:%s" .username .password | b64enc) | b64enc }}
+{{- define "valkey.image" -}}
+{{- $registryName := .Values.image.registry }}
+{{- $repositoryName := .Values.image.repository }}
+{{- $tag := .Values.image.tag | default .Chart.AppVersion }}
+{{- if .Values.global }}
+  {{- if .Values.global.imageRegistry }}
+    {{- $registryName = .Values.global.imageRegistry }}
+  {{- end }}
 {{- end }}
-{{- end }}
-
-{{- define "valkey.secretName" -}}
-{{- if .Values.imagePullSecrets.nameOverride }}
-{{- .Values.imagePullSecrets.nameOverride }}
+{{- if $registryName }}
+{{- printf "%s/%s:%s" $registryName $repositoryName $tag }}
 {{- else }}
-{{- printf "%s-regcred" .Release.Name | trunc 63 | trimSuffix "-" }}
-{{- end }}
-{{- end }}
+{{- printf "%s:%s" $repositoryName $tag }}
+{{ end }}
+{{- end -}}
 
+{{/*
+Returns the valkey image pull secrets
+*/}}
+{{- define "valkey.imagePullSecrets" -}}
+{{- $pullSecrets := list }}
+{{- if .Values.global }}
+{{- range .Values.global.imagePullSecrets -}}
+  {{- $pullSecrets = append $pullSecrets . -}}
+{{- end -}}
+{{- end -}}
+{{- range .Values.imagePullSecrets -}}
+    {{- $pullSecrets = append $pullSecrets . -}}
+{{- end -}}
+{{- if (not (empty $pullSecrets)) }}
+imagePullSecrets:
+{{- range $pullSecrets }}
+- name: {{ . }}
+{{- end }}
+{{- end }}
+{{- end -}}

@@ -1,7 +1,15 @@
+global:
+  # the global image registry
+  imageRegistry: ""
+  ## The global image pull secrets (list of secret names)
+  imagePullSecrets: []
+
 # Number of Valkey pods to run
 replicaCount: 1
 
 image:
+  # image registry
+  registry: ""
   # Valkey Docker image to use
   repository: docker.io/valkey/valkey
   # Image pull policy (Always, IfNotPresent, Never)
