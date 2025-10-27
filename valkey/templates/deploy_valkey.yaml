@@ -68,7 +68,7 @@ spec:
 
       containers:
         - name: {{ include "valkey.fullname" . }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion | default .Chart.AppVersion }}"
           command: [ "valkey-server" ]
           args: [ "/data/conf/valkey.conf" ]
           securityContext:
@@ -105,7 +105,7 @@ spec:
             {{- end }}
         {{- if .Values.metrics.enabled }}
         - name: metrics
-          image: "{{ .Values.metrics.exporter.image.repository }}:{{ .Values.metrics.exporter.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.metrics.exporter.image.repository }}:{{ .Values.metrics.exporter.image.tag }}"
           imagePullPolicy: {{ .Values.metrics.exporter.image.pullPolicy | quote }}
           {{- with .Values.metrics.exporter.securityContext }}
           securityContext:
