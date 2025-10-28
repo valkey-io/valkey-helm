@@ -7,8 +7,8 @@ metadata:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/part-of: valkey
     app.kubernetes.io/component: service-monitor
-    {{- if .Values.metrics.serviceMonitor.extraLabels }}
-    {{- toYaml .Values.metrics.serviceMonitor.extraLabels | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.extraLabels }}
+    {{- toYaml . | nindent 4 }}
     {{- end }}
   {{- with .Values.metrics.serviceMonitor.annotations }}
   annotations:
@@ -17,23 +17,26 @@ metadata:
 spec:
   endpoints:
     - port: {{ .Values.metrics.serviceMonitor.port }}
-      {{- if .Values.metrics.serviceMonitor.interval }}
-      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      {{- with .Values.metrics.serviceMonitor.interval }}
+      interval: {{ . }}
       {{- end }}
-      {{- if .Values.metrics.serviceMonitor.scrapeTimeout }}
-      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+      {{- with .Values.metrics.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
       {{- end }}
-      {{- if .Values.metrics.serviceMonitor.honorLabels }}
-      honorLabels: {{ .Values.metrics.serviceMonitor.honorLabels }}
+      {{- with .Values.metrics.serviceMonitor.honorLabels }}
+      honorLabels: {{ . }}
       {{- end }}
       {{- with .Values.metrics.serviceMonitor.relabelings }}
-      relabelings: {{- toYaml . | nindent 6 }}
+      relabelings: 
+        {{- toYaml . | nindent 6 }}
       {{- end }}
-      {{- if .Values.metrics.serviceMonitor.metricRelabelings }}
-      metricRelabelings: {{- toYaml .Values.metrics.serviceMonitor.metricRelabelings | nindent 6 }}
+      {{- with .Values.metrics.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 6 }}
       {{- end }}
-  {{- if .Values.metrics.serviceMonitor.podTargetLabels }}
-  podTargetLabels: {{- toYaml .Values.metrics.serviceMonitor.podTargetLabels | nindent 4 }}
+  {{- with .Values.metrics.serviceMonitor.podTargetLabels }}
+  podTargetLabels:
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   {{- with .Values.metrics.serviceMonitor.sampleLimit }}
   sampleLimit: {{ . }}
