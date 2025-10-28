@@ -86,6 +86,9 @@ dataStorage:
   # Use existing PVC by name (skip dynamic provisioning if set)
   persistentVolumeClaimName: ""
 
+  # Subpath inside PVC to mount
+  subPath: ""
+
   # Name of the volume (referenced in deployment)
   volumeName: "valkey-data"
 

@@ -43,6 +43,9 @@
                 "persistentVolumeClaimName": {
                     "type": "string"
                 },
+                "subPath": {
+                    "type": "string"
+                },
                 "requestedSize": {
                     "type": "string"
                 },
