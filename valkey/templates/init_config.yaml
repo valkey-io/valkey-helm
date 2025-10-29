@@ -6,7 +6,7 @@ metadata:
     {{- include "valkey.labels" . | nindent 4 }}
 data:
   init.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euo pipefail
 
     # Default config paths
