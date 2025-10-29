@@ -48,6 +48,9 @@ spec:
           volumeMounts:
             - name: {{ .Values.dataStorage.volumeName }}
               mountPath: /data
+              {{- if .Values.dataStorage.subPath }}
+              subPath: {{ .Values.dataStorage.subPath }}
+              {{- end }}
             - name: scripts
               mountPath: /scripts
             {{- if .Values.valkeyConfig }}

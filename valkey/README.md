@@ -20,6 +20,7 @@ A Helm chart for Kubernetes
 | dataStorage.keepPvc | bool | `false` |  |
 | dataStorage.labels | object | `{}` |  |
 | dataStorage.persistentVolumeClaimName | string | `nil` |  |
+| dataStorage.subPath | string | `nil` |  |
 | dataStorage.requestedSize | string | `nil` |  |
 | dataStorage.volumeName | string | `"valkey-data"` |  |
 | deploymentStrategy | string | `RollingUpdate` | |
