@@ -108,6 +108,51 @@ spec:
             - name: {{ $config.name }}-valkey
               mountPath: {{ $config.mountPath }}
             {{- end }}
+        {{- if .Values.metrics.enabled }}
+        - name: metrics
+          image: "{{ .Values.metrics.exporter.image.repository }}:{{ .Values.metrics.exporter.image.tag }}"
+          imagePullPolicy: {{ .Values.metrics.exporter.image.pullPolicy | quote }}
+          {{- with .Values.metrics.exporter.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.metrics.exporter.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.metrics.exporter.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.exporter.port }}
+          startupProbe:
+            tcpSocket:
+              port: metrics
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+          readinessProbe:
+            httpGet:
+              path: /
+              port: metrics
+          {{- with .Values.metrics.exporter.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.metrics.exporter.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: REDIS_ALIAS
+              value: {{ include "valkey.fullname" . }}
+            {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
+            - name: {{ $key }}
+              value: "{{ $val }}"
+            {{- end }}
+        {{- end }}
       volumes:
         - name: scripts
           configMap:
@@ -129,14 +174,6 @@ spec:
           configMap:
             name: {{ .name }}
             defaultMode: {{ .defaultMode | default 0440 }}
-        {{- end }}
-        {{- if .Values.metrics.enabled }}
-        {{- range .Values.metrics.exporter.extraExporterSecrets }}
-        - name: {{ .name }}-exporter
-          secret:
-            secretName: {{ .name }}
-            defaultMode: {{ .defaultMode | default 0440 }}
-        {{- end }}
         {{- end }}
         - name: {{ $storage.volumeName }}
         {{- if $storage.persistentVolumeClaimName }}

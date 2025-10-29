@@ -77,4 +77,3 @@ Creating Image Pull Secrets
 {{- printf "%s-regcred" .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- end }}
-
