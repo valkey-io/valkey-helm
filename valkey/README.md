@@ -1,6 +1,6 @@
 # valkey
 
-![Version: 0.7.6](https://img.shields.io/badge/Version-0.7.6-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 8.1.4](https://img.shields.io/badge/AppVersion-8.1.4-informational?style=flat-square)
+![Version: 0.7.7](https://img.shields.io/badge/Version-0.7.7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 8.1.4](https://img.shields.io/badge/AppVersion-8.1.4-informational?style=flat-square)
 
 A Helm chart for Kubernetes
 
@@ -22,6 +22,7 @@ A Helm chart for Kubernetes
 | dataStorage.keepPvc | bool | `false` |  |
 | dataStorage.labels | object | `{}` |  |
 | dataStorage.persistentVolumeClaimName | string | `nil` |  |
+| dataStorage.subPath | string | `nil` |  |
 | dataStorage.requestedSize | string | `nil` |  |
 | dataStorage.volumeName | string | `"valkey-data"` |  |
 | deploymentStrategy | string | `RollingUpdate` | |
@@ -45,7 +46,50 @@ A Helm chart for Kubernetes
 | ingress.tls | list | `[]` |  |
 | initResources | object | `{}` |  |
 | metrics.enabled | bool | `false` |  |
-| metrics.exporter.extraExporterSecrets | list | `[]` |  |
+| metrics.exporter.args | list | `[]` |  |
+| metrics.exporter.command | list | `[]` |  |
+| metrics.exporter.extraEnvs | object | `{}` |  |
+| metrics.exporter.extraVolumeMounts | list | `[]` |  |
+| metrics.exporter.image.pullPolicy | string | `"IfNotPresent"` |  |
+| metrics.exporter.image.repository | string | `"ghcr.io/oliver006/redis_exporter"` |  |
+| metrics.exporter.image.tag | string | `"v1.79.0"` |  |
+| metrics.exporter.port | int | `9121` |  |
+| metrics.exporter.resources | object | `{}` |  |
+| metrics.exporter.securityContext | object | `{}` |  |
+| metrics.podMonitor.additionalLabels | object | `{}` |  |
+| metrics.podMonitor.annotations | object | `{}` |  |
+| metrics.podMonitor.enabled | bool | `false` |  |
+| metrics.podMonitor.extraLabels | object | `{}` |  |
+| metrics.podMonitor.honorLabels | bool | `false` |  |
+| metrics.podMonitor.interval | string | `"30s"` |  |
+| metrics.podMonitor.metricRelabelings | list | `[]` |  |
+| metrics.podMonitor.podTargetLabels | list | `[]` |  |
+| metrics.podMonitor.port | string | `"metrics"` |  |
+| metrics.podMonitor.relabelings | list | `[]` |  |
+| metrics.podMonitor.sampleLimit | bool | `false` |  |
+| metrics.podMonitor.scrapeTimeout | string | `""` |  |
+| metrics.podMonitor.targetLimit | bool | `false` |  |
+| metrics.prometheusRule.enabled | bool | `false` |  |
+| metrics.prometheusRule.extraAnnotations | object | `{}` |  |
+| metrics.prometheusRule.extraLabels | object | `{}` |  |
+| metrics.prometheusRule.rules | list | `[]` |  |
+| metrics.service.annotations | object | `{}` |  |
+| metrics.service.enabled | bool | `true` |  |
+| metrics.service.ports.http | int | `9121` |  |
+| metrics.service.type | string | `"ClusterIP"` |  |
+| metrics.serviceMonitor.additionalLabels | object | `{}` |  |
+| metrics.serviceMonitor.annotations | object | `{}` |  |
+| metrics.serviceMonitor.enabled | bool | `false` |  |
+| metrics.serviceMonitor.extraLabels | object | `{}` |  |
+| metrics.serviceMonitor.honorLabels | bool | `false` |  |
+| metrics.serviceMonitor.interval | string | `"30s"` |  |
+| metrics.serviceMonitor.metricRelabelings | list | `[]` |  |
+| metrics.serviceMonitor.podTargetLabels | list | `[]` |  |
+| metrics.serviceMonitor.port | string | `"metrics"` |  |
+| metrics.serviceMonitor.relabelings | list | `[]` |  |
+| metrics.serviceMonitor.sampleLimit | bool | `false` |  |
+| metrics.serviceMonitor.scrapeTimeout | string | `""` |  |
+| metrics.serviceMonitor.targetLimit | bool | `false` |  |
 | nameOverride | string | `""` |  |
 | networkPolicy | object | `{}` |  |
 | nodeSelector | object | `{}` |  |
