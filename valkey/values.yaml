@@ -1,5 +1,5 @@
 global:
-  # The global image registry
+  # The global image registry (this will override the registry of all container images defined in this chart)
   imageRegistry: ""
   # The global image pull secrets (list of secret names)
   imagePullSecrets: []
