@@ -113,6 +113,9 @@
         "initResources": {
             "type": "object"
         },
+        "extraInitContainers": {
+            "type": "array"
+        },
         "metrics": {
             "type": "object",
             "properties": {
@@ -132,7 +135,21 @@
                             "type": "integer"
                         },
                         "image": {
-                            "type": "object"
+                            "type": "object",
+                            "properties": {
+                                "pullPolicy": {
+                                    "type": "string"
+                                },
+                                "registry": {
+                                    "type": "string"
+                                },
+                                "repository": {
+                                    "type": "string"
+                                },
+                                "tag": {
+                                    "type": "string"
+                                }
+                            }
                         },
                         "resources": {
                             "type": "object"

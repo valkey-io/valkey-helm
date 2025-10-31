@@ -10,7 +10,7 @@ replicaCount: 1
 image:
   # Image registry
   registry: "docker.io"
-  # Image repository
+  # Valkey container image repository
   repository: valkey/valkey
   # Image pull policy (Always, IfNotPresent, Never)
   pullPolicy: IfNotPresent
@@ -85,6 +85,9 @@ initResources: {}
   # requests:
   #   cpu: 100m
   #   memory: 128Mi
+
+# Additional init containers
+extraInitContainers: []
 
 # Persistent storage configuration
 dataStorage:
@@ -182,8 +185,10 @@ metrics:
     port: 9121
     # Image configuration
     image:
-      # Prometheus exporter Docker image
-      repository: ghcr.io/oliver006/redis_exporter
+      # Image registry
+      registry: ghcr.io
+      # Prometheus exporter container image repository
+      repository: oliver006/redis_exporter
       # Image pull policy (Always, IfNotPresent, Never)
       pullPolicy: IfNotPresent
       # Image tag (leave empty to use latest)

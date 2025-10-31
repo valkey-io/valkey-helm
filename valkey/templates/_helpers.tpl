@@ -62,7 +62,7 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-Returns the valkey container image
+Returns the Valkey container image
 */}}
 {{- define "valkey.image" -}}
 {{- $registryName := .Values.image.registry }}
@@ -81,7 +81,26 @@ Returns the valkey container image
 {{- end -}}
 
 {{/*
-Returns the valkey image pull secrets
+Returns the Valkey exporter container image
+*/}}
+{{- define "valkey.metrics.exporter.image" -}}
+{{- $registryName := .Values.metrics.exporter.image.registry }}
+{{- $repositoryName := .Values.metrics.exporter.image.repository }}
+{{- $tag := .Values.metrics.exporter.image.tag }}
+{{- if .Values.global }}
+  {{- if .Values.global.imageRegistry }}
+    {{- $registryName = .Values.global.imageRegistry }}
+  {{- end }}
+{{- end }}
+{{- if $registryName }}
+{{- printf "%s/%s:%s" $registryName $repositoryName $tag }}
+{{- else }}
+{{- printf "%s:%s" $repositoryName $tag }}
+{{ end }}
+{{- end -}}
+
+{{/*
+Returns the Valkey image pull secrets
 */}}
 {{- define "valkey.imagePullSecrets" -}}
 {{- $pullSecrets := list }}

@@ -32,7 +32,6 @@ spec:
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       securityContext:
       {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      
       initContainers:
         - name: {{ .Chart.Name }}-init
           image: {{ include "valkey.image" . }}
@@ -63,11 +62,9 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
       {{- with .Values.extraInitContainers }}
       {{- toYaml . | nindent 8 }}
       {{- end }}
-
       containers:
         - name: {{ include "valkey.fullname" . }}
           image: {{ include "valkey.image" . }}
@@ -107,7 +104,7 @@ spec:
             {{- end }}
         {{- if .Values.metrics.enabled }}
         - name: metrics
-          image: "{{ .Values.metrics.exporter.image.repository }}:{{ .Values.metrics.exporter.image.tag }}"
+          image: {{ include "valkey.metrics.exporter.image" . }}
           imagePullPolicy: {{ .Values.metrics.exporter.image.pullPolicy | quote }}
           {{- with .Values.metrics.exporter.securityContext }}
           securityContext:
@@ -186,17 +183,14 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-
       {{- with .Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-
       {{- with .Values.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
