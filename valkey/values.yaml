@@ -1,7 +1,7 @@
 global:
-  # the global image registry
+  # The global image registry
   imageRegistry: ""
-  ## The global image pull secrets (list of secret names)
+  # The global image pull secrets (list of secret names)
   imagePullSecrets: []
 
 # Number of Valkey pods to run
