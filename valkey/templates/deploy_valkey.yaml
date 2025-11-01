@@ -100,6 +100,9 @@ spec:
           volumeMounts:
             - name: {{ .Values.dataStorage.volumeName }}
               mountPath: /data
+              {{- if .Values.dataStorage.subPath }}
+              subPath: {{ .Values.dataStorage.subPath }}
+              {{- end }}
             {{- range $secret := .Values.extraValkeySecrets }}
             - name: {{ $secret.name }}-valkey
               mountPath: {{ $secret.mountPath }}
