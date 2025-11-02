@@ -39,7 +39,7 @@ data:
     {
       echo "port 6379"
       echo "protected-mode no"
-      echo "bind 0.0.0.0"
+      echo "bind * -::*"
       echo "dir /data"
     } >>"$VALKEY_CONFIG"
 
