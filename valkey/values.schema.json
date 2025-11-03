@@ -290,6 +290,9 @@
                 }
             }
         },
+        "priorityClassName": {
+            "type": "string"
+        },
         "replicaCount": {
             "type": "integer"
         },

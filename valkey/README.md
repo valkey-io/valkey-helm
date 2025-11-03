@@ -95,6 +95,7 @@ A Helm chart for Kubernetes
 | podSecurityContext.fsGroup | int | `1000` |  |
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |
+| priorityClassName | string | `""` |  |
 | replicaCount | int | `1` |  |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |

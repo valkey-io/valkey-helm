@@ -36,6 +36,9 @@ podSecurityContext:
   runAsUser: 1000
   runAsGroup: 1000
 
+# Priority class name for pod scheduling (leave empty to use cluster's default)
+priorityClassName: ""
+
 # Security context for the Valkey containers
 securityContext:
   capabilities:
