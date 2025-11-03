@@ -109,6 +109,13 @@ A Helm chart for Kubernetes
 | serviceAccount.automount | bool | `false` |  |
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
+| tls.enabled | boolean | `false` | |
+| tls.existingSecret | string | `""` | **Required if TLS is enabled** |
+| tls.serverPublicKey | string | `server.crt` | |
+| tls.serverKey | string | `server.key` | |
+| tls.caPublicKey | string | `ca.crt` | |
+| tls.dhParamKey | string | `""` |  |
+| tls.requireClientCertificate | boolean | `false` | |
 | tolerations | list | `[]` |  |
 | valkeyConfig | string | `""` |  |
 | valkeyLogLevel | string | `"notice"` |  |

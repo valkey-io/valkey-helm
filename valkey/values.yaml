@@ -140,6 +140,22 @@ auth:
     # user default off
     # user default on >defaultpassword ~*  &* +@all 
 
+tls:
+  # Enable TLS
+  enabled: false
+  # Name of the Secret containing TLS keys (required)
+  existingSecret: ""
+  # Secret key name containing server public certificate
+  serverPublicKey: server.crt
+  # Secret key name containing server private key
+  serverKey: server.key
+  # Secret key name containing Certificate Authority public certificate
+  caPublicKey: ca.crt
+  # Secret key name containing DH parameters (optional)
+  dhParamKey: ""
+  # Require that clients authenticate with a certificate
+  requireClientCertificate: false
+
 # Node selector for pod assignment
 nodeSelector: {}
 

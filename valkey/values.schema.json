@@ -355,6 +355,32 @@
                 }
             }
         },
+        "tls": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "existingSecret": {
+                    "type": "string"
+                },
+                "serverPublicKey": {
+                    "type": "string"
+                },
+                "serverKey": {
+                    "type": "string"
+                },
+                "caPublicKey": {
+                    "type": "string"
+                },
+                "dhParamKey": {
+                    "type": "string"
+                },
+                "requireClientCertificate": {
+                    "type": "boolean"
+                }               
+            }
+        },
         "tolerations": {
             "type": "array"
         },

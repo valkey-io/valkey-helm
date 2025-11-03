@@ -16,38 +16,38 @@ Port:         {{ .Values.service.port }}
 
 1) In-cluster access
    From another Pod:
-   $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} PING
+   $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} PING
 
 2) Local access via kubectl port-forward
    $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }} 6379:{{ .Values.service.port }}
    In another terminal:
-   $ valkey-cli -h 127.0.0.1 -p 6379 PING
+   $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} PING
 
 {{ if eq .Values.service.type "LoadBalancer" }}
 3) External access (LoadBalancer)
    $ export SERVICE_IP=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-   $ valkey-cli -h $SERVICE_IP -p {{ .Values.service.port }} PING
+   $ valkey-cli -h $SERVICE_IP -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} PING
 {{ else if eq .Values.service.type "NodePort" }}
 3) External access (NodePort)
    $ export NODE_PORT=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
    $ export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-   $ valkey-cli -h $NODE_IP -p $NODE_PORT PING
+   $ valkey-cli -h $NODE_IP -p $NODE_PORT{{ if .Values.tls.enabled }} --tls{{- end }} PING
 {{ end }}
 
 {{ if .Values.auth.enabled }}
 🔐 Authentication is ENABLED (ACL)
 - Provide the username and password from `.auth.aclConfig`.
 - Default user:
-  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} -a <password> PING
+  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} -a <password> PING
 - Named user:
-  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user <user> -a <password> PING
+  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} --user <user> -a <password> PING
 {{ else }}
 🔓 Authentication is DISABLED
 - Enable with: `--set auth.enabled=true` and provide `.auth.aclConfig`.
 {{ end }}
 
 ✅ Quick test
-$ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
+$ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
 valkey> SET foo bar
 valkey> GET foo
 "bar"
