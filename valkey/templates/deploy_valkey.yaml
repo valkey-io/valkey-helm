@@ -93,10 +93,18 @@ spec:
               protocol: TCP
           startupProbe:
             exec:
+              {{- if .Values.tls.enabled }}
+              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              {{- else }}
               command: [ "sh", "-c", "valkey-cli ping" ]
+              {{- end }}
           livenessProbe:
             exec:
+              {{- if .Values.tls.enabled }}
+              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              {{- else }}
               command: [ "sh", "-c", "valkey-cli ping" ]
+              {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
@@ -105,6 +113,10 @@ spec:
               {{- if .Values.dataStorage.subPath }}
               subPath: {{ .Values.dataStorage.subPath }}
               {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
             {{- range $secret := .Values.extraValkeySecrets }}
             - name: {{ $secret.name }}-valkey
               mountPath: {{ $secret.mountPath }}
@@ -174,6 +186,12 @@ spec:
             secretName: {{ .name }}
             defaultMode: {{ .defaultMode | default 0440 }}
         {{- end }}
+        {{- if .Values.tls.enabled }}
+        - name: {{ include "valkey.fullname" . }}-tls
+          secret:
+            secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            defaultMode: 0400
+        {{- end }}        
         {{- range .Values.extraValkeyConfigs }}
         - name: {{ .name }}-valkey
           configMap:
