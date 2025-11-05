@@ -276,6 +276,9 @@
         "podLabels": {
             "type": "object"
         },
+        "commonLabels": {
+            "type": "object"
+        },
         "podSecurityContext": {
             "type": "object",
             "properties": {
