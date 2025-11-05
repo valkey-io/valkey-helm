@@ -1,5 +1,4 @@
-name: Helm Template (valkey)
-
+name: Test valkey-helm template 
 on:
   push:
     branches: ["**"]
@@ -20,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kube: ["1.31.0", "1.30.0"]  # K8s versions to render against
+        kube: ["1.34.1","1.33.5","1.32.9","1.31.13", "1.30.4"]  # K8s versions to render against
 
     steps:
       - name: Checkout

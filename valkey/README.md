@@ -6,6 +6,17 @@ A Helm chart for Kubernetes
 
 **Homepage:** <https://valkey.io/valkey-helm/>
 
+## Maintainers
+
+| Name | Email | Url |
+| ---- | ------ | --- |
+| raven |  | <https://github.com/mk-raven> |
+
+## Source Code
+
+* <https://github.com/valkey-io/valkey-helm.git>
+* <https://valkey.io>
+
 ## Values
 
 | Key | Type | Default | Description |
@@ -15,15 +26,15 @@ A Helm chart for Kubernetes
 | auth.enabled | bool | `false` |  |
 | dataStorage.accessModes[0] | string | `"ReadWriteOnce"` |  |
 | dataStorage.annotations | object | `{}` |  |
-| dataStorage.className | string | `nil` |  |
+| dataStorage.className | string | `""` |  |
 | dataStorage.enabled | bool | `false` |  |
 | dataStorage.keepPvc | bool | `false` |  |
 | dataStorage.labels | object | `{}` |  |
-| dataStorage.persistentVolumeClaimName | string | `nil` |  |
-| dataStorage.subPath | string | `nil` |  |
-| dataStorage.requestedSize | string | `nil` |  |
+| dataStorage.persistentVolumeClaimName | string | `""` |  |
+| dataStorage.requestedSize | string | `""` |  |
+| dataStorage.subPath | string | `""` |  |
 | dataStorage.volumeName | string | `"valkey-data"` |  |
-| deploymentStrategy | string | `RollingUpdate` | |
+| deploymentStrategy | string | `"RollingUpdate"` |  |
 | env | object | `{}` |  |
 | extraSecretValkeyConfigs | bool | `false` |  |
 | extraStorage | list | `[]` |  |
@@ -34,13 +45,6 @@ A Helm chart for Kubernetes
 | image.repository | string | `"docker.io/valkey/valkey"` |  |
 | image.tag | string | `""` |  |
 | imagePullSecrets | list | `[]` |  |
-| ingress.annotations | object | `{}` |  |
-| ingress.className | string | `""` |  |
-| ingress.enabled | bool | `false` |  |
-| ingress.hosts[0].host | string | `"chart-example.local"` |  |
-| ingress.hosts[0].paths[0].path | string | `"/"` |  |
-| ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
-| ingress.tls | list | `[]` |  |
 | initResources | object | `{}` |  |
 | metrics.enabled | bool | `false` |  |
 | metrics.exporter.args | list | `[]` |  |
@@ -72,6 +76,7 @@ A Helm chart for Kubernetes
 | metrics.prometheusRule.rules | list | `[]` |  |
 | metrics.service.annotations | object | `{}` |  |
 | metrics.service.enabled | bool | `true` |  |
+| metrics.service.extraLabels | object | `{}` |  |
 | metrics.service.ports.http | int | `9121` |  |
 | metrics.service.type | string | `"ClusterIP"` |  |
 | metrics.serviceMonitor.additionalLabels | object | `{}` |  |
@@ -102,31 +107,22 @@ A Helm chart for Kubernetes
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
 | securityContext.runAsNonRoot | bool | `true` |  |
 | securityContext.runAsUser | int | `1000` |  |
+| service.annotations | object | `{}` |  |
+| service.nodePort | int | `0` |  |
 | service.port | int | `6379` |  |
 | service.type | string | `"ClusterIP"` |  |
-| service.nodePort | int | `0` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.automount | bool | `false` |  |
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
-| tls.enabled | boolean | `false` | |
-| tls.existingSecret | string | `""` | **Required if TLS is enabled** |
-| tls.serverPublicKey | string | `server.crt` | |
-| tls.serverKey | string | `server.key` | |
-| tls.caPublicKey | string | `ca.crt` | |
+| tls.caPublicKey | string | `"ca.crt"` |  |
 | tls.dhParamKey | string | `""` |  |
-| tls.requireClientCertificate | boolean | `false` | |
+| tls.enabled | bool | `false` |  |
+| tls.existingSecret | string | `""` |  |
+| tls.requireClientCertificate | bool | `false` |  |
+| tls.serverKey | string | `"server.key"` |  |
+| tls.serverPublicKey | string | `"server.crt"` |  |
 | tolerations | list | `[]` |  |
+| topologySpreadConstraints | list | `[]` |  |
 | valkeyConfig | string | `""` |  |
 | valkeyLogLevel | string | `"notice"` |  |
-
-## Source Code
-
-* <https://github.com/valkey-io/valkey-helm.git>
-* <https://valkey.io>
-
-## Maintainers
-
-| Name | Email | Url |
-| ---- | ------ | --- |
-| raven |  | <https://github.com/mk-raven> |
