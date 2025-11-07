@@ -30,6 +30,9 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
+# Common labels to add to all resources (Deployment, Service, ConfigMap, etc.)
+commonLabels: {}
+
 # Security context for the pod (applies to all containers)
 podSecurityContext:
   fsGroup: 1000
