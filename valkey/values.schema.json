@@ -338,6 +338,9 @@
                 },
                 "nodePort": {
                     "type": "integer"
+                },
+                "clusterIP": {
+                    "type": "string"
                 }
             }
         },
