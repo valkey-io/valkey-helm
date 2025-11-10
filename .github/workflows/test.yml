@@ -1,0 +1,52 @@
+name: Test valkey-helm template 
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helm-template-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  template:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kube: ["1.34.1","1.33.5","1.32.9","1.31.13", "1.30.4"]  # K8s versions to render against
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.3
+
+      - name: Build dependencies (if any)
+        run: |
+          helm dependency build valkey || true
+
+      - name: Render manifests (helm template)
+        run: |
+          out="/tmp/valkey-k${{ matrix.kube }}.yaml"
+          helm template valkey-tmpl ./valkey \
+            --kube-version "${{ matrix.kube }}" \
+            > "$out"
+          echo "Rendered -> $out"
+
+      - name: Upload rendered manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: valkey-template-k${{ matrix.kube }}
+          path: /tmp/valkey-*.yaml
+          if-no-files-found: error

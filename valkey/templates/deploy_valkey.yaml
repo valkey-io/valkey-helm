@@ -10,6 +10,8 @@ metadata:
     {{- include "valkey.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ .Values.deploymentStrategy }}
   selector:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
@@ -17,6 +19,9 @@ spec:
     metadata:
       labels:
         {{- include "valkey.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -32,9 +37,11 @@ spec:
       {{- end }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
       securityContext:
       {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      
       initContainers:
         - name: {{ .Chart.Name }}-init
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -47,10 +54,13 @@ spec:
           volumeMounts:
             - name: {{ .Values.dataStorage.volumeName }}
               mountPath: /data
+              {{- if .Values.dataStorage.subPath }}
+              subPath: {{ .Values.dataStorage.subPath }}
+              {{- end }}
             - name: scripts
               mountPath: /scripts
             {{- if .Values.valkeyConfig }}
-            - name: config
+            - name: valkey-config
               mountPath: /usr/local/etc/valkey/valkey.conf
               subPath: valkey.conf
             {{- end }}
@@ -92,15 +102,30 @@ spec:
               protocol: TCP
           startupProbe:
             exec:
+              {{- if .Values.tls.enabled }}
+              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              {{- else }}
               command: [ "sh", "-c", "valkey-cli ping" ]
+              {{- end }}
           livenessProbe:
             exec:
+              {{- if .Values.tls.enabled }}
+              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              {{- else }}
               command: [ "sh", "-c", "valkey-cli ping" ]
+              {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: {{ .Values.dataStorage.volumeName }}
               mountPath: /data
+              {{- if .Values.dataStorage.subPath }}
+              subPath: {{ .Values.dataStorage.subPath }}
+              {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
             {{- range $secret := .Values.extraValkeySecrets }}
             - name: {{ $secret.name }}-valkey
               mountPath: {{ $secret.mountPath }}
@@ -109,15 +134,60 @@ spec:
             - name: {{ $config.name }}-valkey
               mountPath: {{ $config.mountPath }}
             {{- end }}
+        {{- if .Values.metrics.enabled }}
+        - name: metrics
+          image: "{{ .Values.metrics.exporter.image.repository }}:{{ .Values.metrics.exporter.image.tag }}"
+          imagePullPolicy: {{ .Values.metrics.exporter.image.pullPolicy | quote }}
+          {{- with .Values.metrics.exporter.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.metrics.exporter.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.metrics.exporter.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.exporter.port }}
+          startupProbe:
+            tcpSocket:
+              port: metrics
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+          readinessProbe:
+            httpGet:
+              path: /
+              port: metrics
+          {{- with .Values.metrics.exporter.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.metrics.exporter.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: REDIS_ALIAS
+              value: {{ include "valkey.fullname" . }}
+            {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
+            - name: {{ $key }}
+              value: "{{ $val }}"
+            {{- end }}
+        {{- end }}
       volumes:
         - name: scripts
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts
             defaultMode: 0555
         {{- if .Values.valkeyConfig }}
-        - name: {{ include "valkey.fullname" . }}-config
+        - name: valkey-config
           configMap:
-            name: valkey-config
+            name: {{ include "valkey.fullname" . }}-config
         {{- end }}
         {{- range .Values.extraValkeySecrets }}
         - name: {{ .name }}-valkey
@@ -125,6 +195,12 @@ spec:
             secretName: {{ .name }}
             defaultMode: {{ .defaultMode | default 0440 }}
         {{- end }}
+        {{- if .Values.tls.enabled }}
+        - name: {{ include "valkey.fullname" . }}-tls
+          secret:
+            secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            defaultMode: 0400
+        {{- end }}        
         {{- range .Values.extraValkeyConfigs }}
         - name: {{ .name }}-valkey
           configMap:
@@ -166,6 +242,11 @@ spec:
 
       {{- with .Values.affinity }}
       affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 

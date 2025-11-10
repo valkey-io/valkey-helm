@@ -1,0 +1,14 @@
+# chart-testing configuration
+chart-dirs:
+  - valkey
+
+# Enforce semver bump when chart is modified
+check-version-increment: true
+
+validate-maintainers: false
+
+# Speeds up 'ct dependency build' by caching ~/.cache/ct (handled by action cache automatically)
+helm-extra-args: "--debug"
+
+# excluded-charts:
+#   - charts/valkey-operator

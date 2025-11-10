@@ -43,6 +43,9 @@
                 "persistentVolumeClaimName": {
                     "type": "string"
                 },
+                "subPath": {
+                    "type": "string"
+                },
                 "requestedSize": {
                     "type": "string"
                 },
@@ -50,6 +53,10 @@
                     "type": "string"
                 }
             }
+        },
+        "deploymentStrategy": {
+            "type": "string",
+             "enum": ["RollingUpdate", "Recreate"]
         },
         "env": {
             "type": "object"
@@ -86,48 +93,6 @@
         "imagePullSecrets": {
             "type": "array"
         },
-        "ingress": {
-            "type": "object",
-            "properties": {
-                "annotations": {
-                    "type": "object"
-                },
-                "className": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "hosts": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "host": {
-                                "type": "string"
-                            },
-                            "paths": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "path": {
-                                            "type": "string"
-                                        },
-                                        "pathType": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "tls": {
-                    "type": "array"
-                }
-            }
-        },
         "initResources": {
             "type": "object"
         },
@@ -140,7 +105,156 @@
                 "exporter": {
                     "type": "object",
                     "properties": {
+                        "command": {
+                            "type": "array"
+                        },
+                        "args": {
+                            "type": "array"
+                        },
+                        "port": {
+                            "type": "integer"
+                        },
+                        "image": {
+                            "type": "object"
+                        },
+                        "resources": {
+                            "type": "object"
+                        },
+                        "extraVolumeMounts": {
+                            "type": "array"
+                        },
+                        "extraEnvs": {
+                            "type": "object"
+                        },
+                        "securityContext": {
+                            "type": "object"
+                        },
                         "extraExporterSecrets": {
+                            "type": "array"
+                        }
+                    }
+                },
+                "service": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "type": {
+                            "type": "string"
+                        },
+                        "ports": {
+                            "type": "object"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        },
+                        "extraLabels": {
+                            "type": "object"
+                        }
+                    }
+                },
+                "serviceMonitor": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "port": {
+                            "type": "string"
+                        },
+                        "extraLabels": {
+                            "type": "object"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        },
+                        "interval": {
+                            "type": "string"
+                        },
+                        "scrapeTimeout": {
+                            "type": "string"
+                        },
+                        "relabelings": {
+                            "type": "array"
+                        },
+                        "metricRelabelings": {
+                            "type": "array"
+                        },
+                        "honorLabels": {
+                            "type": "boolean"
+                        },
+                        "additionalLabels": {
+                            "type": "object"
+                        },
+                        "podTargetLabels": {
+                            "type": "array"
+                        },
+                        "sampleLimit": {
+                            "type": "boolean"
+                        },
+                        "targetLimit": {
+                            "type": "boolean"
+                        }
+                    }
+                },
+                "podMonitor": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "port": {
+                            "type": "string"
+                        },
+                        "extraLabels": {
+                            "type": "object"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        },
+                        "interval": {
+                            "type": "string"
+                        },
+                        "scrapeTimeout": {
+                            "type": "string"
+                        },
+                        "relabelings": {
+                            "type": "array"
+                        },
+                        "metricRelabelings": {
+                            "type": "array"
+                        },
+                        "honorLabels": {
+                            "type": "boolean"
+                        },
+                        "additionalLabels": {
+                            "type": "object"
+                        },
+                        "podTargetLabels": {
+                            "type": "array"
+                        },
+                        "sampleLimit": {
+                            "type": "boolean"
+                        },
+                        "targetLimit": {
+                            "type": "boolean"
+                        }
+                    }
+                },
+                "prometheusRule": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "extraLabels": {
+                            "type": "object"
+                        },
+                        "extraAnnotations": {
+                            "type": "object"
+                        },
+                        "rules": {
                             "type": "array"
                         }
                     }
@@ -162,6 +276,9 @@
         "podLabels": {
             "type": "object"
         },
+        "commonLabels": {
+            "type": "object"
+        },
         "podSecurityContext": {
             "type": "object",
             "properties": {
@@ -175,6 +292,9 @@
                     "type": "integer"
                 }
             }
+        },
+        "priorityClassName": {
+            "type": "string"
         },
         "replicaCount": {
             "type": "integer"
@@ -215,6 +335,9 @@
                 },
                 "type": {
                     "type": "string"
+                },
+                "nodePort": {
+                    "type": "integer"
                 }
             }
         },
@@ -235,8 +358,40 @@
                 }
             }
         },
+        "tls": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "existingSecret": {
+                    "type": "string"
+                },
+                "serverPublicKey": {
+                    "type": "string"
+                },
+                "serverKey": {
+                    "type": "string"
+                },
+                "caPublicKey": {
+                    "type": "string"
+                },
+                "dhParamKey": {
+                    "type": "string"
+                },
+                "requireClientCertificate": {
+                    "type": "boolean"
+                }               
+            }
+        },
         "tolerations": {
             "type": "array"
+        },
+        "topologySpreadConstraints": {
+            "type": "array",
+            "items": {
+                "type": "object"
+            }
         },
         "valkeyConfig": {
             "type": "string"

@@ -1,22 +1,67 @@
-1. Get the application URL by running these commands:
-{{- if .Values.ingress.enabled }}
-{{- range $host := .Values.ingress.hosts }}
-  {{- range .paths }}
-  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
-  {{- end }}
-{{- end }}
-{{- else if contains "NodePort" .Values.service.type }}
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "valkey.fullname" . }})
-  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
-  echo http://$NODE_IP:$NODE_PORT
-{{- else if contains "LoadBalancer" .Values.service.type }}
-     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-           You can watch its status by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "valkey.fullname" . }}'
-  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "valkey.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
-  echo http://$SERVICE_IP:{{ .Values.service.port }}
-{{- else if contains "ClusterIP" .Values.service.type }}
-  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "valkey.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
-  export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
-  echo "Visit http://127.0.0.1:8080 to use your application"
-  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
-{{- end }}
+{{/*
+  NOTES for Valkey Helm Chart
+  This file is rendered after `helm install` / `helm upgrade`.
+*/}}
+
+⭐ Valkey has been deployed!
+
+Release:      {{ .Release.Name }}
+Namespace:    {{ .Release.Namespace }}
+Chart:        {{ .Chart.Name }} {{ .Chart.Version }}
+App version:  {{ .Chart.AppVersion }}
+
+Service:      {{ include "valkey.fullname" . }}
+Type:         {{ .Values.service.type }}
+Port:         {{ .Values.service.port }}
+
+1) In-cluster access
+   From another Pod:
+   $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} PING
+
+2) Local access via kubectl port-forward
+   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }} 6379:{{ .Values.service.port }}
+   In another terminal:
+   $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} PING
+
+{{ if eq .Values.service.type "LoadBalancer" }}
+3) External access (LoadBalancer)
+   $ export SERVICE_IP=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+   $ valkey-cli -h $SERVICE_IP -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} PING
+{{ else if eq .Values.service.type "NodePort" }}
+3) External access (NodePort)
+   $ export NODE_PORT=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
+   $ export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+   $ valkey-cli -h $NODE_IP -p $NODE_PORT{{ if .Values.tls.enabled }} --tls{{- end }} PING
+{{ end }}
+
+{{ if .Values.auth.enabled }}
+🔐 Authentication is ENABLED (ACL)
+- Provide the username and password from `.auth.aclConfig`.
+- Default user:
+  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} -a <password> PING
+- Named user:
+  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} --user <user> -a <password> PING
+{{ else }}
+🔓 Authentication is DISABLED
+- Enable with: `--set auth.enabled=true` and provide `.auth.aclConfig`.
+{{ end }}
+
+✅ Quick test
+$ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
+valkey> SET foo bar
+valkey> GET foo
+"bar"
+
+{{ if .Values.dataStorage.enabled }}
+💾 Persistence
+- A PVC is enabled. To see it:
+  $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name={{ include "valkey.name" . }}
+- Note: `dataStorage.keepPvc={{ .Values.dataStorage.keepPvc }}` controls whether the PVC is kept on uninstall.
+{{ else }}
+💾 Persistence
+- Persistence is DISABLED. Data will not survive Pod restarts.
+- Enable with: `--set dataStorage.enabled=true --set dataStorage.requestedSize=5Gi` (optionally set `dataStorage.className`).
+{{ end }}
+
+🧹 Uninstall
+$ helm -n {{ .Release.Namespace }} uninstall {{ .Release.Name }}

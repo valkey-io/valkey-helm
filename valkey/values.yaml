@@ -30,11 +30,17 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
+# Common labels to add to all resources (Deployment, Service, ConfigMap, etc.)
+commonLabels: {}
+
 # Security context for the pod (applies to all containers)
 podSecurityContext:
   fsGroup: 1000
   runAsUser: 1000
   runAsGroup: 1000
+
+# Priority class name for pod scheduling (leave empty to use cluster's default)
+priorityClassName: ""
 
 # Security context for the Valkey containers
 securityContext:
@@ -50,29 +56,13 @@ service:
   type: ClusterIP
   # Port on which Valkey will be exposed
   port: 6379
+  annotations: {}
+  # NodePort value (if service.type is NodePort)
+  nodePort: 0
 
 # Network policy to control traffic to the pods
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
 networkPolicy: {}
-
-# Ingress configuration
-# More info: https://kubernetes.io/docs/concepts/services-networking/ingress/
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-    # Example:
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-    # - secretName: chart-example-tls
-    #   hosts:
-    #     - chart-example.local
 
 # Resource limits/requests for the main Valkey container
 resources: {}
@@ -101,6 +91,9 @@ dataStorage:
 
   # Use existing PVC by name (skip dynamic provisioning if set)
   persistentVolumeClaimName: ""
+
+  # Subpath inside PVC to mount
+  subPath: ""
 
   # Name of the volume (referenced in deployment)
   volumeName: "valkey-data"
@@ -178,6 +171,22 @@ auth:
     # user default off
     # user default on >defaultpassword ~*  &* +@all
 
+tls:
+  # Enable TLS
+  enabled: false
+  # Name of the Secret containing TLS keys (required)
+  existingSecret: ""
+  # Secret key name containing server public certificate
+  serverPublicKey: server.crt
+  # Secret key name containing server private key
+  serverKey: server.key
+  # Secret key name containing Certificate Authority public certificate
+  caPublicKey: ca.crt
+  # Secret key name containing DH parameters (optional)
+  dhParamKey: ""
+  # Require that clients authenticate with a certificate
+  requireClientCertificate: false
+
 # Node selector for pod assignment
 nodeSelector: {}
 
@@ -187,19 +196,173 @@ tolerations: []
 # Affinity rules for pod scheduling
 affinity: {}
 
+# Set Deployment strategy. See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
+deploymentStrategy: RollingUpdate
+
+# See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
+topologySpreadConstraints: []
+
 # Valkey logging level: debug, verbose, notice, warning
 valkeyLogLevel: "notice"
-
-metrics:
-  # Enable Prometheus exporter sidecar
-  enabled: false
-
-  exporter:
-    # Additional secrets to mount for metrics exporter
-    extraExporterSecrets: []
-
 # Environment variables to inject into Valkey container
 env: {}
   # Example:
   # LOG_LEVEL: info
 
+metrics:
+  # Enable Prometheus exporter sidecar
+  enabled: false
+  # Exporter configuration
+  exporter:
+    # Command to run in the metrics exporter container (overrides args)
+    command: []
+    # Arguments to pass to the metrics exporter container
+    args: []
+      # Example:
+      # - --redis.addr=redis:6379
+    # Port on which the metrics exporter will listen
+    port: 9121
+    # Image configuration
+    image:
+      # Prometheus exporter Docker image
+      repository: ghcr.io/oliver006/redis_exporter
+      # Image pull policy (Always, IfNotPresent, Never)
+      pullPolicy: IfNotPresent
+      # Image tag (leave empty to use latest)
+      tag: "v1.79.0"
+    resources: {}
+      # Example:
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+      # requests:
+      #   cpu: 100m
+      #   memory: 128Mi
+    # Extra volume mounts for metrics exporter container
+    extraVolumeMounts: []
+    # Environment variables to inject into the metrics exporter container
+    extraEnvs: {}
+    # Example:
+    # LOG_LEVEL: info
+    securityContext: {}
+      # Example:
+      # runAsNonRoot: true
+      # runAsUser: 1000
+      # runAsGroup: 1000
+      # capabilities:
+      #   drop:
+      #     - ALL
+      # readOnlyRootFilesystem: true
+
+  # Service configuration for the metrics exporter
+  service:
+    # Enable a separate service for the metrics exporter
+    enabled: true  
+    # Service type (ClusterIP, NodePort, LoadBalancer)
+    type: ClusterIP  
+    # Port on which the metrics exporter service will be exposed
+    ports:
+      http: 9121  
+    # Optional annotations for the metrics exporter service
+    annotations: {}  
+    # Optional labels for the metrics exporter service
+    extraLabels: {}  
+    # ServiceMonitor configuration for Prometheus Operator
+  serviceMonitor:
+    # Enable ServiceMonitor resource for scraping service metrics
+    enabled: false
+    # Port name or number to scrape metrics from
+    port: metrics
+    # Extra labels for the ServiceMonitor resource
+    extraLabels: {}
+    # Extra annotations for the ServiceMonitor resource
+    annotations: {}
+    # How often Prometheus should scrape metrics
+    interval: 30s
+    # Maximum duration allowed for a scrape request
+    scrapeTimeout: ""
+    # Relabeling rules applied before scraping metrics
+    relabelings: []
+    # Relabeling rules applied before ingesting metrics
+    metricRelabelings: []
+    # Set honorLabels to true to preserve original metric labels
+    honorLabels: false
+    # Extra labels to help Prometheus discover ServiceMonitor resources
+    additionalLabels: {}
+    # Pod labels to copy onto the generated metrics
+    podTargetLabels: []
+    # Maximum number of samples to collect per Pod scrape
+    sampleLimit: false
+    # Maximum number of scrape targets allowed
+    targetLimit: false
+  podMonitor:
+    # Enable PodMonitor resource for scraping pod metrics
+    enabled: false
+    # Port name or number to scrape metrics from
+    port: metrics
+    # Extra labels for the ServiceMonitor resource
+    extraLabels: {}
+    # Extra annotations for the ServiceMonitor resource
+    annotations: {}
+    # Frequency for Prometheus to scrape pod metrics
+    interval: 30s
+    # Time limit for each scrape operation
+    scrapeTimeout: ""
+    # Relabeling rules to apply before scraping pod metrics
+    relabelings: []
+    # Relabeling rules to apply before ingesting pod metrics
+    metricRelabelings: []
+    # If true, keeps original labels from the pod metrics
+    honorLabels: false
+    # Additional labels for Prometheus to find PodMonitor resources
+    additionalLabels: {}
+    # Pod labels to attach to the metrics
+    podTargetLabels: []
+    # Maximum samples to scrape from each Pod
+    sampleLimit: false
+    # Maximum number of pods to scrape
+    targetLimit: false
+
+  # PrometheusRule configuration for alerting rules (used by kube-prometheus-stack)
+  prometheusRule:
+    # Enable creation of PrometheusRule resource
+    enabled: false
+    # Extra labels to add to the PrometheusRule resource
+    extraLabels: {}
+    # Extra annotations to add to the PrometheusRule resource
+    extraAnnotations: {}
+    # List of Prometheus alerting rules
+    rules: []
+    # Example alerting rules:
+    # - alert: ValkeyDown
+    #   annotations:
+    #     summary: Valkey instance {{ "{{ $labels.instance }}" }} down
+    #     description: Valkey instance {{ "{{ $labels.instance }}" }} is down.
+    #   expr: |
+    #     redis_up{service="{{ include "valkey.fullname" . }}-metrics"} == 0
+    #   for: 2m
+    #   labels:
+    #     severity: error
+    # - alert: ValkeyMemoryHigh
+    #   annotations:
+    #     summary: Valkey instance {{ "{{ $labels.instance }}" }} is using too much memory
+    #     description: |
+    #        Valkey instance {{ "{{ $labels.instance }}" }} is using {{ "{{ $value }}" }}% of its available memory.
+    #   expr: |
+    #      redis_memory_used_bytes{service="{{ include "valkey.fullname" . }}-metrics"} * 100
+    #      /
+    #      redis_memory_max_bytes{service="{{ include "valkey.fullname" . }}-metrics"}
+    #      > 90 <= 100
+    #   for: 2m
+    #   labels:
+    #     severity: error
+    # - alert: ValkeyKeyEviction
+    #   annotations:
+    #     summary: Valkey instance {{ "{{ $labels.instance }}" }} has evicted keys
+    #     description: |
+    #        Valkey instance {{ "{{ $labels.instance }}" }} has evicted {{ "{{ $value }}" }} keys in the last 5 minutes.
+    #   expr: |
+    #     increase(redis_evicted_keys_total{service="{{ include "valkey.fullname" . }}-metrics"}[5m]) > 0
+    #   for: 1s
+    #   labels:
+    #     severity: error

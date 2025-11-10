@@ -6,7 +6,7 @@ metadata:
     {{- include "valkey.labels" . | nindent 4 }}
 data:
   init.sh: |-
-    #!/bin/bash
+    #!/bin/sh
     set -euo pipefail
 
     # Default config paths
@@ -37,9 +37,23 @@ data:
     # Base valkey.conf
     log "Generating base valkey.conf"
     {
+{{- if .Values.tls.enabled }}
+      echo "tls-cert-file /tls/{{ .Values.tls.serverPublicKey }}"
+      echo "tls-key-file /tls/{{ .Values.tls.serverKey }}"
+      echo "tls-ca-cert-file /tls/{{ .Values.tls.caPublicKey }}"
+      {{- if .Values.tls.dhParamKey }}
+      echo "tls-dh-params-file /tls/{{ .Values.tls.dhParamKey }}"
+      {{- end }}
+      {{- if not .Values.tls.requireClientCertificate }}
+      echo "tls-auth-clients no"
+      {{- end }}
+      echo "port 0"
+      echo "tls-port 6379"
+{{- else }}
       echo "port 6379"
+{{- end }}
       echo "protected-mode no"
-      echo "bind 0.0.0.0"
+      echo "bind * -::*"
       echo "dir /data"
     } >>"$VALKEY_CONFIG"
 

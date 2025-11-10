@@ -2,8 +2,8 @@ apiVersion: v2
 name: valkey
 description: A Helm chart for Kubernetes
 type: application
-version: 0.7.2
-appVersion: "8.1.3"
+version: 0.7.7
+appVersion: "8.1.4"
 home: https://valkey.io/valkey-helm/
 sources:
   - https://github.com/valkey-io/valkey-helm.git
