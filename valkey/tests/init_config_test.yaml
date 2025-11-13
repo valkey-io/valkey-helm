@@ -16,7 +16,7 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "admin-password"
     asserts:
@@ -40,7 +40,7 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-secret"
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
     asserts:
       - isKind:
@@ -56,7 +56,7 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "admin-password"
       auth.aclConfig: |
@@ -78,7 +78,7 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "admin-password"
     asserts:

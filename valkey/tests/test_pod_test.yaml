@@ -13,7 +13,7 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "admin-password"
     asserts:
@@ -42,7 +42,7 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-secret"
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
     asserts:
       - hasDocuments:
@@ -71,7 +71,7 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "testuser"
+        testuser:
           permissions: "~* &* +@all"
           password: "test-password"
     asserts:
@@ -91,7 +91,7 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "admin-password"
     asserts:

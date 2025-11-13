@@ -122,8 +122,8 @@ Check if there are any users with inline passwords
 */}}
 {{- define "valkey.hasInlinePasswords" -}}
 {{- $hasInlinePasswords := false -}}
-{{- range .Values.auth.aclUsers -}}
-  {{- if .password -}}
+{{- range $username, $user := .Values.auth.aclUsers -}}
+  {{- if $user.password -}}
     {{- $hasInlinePasswords = true -}}
   {{- end -}}
 {{- end -}}
@@ -140,18 +140,15 @@ Validate auth configuration
   {{- end }}
   {{- if .Values.auth.aclUsers }}
     {{- $hasUsersExistingSecret := .Values.auth.usersExistingSecret }}
-    {{- range .Values.auth.aclUsers }}
-      {{- if not .name }}
-        {{- fail "Each user in auth.aclUsers must have a 'name' field" }}
+    {{- range $username, $user := .Values.auth.aclUsers }}
+      {{- if not $user.permissions }}
+        {{- fail (printf "User '%s' in auth.aclUsers must have a 'permissions' field" $username) }}
       {{- end }}
-      {{- if not .permissions }}
-        {{- fail (printf "User '%s' in auth.aclUsers must have a 'permissions' field" .name) }}
+      {{- if not (or $user.password $hasUsersExistingSecret) }}
+        {{- fail (printf "User '%s' must have either 'password' field or auth.usersExistingSecret must be set" $username) }}
       {{- end }}
-      {{- if not (or .password $hasUsersExistingSecret) }}
-        {{- fail (printf "User '%s' must have either 'password' field or auth.usersExistingSecret must be set" .name) }}
-      {{- end }}
-      {{- if and .passwordKey (not $hasUsersExistingSecret) }}
-        {{- fail (printf "User '%s' has passwordKey but auth.usersExistingSecret is not set" .name) }}
+      {{- if and $user.passwordKey (not $hasUsersExistingSecret) }}
+        {{- fail (printf "User '%s' has passwordKey but auth.usersExistingSecret is not set" $username) }}
       {{- end }}
     {{- end }}
   {{- end }}

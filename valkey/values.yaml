@@ -152,15 +152,15 @@ auth:
   # Use an existing secret for user passwords. Key defaults to username.
   usersExistingSecret: ""
 
-  # List of users to create with ACL permissions.
+  # Map of users to create with ACL permissions.
   # If usersExistingSecret is set, passwords from the secret take priority over inline passwords.
-  aclUsers: []
+  aclUsers: {}
   # Example:
-  # - name: default
+  # default:
   #   permissions: "~* &* +@all"
   #   password: "secretpass"        # Inline password (fallback if usersExistingSecret not set)
   #   passwordKey: "admin-pwd"      # Key in usersExistingSecret (defaults to username)
-  # - name: read-user
+  # read-user:
   #   permissions: "~* -@all +@read +ping +info"
 
   # Inline ACL configuration that will be appended after generated users.

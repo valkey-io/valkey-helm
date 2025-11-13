@@ -6,29 +6,18 @@ tests:
   - it: should fail when auth enabled but no method configured
     set:
       auth.enabled: true
-      auth.aclUsers: []
+      auth.aclUsers: {}
       auth.aclConfig: ""
     template: templates/deploy_valkey.yaml
     asserts:
       - failedTemplate:
           errorPattern: "auth.enabled is true but no authentication method.*"
 
-  - it: should fail when user has no name
-    set:
-      auth.enabled: true
-      auth.aclUsers:
-        - permissions: "~* &* +@all"
-          password: "test"
-    template: templates/deploy_valkey.yaml
-    asserts:
-      - failedTemplate:
-          errorPattern: "Each user in auth.aclUsers must have a 'name' field"
-
   - it: should fail when user has no permissions
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           password: "test"
     template: templates/deploy_valkey.yaml
     asserts:
@@ -39,7 +28,7 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
     template: templates/deploy_valkey.yaml
     asserts:
@@ -50,7 +39,7 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "test"
           passwordKey: "admin-pwd"
@@ -63,10 +52,10 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "admin-password"
-        - name: "readonly"
+        readonly:
           permissions: "~* +@read"
           password: "readonly-password"
     template: templates/deploy_valkey.yaml
@@ -79,9 +68,9 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-secret"
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
-        - name: "readonly"
+        readonly:
           permissions: "~* +@read"
           passwordKey: "readonly-pwd"
     template: templates/deploy_valkey.yaml
@@ -94,11 +83,11 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-secret"
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "fallback-password"
           passwordKey: "admin-pwd"
-        - name: "readonly"
+        readonly:
           permissions: "~* +@read"
           password: "readonly-password"
     template: templates/deploy_valkey.yaml
@@ -119,7 +108,7 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "admin-password"
       auth.aclConfig: "user guest on nopass ~public:* +@read"

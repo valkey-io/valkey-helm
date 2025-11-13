@@ -23,7 +23,7 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "admin-password"
     template: templates/deploy_valkey.yaml
@@ -49,7 +49,7 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-custom-secret"
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
     template: templates/deploy_valkey.yaml
     asserts:
@@ -74,10 +74,10 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-custom-secret"
       auth.aclUsers:
-        - name: "admin"
+        admin:
           permissions: "~* &* +@all"
           password: "admin-password"
-        - name: "readonly"
+        readonly:
           permissions: "~* +@read"
     template: templates/deploy_valkey.yaml
     asserts:

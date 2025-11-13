@@ -1,9 +1,11 @@
 {{- if .Values.auth.enabled }}
 {{- $firstUser := dict }}
-{{- range .Values.auth.aclUsers }}
-  {{- if .password }}
-    {{- if not $firstUser.name }}
-      {{- $firstUser = . }}
+{{- $firstUsername := "" }}
+{{- range $username, $user := .Values.auth.aclUsers }}
+  {{- if $user.password }}
+    {{- if not $firstUsername }}
+      {{- $firstUsername = $username }}
+      {{- $firstUser = $user }}
     {{- end }}
   {{- end }}
 {{- end }}
@@ -30,8 +32,8 @@ spec:
           echo "Testing authentication with aclUsers (inline passwords)..."
 
           # Extract password from secret
-          PASSWORD=$(cat /valkey-auth/{{ $firstUser.name }}-password)
-          USERNAME="{{ $firstUser.name }}"
+          PASSWORD=$(cat /valkey-auth/{{ $firstUsername }}-password)
+          USERNAME="{{ $firstUsername }}"
 
           # Test authentication
           valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user "$USERNAME" --pass "$PASSWORD" PING

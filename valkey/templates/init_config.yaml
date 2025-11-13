@@ -72,9 +72,8 @@ data:
     {{- if .Values.auth.aclUsers }}
     # Generate ACL entries for each user
     log "Generating ACL entries for users"
-    {{- range .Values.auth.aclUsers }}
-    {{- $username := .name }}
-    {{- $passwordKey := .passwordKey | default .name }}
+    {{- range $username, $user := .Values.auth.aclUsers }}
+    {{- $passwordKey := $user.passwordKey | default $username }}
 
     # User: {{ $username }}
     PASSWORD=""
@@ -83,7 +82,7 @@ data:
     if [ -f /valkey-users-secret/{{ $passwordKey }} ]; then
       PASSWORD=$(cat /valkey-users-secret/{{ $passwordKey }})
       log "Using password from existing secret for user {{ $username }}"
-    {{- if .password }}
+    {{- if $user.password }}
     elif [ -f /valkey-auth-secret/{{ $username }}-password ]; then
       # Fallback to inline password
       PASSWORD=$(cat /valkey-auth-secret/{{ $username }}-password)
@@ -93,7 +92,7 @@ data:
       log "ERROR: No password found for user {{ $username }}"
       exit 1
     fi
-    {{- else if .password }}
+    {{- else if $user.password }}
     # Use inline password only
     if [ -f /valkey-auth-secret/{{ $username }}-password ]; then
       PASSWORD=$(cat /valkey-auth-secret/{{ $username }}-password)
@@ -106,7 +105,7 @@ data:
 
     # Hash the password and write ACL entry
     PASSHASH=$(echo -n "$PASSWORD" | sha256sum | cut -f 1 -d " ")
-    echo "user {{ $username }} on #$PASSHASH {{ .permissions }}" >> /etc/valkey/users.acl
+    echo "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> /etc/valkey/users.acl
 
     {{- end }}
     {{- end }}
