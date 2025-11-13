@@ -12,66 +12,96 @@ tests:
           path: data["init.sh"]
           pattern: "aclfile"
 
-  - it: should copy ACL from secret with generateDefaultUser
+  - it: should configure ACL file at /etc/valkey/users.acl with inline passwords
     set:
       auth.enabled: true
-      auth.generateDefaultUser.enabled: true
-      auth.aclConfig: ""
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "admin-password"
     asserts:
       - isKind:
           of: ConfigMap
       - matchRegex:
           path: data["init.sh"]
-          pattern: "aclfile /data/conf/users\\.acl"
+          pattern: "aclfile /etc/valkey/users\\.acl"
       - matchRegex:
           path: data["init.sh"]
-          pattern: "cp /valkey-auth/users\\.acl"
+          pattern: "mkdir -p /etc/valkey"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "chmod 0400 /etc/valkey/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cat /valkey-auth-secret/admin-password"
 
-  - it: should copy ACL from secret with existingSecret
+  - it: should configure ACL file with usersExistingSecret
     set:
       auth.enabled: true
-      auth.existingSecret: "my-secret"
-      auth.aclConfig: ""
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
     asserts:
       - isKind:
           of: ConfigMap
       - matchRegex:
           path: data["init.sh"]
-          pattern: "aclfile /data/conf/users\\.acl"
+          pattern: "aclfile /etc/valkey/users\\.acl"
       - matchRegex:
           path: data["init.sh"]
-          pattern: "cp /valkey-auth/users\\.acl"
+          pattern: "/valkey-users-secret/admin"
 
-  - it: should use inline ACL config
+  - it: should append aclConfig to generated users
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "admin-password"
+      auth.aclConfig: |
+        user guest on nopass ~public:* +@read
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile /etc/valkey/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "Appending custom ACL configuration"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "/valkey-auth-secret/aclConfig"
+
+  - it: should have error handling for missing passwords
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "admin-password"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "ERROR.*No password found"
+
+  - it: should use aclConfig only
     set:
       auth.enabled: true
       auth.aclConfig: |
         user admin on >password ~* &* +@all
-        user readonly on >password ~* +@read
     asserts:
       - isKind:
           of: ConfigMap
       - matchRegex:
           path: data["init.sh"]
-          pattern: "aclfile /data/conf/users\\.acl"
+          pattern: "aclfile /etc/valkey/users\\.acl"
       - matchRegex:
           path: data["init.sh"]
-          pattern: "cat <<EOF > /data/conf/users\\.acl"
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: "user admin on >password"
-
-  - it: should have error handling for missing ACL file
-    set:
-      auth.enabled: true
-      auth.generateDefaultUser.enabled: true
-      auth.aclConfig: ""
-    asserts:
-      - isKind:
-          of: ConfigMap
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: "ERROR.*ACL file"
+          pattern: "/valkey-auth-secret/aclConfig"
 
   - it: should have correct metadata
     asserts:

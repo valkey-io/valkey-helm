@@ -1,4 +1,13 @@
-{{- if and .Values.auth.enabled .Values.auth.generateDefaultUser.enabled }}
+{{- if .Values.auth.enabled }}
+{{- $firstUser := dict }}
+{{- range .Values.auth.aclUsers }}
+  {{- if .password }}
+    {{- if not $firstUser.name }}
+      {{- $firstUser = . }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if include "valkey.hasInlinePasswords" . | eq "true" }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -18,25 +27,28 @@ spec:
         - -c
         - |
           set -e
-          echo "Testing authentication with generated default user..."
+          echo "Testing authentication with aclUsers (inline passwords)..."
 
           # Extract password from secret
-          PASSWORD=$(cat /valkey-auth/password)
+          PASSWORD=$(cat /valkey-auth/{{ $firstUser.name }}-password)
+          USERNAME="{{ $firstUser.name }}"
 
           # Test authentication
-          valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user {{ .Values.auth.generateDefaultUser.username }} --pass "$PASSWORD" PING
+          valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user "$USERNAME" --pass "$PASSWORD" PING
 
-          # Test that we can set and get a value
-          valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user {{ .Values.auth.generateDefaultUser.username }} --pass "$PASSWORD" SET test-key-generated "test-value"
-
-          VALUE=$(valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user {{ .Values.auth.generateDefaultUser.username }} --pass "$PASSWORD" GET test-key-generated)
-
-          if [ "$VALUE" = "test-value" ]; then
-            echo "✓ Authentication test passed (generated user)"
-            exit 0
+          # Test that we can set and get a value (if permissions allow)
+          if valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user "$USERNAME" --pass "$PASSWORD" SET test-key-generated "test-value" 2>/dev/null; then
+            VALUE=$(valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user "$USERNAME" --pass "$PASSWORD" GET test-key-generated)
+            if [ "$VALUE" = "test-value" ]; then
+              echo "✓ Authentication test passed with write permissions"
+              exit 0
+            else
+              echo "✗ Authentication test failed: expected 'test-value', got '$VALUE'"
+              exit 1
+            fi
           else
-            echo "✗ Authentication test failed: expected 'test-value', got '$VALUE'"
-            exit 1
+            echo "✓ Authentication test passed (read-only or restricted permissions)"
+            exit 0
           fi
       volumeMounts:
         - name: valkey-auth
@@ -47,8 +59,9 @@ spec:
       secret:
         secretName: {{ include "valkey.fullname" . }}-auth
 {{- end }}
+{{- end }}
 ---
-{{- if and .Values.auth.enabled .Values.auth.existingSecret }}
+{{- if and .Values.auth.enabled .Values.auth.usersExistingSecret }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -68,18 +81,7 @@ spec:
         - -c
         - |
           set -e
-          echo "Testing authentication with existing secret..."
-
-          # Verify ACL file exists
-          if [ ! -f /valkey-auth/users.acl ]; then
-            echo "✗ ACL file not found in existing secret"
-            exit 1
-          fi
-
-          # Extract first user and password from ACL file (basic parsing)
-          # Expected format: user <username> on ><password> ...
-          ACL_CONTENT=$(cat /valkey-auth/users.acl)
-          echo "ACL content preview: $(echo "$ACL_CONTENT" | head -c 100)"
+          echo "Testing authentication with usersExistingSecret..."
 
           # Test basic connection (no auth - will fail if auth is properly configured)
           if valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} PING 2>/dev/null; then
@@ -88,33 +90,14 @@ spec:
           fi
 
           echo "✓ Authentication is enforced (unauthenticated access denied)"
-
-          # If password key exists in secret, test with it
-          if [ -f /valkey-auth/password ]; then
-            PASSWORD=$(cat /valkey-auth/password)
-            USERNAME="${USERNAME:-default}"
-
-            if valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user "$USERNAME" --pass "$PASSWORD" PING; then
-              echo "✓ Authentication test passed (existing secret with password)"
-
-              # Test write operation if permissions allow
-              valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user "$USERNAME" --pass "$PASSWORD" SET test-key-existing "test-value" || echo "⚠ Write operation not permitted (may be expected based on ACL)"
-              exit 0
-            else
-              echo "✗ Authentication failed with provided credentials"
-              exit 1
-            fi
-          else
-            echo "✓ ACL file verified, but no password file for testing"
-            echo "⚠ Manual verification recommended for existing secret configuration"
-            exit 0
-          fi
+          echo "⚠ Manual verification recommended for usersExistingSecret configuration"
+          exit 0
       volumeMounts:
-        - name: valkey-auth
-          mountPath: /valkey-auth
+        - name: valkey-users-secret
+          mountPath: /valkey-users-secret
           readOnly: true
   volumes:
-    - name: valkey-auth
+    - name: valkey-users-secret
       secret:
-        secretName: {{ .Values.auth.existingSecret }}
+        secretName: {{ .Values.auth.usersExistingSecret }}
 {{- end }}

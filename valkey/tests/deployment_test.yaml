@@ -11,15 +11,21 @@ tests:
       - isKind:
           of: Deployment
       - notExists:
-          path: spec.template.spec.volumes[?(@.name == "valkey-auth")]
+          path: spec.template.spec.volumes[?(@.name == "valkey-users-secret")]
       - notExists:
-          path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "valkey-auth")]
+          path: spec.template.spec.volumes[?(@.name == "valkey-auth-secret")]
+      - notExists:
+          path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "valkey-users-secret")]
+      - notExists:
+          path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "valkey-auth-secret")]
 
-  - it: should have auth volume and mount with generateDefaultUser
+  - it: should have generated volume with inline passwords
     set:
       auth.enabled: true
-      auth.generateDefaultUser.enabled: true
-      auth.aclConfig: ""
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "admin-password"
     template: templates/deploy_valkey.yaml
     asserts:
       - isKind:
@@ -27,22 +33,24 @@ tests:
       - contains:
           path: spec.template.spec.volumes
           content:
-            name: valkey-auth
+            name: valkey-auth-secret
             secret:
               secretName: RELEASE-NAME-valkey-auth
-              defaultMode: 0440
+              defaultMode: 0400
       - contains:
           path: spec.template.spec.initContainers[0].volumeMounts
           content:
-            name: valkey-auth
-            mountPath: /valkey-auth
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
             readOnly: true
 
-  - it: should have auth volume and mount with existingSecret
+  - it: should have users-secret volume with usersExistingSecret
     set:
       auth.enabled: true
-      auth.existingSecret: "my-custom-secret"
-      auth.aclConfig: ""
+      auth.usersExistingSecret: "my-custom-secret"
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
     template: templates/deploy_valkey.yaml
     asserts:
       - isKind:
@@ -50,18 +58,47 @@ tests:
       - contains:
           path: spec.template.spec.volumes
           content:
-            name: valkey-auth
+            name: valkey-users-secret
             secret:
               secretName: my-custom-secret
-              defaultMode: 0440
+              defaultMode: 0400
       - contains:
           path: spec.template.spec.initContainers[0].volumeMounts
           content:
-            name: valkey-auth
-            mountPath: /valkey-auth
+            name: valkey-users-secret
+            mountPath: /valkey-users-secret
             readOnly: true
 
-  - it: should not have auth volume with aclConfig (inline)
+  - it: should have both volumes with mixed passwords
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret"
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "admin-password"
+        - name: "readonly"
+          permissions: "~* +@read"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-users-secret
+            secret:
+              secretName: my-custom-secret
+              defaultMode: 0400
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-auth-secret
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 0400
+
+  - it: should have generated volume with aclConfig only
     set:
       auth.enabled: true
       auth.aclConfig: "user admin on >password ~* &* +@all"
@@ -69,8 +106,13 @@ tests:
     asserts:
       - isKind:
           of: Deployment
-      - notExists:
-          path: spec.template.spec.volumes[?(@.name == "valkey-auth")]
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-auth-secret
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 0400
 
   - it: should have correct replicas
     set:
@@ -83,13 +125,14 @@ tests:
 
   - it: should use custom image
     set:
-      image.repository: custom-registry/valkey
+      image.registry: custom-registry
+      image.repository: valkey/valkey
       image.tag: "7.0.0"
     template: templates/deploy_valkey.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: custom-registry/valkey:7.0.0
+          value: custom-registry/valkey/valkey:7.0.0
 
   - it: should have service account
     set:

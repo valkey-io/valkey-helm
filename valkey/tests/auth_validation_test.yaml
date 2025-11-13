@@ -3,78 +3,104 @@ templates:
   - templates/deploy_valkey.yaml
   - templates/init_config.yaml
 tests:
-  - it: should fail when auth enabled with multiple methods (generateDefaultUser + existingSecret)
-    set:
-      auth.enabled: true
-      auth.generateDefaultUser.enabled: true
-      auth.existingSecret: "my-secret"
-      auth.aclConfig: ""
-    template: templates/deploy_valkey.yaml
-    asserts:
-      - failedTemplate:
-          errorPattern: "Multiple authentication methods.*"
-
-  - it: should fail when auth enabled with multiple methods (generateDefaultUser + aclConfig)
-    set:
-      auth.enabled: true
-      auth.generateDefaultUser.enabled: true
-      auth.aclConfig: "user admin on >password ~* &* +@all"
-    template: templates/deploy_valkey.yaml
-    asserts:
-      - failedTemplate:
-          errorPattern: "Multiple authentication methods.*"
-
-  - it: should fail when auth enabled with multiple methods (existingSecret + aclConfig)
-    set:
-      auth.enabled: true
-      auth.existingSecret: "my-secret"
-      auth.aclConfig: "user admin on >password ~* &* +@all"
-    template: templates/deploy_valkey.yaml
-    asserts:
-      - failedTemplate:
-          errorPattern: "Multiple authentication methods.*"
-
   - it: should fail when auth enabled but no method configured
     set:
       auth.enabled: true
-      auth.generateDefaultUser.enabled: false
-      auth.existingSecret: ""
+      auth.aclUsers: []
       auth.aclConfig: ""
     template: templates/deploy_valkey.yaml
     asserts:
       - failedTemplate:
           errorPattern: "auth.enabled is true but no authentication method.*"
 
-  - it: should fail when auth enabled with only comments in aclConfig
+  - it: should fail when user has no name
     set:
       auth.enabled: true
-      auth.generateDefaultUser.enabled: false
-      auth.existingSecret: ""
-      auth.aclConfig: |
-        # Just comments
-        # user default off
+      auth.aclUsers:
+        - permissions: "~* &* +@all"
+          password: "test"
     template: templates/deploy_valkey.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "auth.enabled is true but no authentication method.*"
+          errorPattern: "Each user in auth.aclUsers must have a 'name' field"
 
-  - it: should succeed when auth enabled with generateDefaultUser only
+  - it: should fail when user has no permissions
     set:
       auth.enabled: true
-      auth.generateDefaultUser.enabled: true
-      auth.existingSecret: ""
-      auth.aclConfig: ""
+      auth.aclUsers:
+        - name: "admin"
+          password: "test"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "User 'admin' in auth.aclUsers must have a 'permissions' field"
+
+  - it: should fail when user has no password and no usersExistingSecret
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "User 'admin' must have either 'password' field or auth.usersExistingSecret must be set"
+
+  - it: should fail when user has passwordKey but no usersExistingSecret
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "test"
+          passwordKey: "admin-pwd"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "User 'admin' has passwordKey but auth.usersExistingSecret is not set"
+
+  - it: should succeed with aclUsers and inline passwords only
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "admin-password"
+        - name: "readonly"
+          permissions: "~* +@read"
+          password: "readonly-password"
     template: templates/deploy_valkey.yaml
     asserts:
       - isKind:
           of: Deployment
 
-  - it: should succeed when auth enabled with existingSecret only
+  - it: should succeed with aclUsers and usersExistingSecret only
     set:
       auth.enabled: true
-      auth.generateDefaultUser.enabled: false
-      auth.existingSecret: "my-secret"
-      auth.aclConfig: ""
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+        - name: "readonly"
+          permissions: "~* +@read"
+          passwordKey: "readonly-pwd"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should succeed with mixed inline and existing secret passwords
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "fallback-password"
+          passwordKey: "admin-pwd"
+        - name: "readonly"
+          permissions: "~* +@read"
+          password: "readonly-password"
     template: templates/deploy_valkey.yaml
     asserts:
       - isKind:
@@ -83,9 +109,20 @@ tests:
   - it: should succeed when auth enabled with aclConfig only
     set:
       auth.enabled: true
-      auth.generateDefaultUser.enabled: false
-      auth.existingSecret: ""
       auth.aclConfig: "user admin on >password ~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should succeed with aclUsers and aclConfig combined
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "admin-password"
+      auth.aclConfig: "user guest on nopass ~public:* +@read"
     template: templates/deploy_valkey.yaml
     asserts:
       - isKind:

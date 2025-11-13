@@ -149,40 +149,25 @@ auth:
   # Enable ACL-based authentication
   enabled: false
 
-  # IMPORTANT: Choose ONE of the following three configuration methods:
-  # Priority order (if multiple are enabled):
-  #   1. generateDefaultUser (highest priority)
-  #   2. existingSecret
-  #   3. aclConfig (lowest priority, inline configuration)
-  #
-  # WARNING: Only enable ONE method. Enabling multiple methods simultaneously
-  # may lead to unexpected behavior as generateDefaultUser takes precedence.
+  # Use an existing secret for user passwords. Key defaults to username.
+  usersExistingSecret: ""
 
-  # Method 1: Generate a default user with random password
-  # This automatically creates a Kubernetes Secret with a random password
-  # Best for: Quick setup, development, testing
-  generateDefaultUser:
-    enabled: false
-    # Username for the generated default user
-    username: "default"
-    # Optional: Specify a password (if empty, one will be generated)
-    password: ""
-    # ACL permissions for the default user
-    permissions: "~* &* +@all"
+  # List of users to create with ACL permissions.
+  # If usersExistingSecret is set, passwords from the secret take priority over inline passwords.
+  aclUsers: []
+  # Example:
+  # - name: default
+  #   permissions: "~* &* +@all"
+  #   password: "secretpass"        # Inline password (fallback if usersExistingSecret not set)
+  #   passwordKey: "admin-pwd"      # Key in usersExistingSecret (defaults to username)
+  # - name: read-user
+  #   permissions: "~* -@all +@read +ping +info"
 
-  # Method 2: Use an existing secret containing ACL configuration
-  # The secret must have a key named 'users.acl' with ACL rules
-  # Best for: Production, GitOps workflows, external secret management
-  # Example: existingSecret: "my-valkey-auth-secret"
-  existingSecret: ""
-
-  # Method 3: Inline ACL configuration (used only if the above two are not enabled)
-  # Best for: Simple deployments, version-controlled configurations
-  aclConfig: |
-    # Users and permissions can be defined here
-    # Example:
-    # user default off
-    # user default on >defaultpassword ~*  &* +@all
+  # Inline ACL configuration that will be appended after generated users.
+  aclConfig: ""
+  # Example:
+  # aclConfig: |
+  #   user default on >secretpass ~* &* +@all
 
 tls:
   # Enable TLS

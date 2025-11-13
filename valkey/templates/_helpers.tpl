@@ -103,9 +103,9 @@ Returns the Valkey image pull secrets
 {{- define "valkey.imagePullSecrets" -}}
 {{- $pullSecrets := list }}
 {{- if .Values.global }}
-{{- range .Values.global.imagePullSecrets -}}
-  {{- $pullSecrets = append $pullSecrets . -}}
-{{- end -}}
+  {{- range .Values.global.imagePullSecrets -}}
+    {{- $pullSecrets = append $pullSecrets . -}}
+  {{- end -}}
 {{- end -}}
 {{- range .Values.imagePullSecrets -}}
     {{- $pullSecrets = append $pullSecrets . -}}
@@ -116,35 +116,44 @@ imagePullSecrets:
 - name: {{ . }}
 {{- end }}
 {{- end }}
+{{- end -}}
+{{/*
+Check if there are any users with inline passwords
+*/}}
+{{- define "valkey.hasInlinePasswords" -}}
+{{- $hasInlinePasswords := false -}}
+{{- range .Values.auth.aclUsers -}}
+  {{- if .password -}}
+    {{- $hasInlinePasswords = true -}}
+  {{- end -}}
+{{- end -}}
+{{- $hasInlinePasswords -}}
+{{- end -}}
 
 {{/*
 Validate auth configuration
 */}}
 {{- define "valkey.validateAuthConfig" -}}
 {{- if .Values.auth.enabled }}
-  {{- $methodCount := 0 }}
-  {{- if .Values.auth.generateDefaultUser.enabled }}
-    {{- $methodCount = add $methodCount 1 }}
+  {{- if not (or .Values.auth.aclUsers .Values.auth.aclConfig) }}
+    {{- fail "auth.enabled is true but no authentication method is configured. Please provide auth.aclUsers or auth.aclConfig" }}
   {{- end }}
-  {{- if .Values.auth.existingSecret }}
-    {{- $methodCount = add $methodCount 1 }}
-  {{- end }}
-  {{- /* Check if aclConfig has actual content (not just comments/whitespace) */}}
-  {{- if .Values.auth.aclConfig }}
-    {{- $trimmed := .Values.auth.aclConfig | trim }}
-    {{- /* Use regex to check for any non-empty, non-comment line */}}
-    {{- $hasContent := regexMatch "(?m)^(\s*[^#\s].*)$" $trimmed }}
-    {{- if $hasContent }}
-      {{- $methodCount = add $methodCount 1 }}
+  {{- if .Values.auth.aclUsers }}
+    {{- $hasUsersExistingSecret := .Values.auth.usersExistingSecret }}
+    {{- range .Values.auth.aclUsers }}
+      {{- if not .name }}
+        {{- fail "Each user in auth.aclUsers must have a 'name' field" }}
+      {{- end }}
+      {{- if not .permissions }}
+        {{- fail (printf "User '%s' in auth.aclUsers must have a 'permissions' field" .name) }}
+      {{- end }}
+      {{- if not (or .password $hasUsersExistingSecret) }}
+        {{- fail (printf "User '%s' must have either 'password' field or auth.usersExistingSecret must be set" .name) }}
+      {{- end }}
+      {{- if and .passwordKey (not $hasUsersExistingSecret) }}
+        {{- fail (printf "User '%s' has passwordKey but auth.usersExistingSecret is not set" .name) }}
+      {{- end }}
     {{- end }}
   {{- end }}
-  {{- if eq $methodCount 0 }}
-    {{- fail "auth.enabled is true but no authentication method is configured. Please enable one of: auth.generateDefaultUser.enabled, auth.existingSecret, or provide auth.aclConfig" }}
-  {{- end }}
-  {{- if gt $methodCount 1 }}
-    {{- fail "Multiple authentication methods are enabled. Please enable only ONE of: auth.generateDefaultUser.enabled, auth.existingSecret, or auth.aclConfig" }}
-  {{- end }}
 {{- end }}
-{{- end }}
-
 {{- end -}}

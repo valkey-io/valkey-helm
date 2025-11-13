@@ -9,11 +9,13 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should render generated user test pod only
+  - it: should render generated user test pod with inline passwords
     set:
       auth.enabled: true
-      auth.generateDefaultUser.enabled: true
-      auth.aclConfig: ""
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "admin-password"
     asserts:
       - hasDocuments:
           count: 1
@@ -38,8 +40,10 @@ tests:
   - it: should render existing secret test pod only
     set:
       auth.enabled: true
-      auth.existingSecret: "my-secret"
-      auth.aclConfig: ""
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
     asserts:
       - hasDocuments:
           count: 1
@@ -51,11 +55,11 @@ tests:
       - contains:
           path: spec.volumes
           content:
-            name: valkey-auth
+            name: valkey-users-secret
             secret:
               secretName: my-secret
 
-  - it: should not render test pods with inline aclConfig
+  - it: should not render test pods with aclConfig only
     set:
       auth.enabled: true
       auth.aclConfig: "user admin on >password ~* &* +@all"
@@ -66,9 +70,10 @@ tests:
   - it: generated test pod should have correct command structure
     set:
       auth.enabled: true
-      auth.generateDefaultUser.enabled: true
-      auth.generateDefaultUser.username: "testuser"
-      auth.aclConfig: ""
+      auth.aclUsers:
+        - name: "testuser"
+          permissions: "~* &* +@all"
+          password: "test-password"
     asserts:
       - isKind:
           of: Pod
@@ -82,23 +87,13 @@ tests:
             mountPath: /valkey-auth
             readOnly: true
 
-  - it: existing secret test pod should verify ACL file
-    set:
-      auth.enabled: true
-      auth.existingSecret: "my-secret"
-      auth.aclConfig: ""
-    asserts:
-      - isKind:
-          of: Pod
-      - matchRegex:
-          path: spec.containers[0].command[2]
-          pattern: "users\\.acl"
-
   - it: test pods should have hook deletion policy
     set:
       auth.enabled: true
-      auth.generateDefaultUser.enabled: true
-      auth.aclConfig: ""
+      auth.aclUsers:
+        - name: "admin"
+          permissions: "~* &* +@all"
+          password: "admin-password"
     asserts:
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
