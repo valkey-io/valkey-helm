@@ -2,6 +2,20 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
+        "global": {
+            "type": "object",
+            "properties": {
+                "imageRegistry": {
+                    "type": "string",
+                    "default": ""
+                },
+                "imagePullSecrets": {
+                    "type": "array",
+                    "default": [],
+                    "items": {}
+                }
+            }
+        },
         "affinity": {
             "type": "object"
         },
@@ -82,6 +96,9 @@
                 "pullPolicy": {
                     "type": "string"
                 },
+                "registry": {
+                    "type": "string"
+                },
                 "repository": {
                     "type": "string"
                 },
@@ -95,6 +112,9 @@
         },
         "initResources": {
             "type": "object"
+        },
+        "extraInitContainers": {
+            "type": "array"
         },
         "metrics": {
             "type": "object",
@@ -115,7 +135,21 @@
                             "type": "integer"
                         },
                         "image": {
-                            "type": "object"
+                            "type": "object",
+                            "properties": {
+                                "pullPolicy": {
+                                    "type": "string"
+                                },
+                                "registry": {
+                                    "type": "string"
+                                },
+                                "repository": {
+                                    "type": "string"
+                                },
+                                "tag": {
+                                    "type": "string"
+                                }
+                            }
                         },
                         "resources": {
                             "type": "object"
@@ -338,6 +372,9 @@
                 },
                 "nodePort": {
                     "type": "integer"
+                },
+                "clusterIP": {
+                    "type": "string"
                 }
             }
         },

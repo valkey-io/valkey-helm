@@ -65,19 +65,55 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-Creating Image Pull Secrets
+Returns the Valkey container image
 */}}
-{{- define "imagePullSecret" }}
-{{- with .Values.imageCredentials }}
-{{- printf "{\"auths\":{\"%s\":{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\",\"auth\":\"%s\"}}}" .registry .username .password .email (printf "%s:%s" .username .password | b64enc) | b64enc }}
-{{- end }}
-{{- end }}
+{{- define "valkey.image" -}}
+{{- include "common.image" (dict "image" (dict "registry" .Values.image.registry "repository" .Values.image.repository "tag" (.Values.image.tag | default .Chart.AppVersion)) "global" .Values.global) }}
+{{- end -}}
 
-{{- define "valkey.secretName" -}}
-{{- if .Values.imagePullSecrets.nameOverride }}
-{{- .Values.imagePullSecrets.nameOverride }}
+{{/*
+Returns the Valkey exporter container image
+*/}}
+{{- define "valkey.metrics.exporter.image" -}}
+{{- include "common.image" (dict "image" .Values.metrics.exporter.image "global" .Values.global) }}
+{{- end -}}
+
+{{/*
+The common image function that renders the container image
+*/}}
+{{- define "common.image" -}}
+{{- $registryName := .image.registry }}
+{{- $repositoryName := .image.repository }}
+{{- $tag := .image.tag }}
+{{- if .global }}
+  {{- if .global.imageRegistry }}
+    {{- $registryName = .global.imageRegistry }}
+  {{- end }}
+{{- end }}
+{{- if $registryName }}
+{{- printf "%s/%s:%s" $registryName $repositoryName $tag }}
 {{- else }}
-{{- printf "%s-regcred" .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- printf "%s:%s" $repositoryName $tag }}
+{{ end }}
+{{- end -}}
+
+{{/*
+Returns the Valkey image pull secrets
+*/}}
+{{- define "valkey.imagePullSecrets" -}}
+{{- $pullSecrets := list }}
+{{- if .Values.global }}
+{{- range .Values.global.imagePullSecrets -}}
+  {{- $pullSecrets = append $pullSecrets . -}}
+{{- end -}}
+{{- end -}}
+{{- range .Values.imagePullSecrets -}}
+    {{- $pullSecrets = append $pullSecrets . -}}
+{{- end -}}
+{{- if (not (empty $pullSecrets)) }}
+imagePullSecrets:
+{{- range $pullSecrets }}
+- name: {{ . }}
 {{- end }}
 {{- end }}
 
@@ -111,3 +147,4 @@ Validate auth configuration
 {{- end }}
 {{- end }}
 
+{{- end -}}

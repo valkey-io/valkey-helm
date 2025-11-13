@@ -1,9 +1,17 @@
+global:
+  # The global image registry (this will override the registry of all container images defined in this chart)
+  imageRegistry: ""
+  # The global image pull secrets (list of secret names)
+  imagePullSecrets: []
+
 # Number of Valkey pods to run
 replicaCount: 1
 
 image:
-  # Valkey Docker image to use
-  repository: docker.io/valkey/valkey
+  # Image registry
+  registry: "docker.io"
+  # Valkey container image repository
+  repository: valkey/valkey
   # Image pull policy (Always, IfNotPresent, Never)
   pullPolicy: IfNotPresent
   # Image tag (leave empty to use .Chart.AppVersion)
@@ -59,6 +67,8 @@ service:
   annotations: {}
   # NodePort value (if service.type is NodePort)
   nodePort: 0
+  # ClusterIP value
+  clusterIP: ""
 
 # Network policy to control traffic to the pods
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
@@ -83,6 +93,9 @@ initResources: {}
   # requests:
   #   cpu: 100m
   #   memory: 128Mi
+
+# Additional init containers
+extraInitContainers: []
 
 # Persistent storage configuration
 dataStorage:
@@ -224,8 +237,10 @@ metrics:
     port: 9121
     # Image configuration
     image:
-      # Prometheus exporter Docker image
-      repository: ghcr.io/oliver006/redis_exporter
+      # Image registry
+      registry: ghcr.io
+      # Prometheus exporter container image repository
+      repository: oliver006/redis_exporter
       # Image pull policy (Always, IfNotPresent, Never)
       pullPolicy: IfNotPresent
       # Image tag (leave empty to use latest)
