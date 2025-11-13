@@ -30,10 +30,7 @@ spec:
       {{- end }}
         checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 }}
     spec:
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{ (include "valkey.imagePullSecrets" .) | nindent 6 }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       {{- if .Values.priorityClassName }}
@@ -43,7 +40,7 @@ spec:
       {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
         - name: {{ .Chart.Name }}-init
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "valkey.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.securityContext }}
           securityContext:
@@ -71,14 +68,12 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
       {{- with .Values.extraInitContainers }}
       {{- toYaml . | nindent 8 }}
       {{- end }}
-
       containers:
         - name: {{ include "valkey.fullname" . }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "valkey.image" . }}
           command: [ "valkey-server" ]
           args: [ "/data/conf/valkey.conf" ]
           securityContext:
@@ -130,7 +125,7 @@ spec:
             {{- end }}
         {{- if .Values.metrics.enabled }}
         - name: metrics
-          image: "{{ .Values.metrics.exporter.image.repository }}:{{ .Values.metrics.exporter.image.tag }}"
+          image: {{ include "valkey.metrics.exporter.image" . }}
           imagePullPolicy: {{ .Values.metrics.exporter.image.pullPolicy | quote }}
           {{- with .Values.metrics.exporter.securityContext }}
           securityContext:
@@ -215,17 +210,14 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-
       {{- with .Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-
       {{- with .Values.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}

@@ -21,6 +21,8 @@ A Helm chart for Kubernetes
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| global.imageRegistry | string | '' |  |
+| global.imagePullSecrets | list | `[]` |  |
 | affinity | object | `{}` |  |
 | auth.aclConfig | string | `"# Users and permissions can be defined here\n# Example:\n# user default off\n# user default on >defaultpassword ~*  &* +@all \n"` |  |
 | auth.enabled | bool | `false` |  |
@@ -42,6 +44,7 @@ A Helm chart for Kubernetes
 | extraValkeySecrets | list | `[]` |  |
 | fullnameOverride | string | `""` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
+| image.registry | string | `""` |  |
 | image.repository | string | `"docker.io/valkey/valkey"` |  |
 | image.tag | string | `""` |  |
 | imagePullSecrets | list | `[]` |  |
