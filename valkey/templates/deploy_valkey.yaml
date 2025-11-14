@@ -39,7 +39,7 @@ spec:
       securityContext:
       {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
-        - name: {{ .Chart.Name }}-init
+        - name: {{ include "valkey.fullname" . }}-init
           image: {{ include "valkey.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.securityContext }}
