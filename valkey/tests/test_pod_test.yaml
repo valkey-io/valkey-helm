@@ -1,0 +1,100 @@
+suite: test pods
+templates:
+  - templates/tests/auth.yaml
+tests:
+  - it: should not render test pods when auth disabled
+    set:
+      auth.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render generated user test pod with inline passwords
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+          password: "admin-password"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Pod
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-test-auth-generated
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+      - equal:
+          path: spec.restartPolicy
+          value: Never
+      - contains:
+          path: spec.volumes
+          content:
+            name: valkey-auth
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+
+  - it: should render existing secret test pod only
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Pod
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-test-auth-existing
+      - contains:
+          path: spec.volumes
+          content:
+            name: valkey-users-secret
+            secret:
+              secretName: my-secret
+
+  - it: should not render test pods with aclConfig only
+    set:
+      auth.enabled: true
+      auth.aclConfig: "user admin on >password ~* &* +@all"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: generated test pod should have correct command structure
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        testuser:
+          permissions: "~* &* +@all"
+          password: "test-password"
+    asserts:
+      - isKind:
+          of: Pod
+      - contains:
+          path: spec.containers[0].command
+          content: sh
+      - contains:
+          path: spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth
+            mountPath: /valkey-auth
+            readOnly: true
+
+  - it: test pods should have hook deletion policy
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+          password: "admin-password"
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded

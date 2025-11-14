@@ -17,6 +17,59 @@ A Helm chart for Kubernetes
 * <https://github.com/valkey-io/valkey-helm.git>
 * <https://valkey.io>
 
+## Authentication
+
+This chart supports ACL-based authentication for Valkey.
+
+### Existing Secret (recommended)
+
+Reference an existing Kubernetes secret containing user passwords:
+
+```yaml
+auth:
+  enabled: true
+  usersExistingSecret: "my-valkey-users"
+  aclUsers:
+    admin:
+      permissions: "~* &* +@all"
+      # Password will be read from secret key "admin" (defaults to username)
+    readonly:
+      permissions: "~* -@all +@read +ping +info"
+      passwordKey: "readonly-pwd"  # Use custom secret key name
+```
+
+### Inline Passwords
+
+Define users directly in your values file with inline passwords:
+
+```yaml
+auth:
+  enabled: true
+  aclUsers:
+    admin:
+      permissions: "~* &* +@all"
+      password: "admin-password"
+    readonly:
+      permissions: "~* -@all +@read +ping +info"
+      password: "readonly-password"
+```
+
+**Note:**
+
+* If `usersExistingSecret` is defined, passwords from the secret will take precedence over inline passwords.
+
+### Custom ACL Configuration
+
+You can also provide raw ACL configuration that will be appended after any generated users:
+
+```yaml
+auth:
+  enabled: true
+  aclConfig: |
+    user default on >defaultpassword ~* &* +@all
+    user guest on nopass ~public:* +@read
+```
+
 ## Values
 
 | Key | Type | Default | Description |
@@ -24,8 +77,10 @@ A Helm chart for Kubernetes
 | global.imageRegistry | string | '' |  |
 | global.imagePullSecrets | list | `[]` |  |
 | affinity | object | `{}` |  |
-| auth.aclConfig | string | `"# Users and permissions can be defined here\n# Example:\n# user default off\n# user default on >defaultpassword ~*  &* +@all \n"` |  |
+| auth.aclConfig | string | `""` |  |
+| auth.aclUsers | object | `{}` | |
 | auth.enabled | bool | `false` |  |
+| auth.usersExistingSecret | string | `""` | |
 | dataStorage.accessModes[0] | string | `"ReadWriteOnce"` |  |
 | dataStorage.annotations | object | `{}` |  |
 | dataStorage.className | string | `""` |  |

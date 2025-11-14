@@ -58,10 +58,69 @@ data:
     } >>"$VALKEY_CONFIG"
 
     {{- if .Values.auth.enabled }}
-    echo "aclfile /data/conf/users.acl" >>"$VALKEY_CONFIG"
-    cat <<EOF > /data/conf/users.acl
-{{ .Values.auth.aclConfig | indent 6 }}
-    EOF
+    # Create secure directory for ACL file
+    log "Creating /etc/valkey directory for ACL file"
+    mkdir -p /etc/valkey
+
+    # Set aclfile path in valkey.conf
+    echo "aclfile /etc/valkey/users.acl" >>"$VALKEY_CONFIG"
+
+    # Create ACL file with secure permissions
+    log "Generating ACL file at /etc/valkey/users.acl"
+    touch /etc/valkey/users.acl
+
+    {{- if .Values.auth.aclUsers }}
+    # Generate ACL entries for each user
+    log "Generating ACL entries for users"
+    {{- range $username, $user := .Values.auth.aclUsers }}
+    {{- $passwordKey := $user.passwordKey | default $username }}
+
+    # User: {{ $username }}
+    PASSWORD=""
+    {{- if $.Values.auth.usersExistingSecret }}
+    # Try to get password from existing secret first (priority)
+    if [ -f /valkey-users-secret/{{ $passwordKey }} ]; then
+      PASSWORD=$(cat /valkey-users-secret/{{ $passwordKey }})
+      log "Using password from existing secret for user {{ $username }}"
+    {{- if $user.password }}
+    elif [ -f /valkey-auth-secret/{{ $username }}-password ]; then
+      # Fallback to inline password
+      PASSWORD=$(cat /valkey-auth-secret/{{ $username }}-password)
+      log "Using inline password for user {{ $username }}"
+    {{- end }}
+    else
+      log "ERROR: No password found for user {{ $username }}"
+      exit 1
+    fi
+    {{- else if $user.password }}
+    # Use inline password only
+    if [ -f /valkey-auth-secret/{{ $username }}-password ]; then
+      PASSWORD=$(cat /valkey-auth-secret/{{ $username }}-password)
+      log "Using inline password for user {{ $username }}"
+    else
+      log "ERROR: No password found for user {{ $username }}"
+      exit 1
+    fi
+    {{- end }}
+
+    # Hash the password and write ACL entry
+    PASSHASH=$(echo -n "$PASSWORD" | sha256sum | cut -f 1 -d " ")
+    echo "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> /etc/valkey/users.acl
+
+    {{- end }}
+    {{- end }}
+
+    {{- if .Values.auth.aclConfig }}
+    # Append inline ACL configuration
+    log "Appending custom ACL configuration"
+    if [ -f /valkey-auth-secret/aclConfig ]; then
+      cat /valkey-auth-secret/aclConfig >> /etc/valkey/users.acl
+    fi
+    {{- end }}
+
+    # Set final permissions
+    chmod 0400 /etc/valkey/users.acl
+    log "ACL file created with 0400 permissions"
     {{- end }}
 
     # Append extra configs if present
