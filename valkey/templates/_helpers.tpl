@@ -103,9 +103,9 @@ Returns the Valkey image pull secrets
 {{- define "valkey.imagePullSecrets" -}}
 {{- $pullSecrets := list }}
 {{- if .Values.global }}
-{{- range .Values.global.imagePullSecrets -}}
-  {{- $pullSecrets = append $pullSecrets . -}}
-{{- end -}}
+  {{- range .Values.global.imagePullSecrets -}}
+    {{- $pullSecrets = append $pullSecrets . -}}
+  {{- end -}}
 {{- end -}}
 {{- range .Values.imagePullSecrets -}}
     {{- $pullSecrets = append $pullSecrets . -}}
@@ -115,5 +115,42 @@ imagePullSecrets:
 {{- range $pullSecrets }}
 - name: {{ . }}
 {{- end }}
+{{- end }}
+{{- end -}}
+{{/*
+Check if there are any users with inline passwords
+*/}}
+{{- define "valkey.hasInlinePasswords" -}}
+{{- $hasInlinePasswords := false -}}
+{{- range $username, $user := .Values.auth.aclUsers -}}
+  {{- if $user.password -}}
+    {{- $hasInlinePasswords = true -}}
+  {{- end -}}
+{{- end -}}
+{{- $hasInlinePasswords -}}
+{{- end -}}
+
+{{/*
+Validate auth configuration
+*/}}
+{{- define "valkey.validateAuthConfig" -}}
+{{- if .Values.auth.enabled }}
+  {{- if not (or .Values.auth.aclUsers .Values.auth.aclConfig) }}
+    {{- fail "auth.enabled is true but no authentication method is configured. Please provide auth.aclUsers or auth.aclConfig" }}
+  {{- end }}
+  {{- if .Values.auth.aclUsers }}
+    {{- $hasUsersExistingSecret := .Values.auth.usersExistingSecret }}
+    {{- range $username, $user := .Values.auth.aclUsers }}
+      {{- if not $user.permissions }}
+        {{- fail (printf "User '%s' in auth.aclUsers must have a 'permissions' field" $username) }}
+      {{- end }}
+      {{- if not (or $user.password $hasUsersExistingSecret) }}
+        {{- fail (printf "User '%s' must have either 'password' field or auth.usersExistingSecret must be set" $username) }}
+      {{- end }}
+      {{- if and $user.passwordKey (not $hasUsersExistingSecret) }}
+        {{- fail (printf "User '%s' has passwordKey but auth.usersExistingSecret is not set" $username) }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
 {{- end }}
 {{- end -}}

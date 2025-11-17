@@ -1,0 +1,105 @@
+{{- if .Values.auth.enabled }}
+{{- $firstUser := dict }}
+{{- $firstUsername := "" }}
+{{- range $username, $user := .Values.auth.aclUsers }}
+  {{- if $user.password }}
+    {{- if not $firstUsername }}
+      {{- $firstUsername = $username }}
+      {{- $firstUser = $user }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if include "valkey.hasInlinePasswords" . | eq "true" }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "valkey.fullname" . }}-test-auth-generated
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test-auth
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Testing authentication with aclUsers (inline passwords)..."
+
+          # Extract password from secret
+          PASSWORD=$(cat /valkey-auth/{{ $firstUsername }}-password)
+          USERNAME="{{ $firstUsername }}"
+
+          # Test authentication
+          valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user "$USERNAME" --pass "$PASSWORD" PING
+
+          # Test that we can set and get a value (if permissions allow)
+          if valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user "$USERNAME" --pass "$PASSWORD" SET test-key-generated "test-value" 2>/dev/null; then
+            VALUE=$(valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} --user "$USERNAME" --pass "$PASSWORD" GET test-key-generated)
+            if [ "$VALUE" = "test-value" ]; then
+              echo "✓ Authentication test passed with write permissions"
+              exit 0
+            else
+              echo "✗ Authentication test failed: expected 'test-value', got '$VALUE'"
+              exit 1
+            fi
+          else
+            echo "✓ Authentication test passed (read-only or restricted permissions)"
+            exit 0
+          fi
+      volumeMounts:
+        - name: valkey-auth
+          mountPath: /valkey-auth
+          readOnly: true
+  volumes:
+    - name: valkey-auth
+      secret:
+        secretName: {{ include "valkey.fullname" . }}-auth
+{{- end }}
+{{- end }}
+---
+{{- if and .Values.auth.enabled .Values.auth.usersExistingSecret }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "valkey.fullname" . }}-test-auth-existing
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test-auth
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Testing authentication with usersExistingSecret..."
+
+          # Test basic connection (no auth - will fail if auth is properly configured)
+          if valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} PING 2>/dev/null; then
+            echo "✗ Authentication test failed: server allows unauthenticated access"
+            exit 1
+          fi
+
+          echo "✓ Authentication is enforced (unauthenticated access denied)"
+          echo "⚠ Manual verification recommended for usersExistingSecret configuration"
+          exit 0
+      volumeMounts:
+        - name: valkey-users-secret
+          mountPath: /valkey-users-secret
+          readOnly: true
+  volumes:
+    - name: valkey-users-secret
+      secret:
+        secretName: {{ .Values.auth.usersExistingSecret }}
+{{- end }}

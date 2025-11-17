@@ -1,6 +1,7 @@
 {{- $fullname := include "valkey.fullname" . }}
 {{- $storage := .Values.dataStorage }}
 {{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
+{{- include "valkey.validateAuthConfig" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -64,6 +65,20 @@ spec:
             - name: extravalkeyconfigs-volume
               mountPath: /extravalkeyconfigs
             {{- end }}
+            {{- if .Values.auth.enabled }}
+            - name: valkey-acl
+              mountPath: /etc/valkey
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
+            {{- end }}
           {{- with .Values.initResources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -114,6 +129,10 @@ spec:
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            - name: valkey-acl
+              mountPath: /etc/valkey
             {{- end }}
             {{- range $secret := .Values.extraValkeySecrets }}
             - name: {{ $secret.name }}-valkey
@@ -173,6 +192,11 @@ spec:
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts
             defaultMode: 0555
+        {{- if .Values.auth.enabled }}
+        - name: valkey-acl
+          emptyDir:
+            medium: Memory
+        {{- end }}
         {{- if .Values.valkeyConfig }}
         - name: valkey-config
           configMap:
@@ -195,6 +219,28 @@ spec:
           configMap:
             name: {{ .name }}
             defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- if .Values.metrics.enabled }}
+        {{- range .Values.metrics.exporter.extraExporterSecrets }}
+        - name: {{ .name }}-exporter
+          secret:
+            secretName: {{ .name }}
+            defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.auth.enabled }}
+        {{- if .Values.auth.usersExistingSecret }}
+        - name: valkey-users-secret
+          secret:
+            secretName: {{ .Values.auth.usersExistingSecret }}
+            defaultMode: 0400
+        {{- end }}
+        {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+        - name: valkey-auth-secret
+          secret:
+            secretName: {{ include "valkey.fullname" . }}-auth
+            defaultMode: 0400
+        {{- end }}
         {{- end }}
         - name: {{ $storage.volumeName }}
         {{- if $storage.persistentVolumeClaimName }}
