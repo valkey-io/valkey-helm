@@ -3,7 +3,25 @@ entries:
   valkey:
   - apiVersion: v2
     appVersion: 8.1.4
-    created: "2025-10-30T16:57:24.442454935+02:00"
+    created: "2025-11-17T16:29:50.475427571+02:00"
+    description: A Helm chart for Kubernetes
+    digest: b6da642cd5feb4277a42b37ab44d68ab1145fc7059e6c46d0d9138e1d7d0dc95
+    home: https://valkey.io/valkey-helm/
+    icon: https://dyltqmyl993wv.cloudfront.net/assets/stacks/valkey/img/valkey-stack-220x234.png
+    maintainers:
+    - name: raven
+      url: https://github.com/mk-raven
+    name: valkey
+    sources:
+    - https://github.com/valkey-io/valkey-helm.git
+    - https://valkey.io
+    type: application
+    urls:
+    - https://valkey.io/valkey-helm/valkey-0.8.0.tgz
+    version: 0.8.0
+  - apiVersion: v2
+    appVersion: 8.1.4
+    created: "2025-11-17T16:29:50.474756146+02:00"
     description: A Helm chart for Kubernetes
     digest: bb5e84239a8cf18d80cef40ad017961236cdf66e0e864a3a365b0f185b3727b1
     home: https://valkey.io/valkey-helm/
@@ -21,7 +39,7 @@ entries:
     version: 0.7.7
   - apiVersion: v2
     appVersion: 8.1.4
-    created: "2025-10-30T16:57:24.441435936+02:00"
+    created: "2025-11-17T16:29:50.474188879+02:00"
     description: A Helm chart for Kubernetes
     digest: a158e267d620af5729ee36fa3c2d706fdb5df9633b77efcbc97dacd78d7d8178
     home: https://valkey.io/valkey-helm/
@@ -39,7 +57,7 @@ entries:
     version: 0.7.6
   - apiVersion: v2
     appVersion: 8.1.4
-    created: "2025-10-30T16:57:24.440097155+02:00"
+    created: "2025-11-17T16:29:50.473573971+02:00"
     description: A Helm chart for Kubernetes
     digest: 59498dc029503081e00da9dd5e06b0dfddf20bf8a409438ab3ab4183ffbe01d8
     home: https://valkey.io/valkey-helm/
@@ -57,7 +75,7 @@ entries:
     version: 0.7.5
   - apiVersion: v2
     appVersion: 8.1.3
-    created: "2025-10-30T16:57:24.438977586+02:00"
+    created: "2025-11-17T16:29:50.471983901+02:00"
     description: A Helm chart for Kubernetes
     digest: 88c5dd625cc0250bb888a4c8791a4abe4427ce8e69d02c22da1f117e66a4b9aa
     home: https://valkey.io/valkey-helm/
@@ -75,7 +93,7 @@ entries:
     version: 0.7.4
   - apiVersion: v2
     appVersion: 8.1.3
-    created: "2025-10-30T16:57:24.438335776+02:00"
+    created: "2025-11-17T16:29:50.471556738+02:00"
     description: A Helm chart for Kubernetes
     digest: 314219ddea445f191faf6a14a980165b445261c5b003ba1e42e889457da3986e
     home: https://valkey.io/valkey-helm/
@@ -93,7 +111,7 @@ entries:
     version: 0.7.3
   - apiVersion: v2
     appVersion: 8.1.3
-    created: "2025-10-30T16:57:24.437675321+02:00"
+    created: "2025-11-17T16:29:50.471160808+02:00"
     description: A Helm chart for Kubernetes
     digest: fd67b224f58eeec91f521039848ee2f0c8c463dfb0dec4eb65bf3b447c0ec4b4
     home: https://valkey.io/valkey-helm/
@@ -111,7 +129,7 @@ entries:
     version: 0.7.2
   - apiVersion: v2
     appVersion: 8.1.3
-    created: "2025-10-30T16:57:24.436826637+02:00"
+    created: "2025-11-17T16:29:50.470748141+02:00"
     description: A Helm chart for Kubernetes
     digest: 406180b865ee5ba9b8cded0d0717127da3e1bc474b1ff824cbf9b50f0bcf528f
     home: https://github.com/mk-raven
@@ -129,7 +147,7 @@ entries:
     version: 0.7.1
   - apiVersion: v2
     appVersion: 8.1.3
-    created: "2025-10-30T16:57:24.435903247+02:00"
+    created: "2025-11-17T16:29:50.470383052+02:00"
     description: A Helm chart for Kubernetes
     digest: 30def2416d974076028b1f12ad109fb0621e647505feada318365ced92247a09
     home: https://github.com/mk-raven
@@ -146,7 +164,7 @@ entries:
     version: 0.7.0
   - apiVersion: v2
     appVersion: 8.1.3
-    created: "2025-10-30T16:57:24.434834622+02:00"
+    created: "2025-11-17T16:29:50.469978008+02:00"
     description: A Helm chart for Kubernetes
     digest: 7a43dd032c3acb8c1612e2aef144fe5f552249c2b770402069f813325dba8e8d
     home: https://github.com/mk-raven
@@ -163,7 +181,7 @@ entries:
     version: 0.6.0
   - apiVersion: v2
     appVersion: 8.1.3
-    created: "2025-10-30T16:57:24.432916558+02:00"
+    created: "2025-11-17T16:29:50.469594304+02:00"
     description: A Helm chart for Kubernetes
     digest: 378475cc1e4d039f5fd7339e5a9709ce99b8845e7cbdca37dc0c06ee9dc67c37
     home: https://github.com/mk-raven
@@ -180,7 +198,7 @@ entries:
     version: 0.5.1
   - apiVersion: v2
     appVersion: 8.1.0
-    created: "2025-10-30T16:57:24.432270042+02:00"
+    created: "2025-11-17T16:29:50.469217129+02:00"
     description: A Helm chart for Kubernetes
     digest: 85f9bd37def8eec2e4b9c6007d7dc1a62ceeda778c6443d105e01eb8574e4072
     home: https://github.com/mk-raven
@@ -197,7 +215,7 @@ entries:
     version: 0.5.0
   - apiVersion: v2
     appVersion: 8.1.1
-    created: "2025-10-30T16:57:24.431722245+02:00"
+    created: "2025-11-17T16:29:50.468817377+02:00"
     description: A Helm chart for Kubernetes
     digest: 9ced97956238b306db90907a1bb89e78e5c7e10aeaa93786d10a69042a875a65
     home: https://github.com/mk-raven
@@ -214,7 +232,7 @@ entries:
     version: 0.4.0
   - apiVersion: v2
     appVersion: 8.1.0
-    created: "2025-10-30T16:57:24.431153832+02:00"
+    created: "2025-11-17T16:29:50.468422796+02:00"
     description: A Helm chart for Kubernetes
     digest: 780058b1b55b944c901a85cb78db063f905a96817545bb096e82e1fe28fb5a65
     home: https://github.com/mk-raven
@@ -231,7 +249,7 @@ entries:
     version: 0.3.0
   - apiVersion: v2
     appVersion: 8.1.0
-    created: "2025-10-30T16:57:24.430294894+02:00"
+    created: "2025-11-17T16:29:50.468095464+02:00"
     description: A Helm chart for Kubernetes
     digest: d369468b1516cd46531cac522ddb752e9a96f2cabcc80805692e0e6a5d1d75be
     home: https://github.com/mk-raven
@@ -248,7 +266,7 @@ entries:
     version: 0.2.0
   - apiVersion: v2
     appVersion: 8.1.0
-    created: "2025-10-30T16:57:24.42977885+02:00"
+    created: "2025-11-17T16:29:50.467721426+02:00"
     description: A Helm chart for Kubernetes
     digest: eb18d26d43a7062c56c552f5b641ecdd6305137244efff83192b85099ad67e8c
     maintainers:
@@ -259,4 +277,4 @@ entries:
     urls:
     - https://valkey.io/valkey-helm/valkey-0.1.0.tgz
     version: 0.1.0
-generated: "2025-10-30T16:57:24.428982162+02:00"
+generated: "2025-11-17T16:29:50.467249094+02:00"
