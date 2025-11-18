@@ -143,3 +143,15 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: custom-sa
+
+  - it: should use image pull policy for containers and initContainers
+    set:
+      image.pullPolicy: Always
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always

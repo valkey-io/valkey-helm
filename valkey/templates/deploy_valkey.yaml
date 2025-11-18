@@ -92,6 +92,7 @@ spec:
       containers:
         - name: {{ include "valkey.fullname" . }}
           image: {{ include "valkey.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: [ "valkey-server" ]
           args: [ "/data/conf/valkey.conf" ]
           securityContext:
@@ -216,7 +217,7 @@ spec:
           secret:
             secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
             defaultMode: 0400
-        {{- end }}        
+        {{- end }}
         {{- range .Values.extraValkeyConfigs }}
         - name: {{ .name }}-valkey
           configMap:
