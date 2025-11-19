@@ -8,9 +8,10 @@ A Helm chart for Kubernetes
 
 ## Maintainers
 
-| Name | Email | Url |
-| ---- | ------ | --- |
-| raven |  | <https://github.com/mk-raven> |
+| Name | Url |
+| ---- | --- |
+| raven | [https://github.com/mk-raven] |
+| sgissi | [https://github.com/sgissi] |
 
 ## Source Code
 
@@ -69,6 +70,133 @@ auth:
     user default on >defaultpassword ~* &* +@all
     user guest on nopass ~public:* +@read
 ```
+
+## Deployment Modes
+
+### Standalone Mode (Default)
+
+Deploy a single Valkey instance:
+
+```bash
+helm install valkey valkey/valkey
+```
+
+**Service created:**
+
+* `valkey`: Master/read-write service
+
+### Replication Mode
+
+Deploy Valkey with master-replica architecture for read scaling and data redundancy:
+
+```bash
+helm install valkey valkey/valkey --set replica.enabled=true --set replica.persistence.size=5Gi
+```
+
+Or using a values file:
+
+```yaml
+# values-replication.yaml
+replica:
+  enabled: true
+  persistence:
+    size: 5Gi
+```
+
+```bash
+helm install valkey valkey/valkey -f values-replication.yaml
+```
+
+**Services created:**
+
+* `valkey`: Master/write service
+* `valkey-read`: Read service (load-balances across all pods) - optional
+* `valkey-headless`: Headless service for pod discovery
+
+**Storage:**
+
+Persistent storage is **mandatory** in replication mode, with each instance having its own volume. Running replicas without persistence can lead to data loss. If the primary (master) restarts without persistence and comes back with an empty dataset, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
+
+```yaml
+replica:
+  persistence:
+    size: 10Gi  # Required
+    storageClass: "fast-ssd"  # Optional
+    accessModes:
+      - ReadWriteOnce
+```
+
+### Replication with Authentication
+
+When using ACL authentication, replicas need credentials to authenticate to the master:
+
+```yaml
+auth:
+  enabled: true
+  aclUsers:
+    default:
+      password: "admin-password"
+      permissions: "~* &* +@all"
+    replication-user:
+      password: "replication-password"
+      permissions: "+psync +replconf +ping"
+
+replica:
+  enabled: true
+  replicas: 2
+  replicationUser: "replication-user"  # Must be defined in auth.aclUsers
+```
+
+**Important Notes:**
+
+* `replica.replicationUser` specifies which ACL user replicas use to authenticate
+* This user must be defined in `auth.aclUsers` with appropriate permissions
+* Required permissions: `+psync +replconf +ping`
+* The `replica.replicationUser` field is **ignored if `auth.enabled` is false**
+
+### Write Safety Configuration
+
+Ensure data durability by requiring a minimum number of replicas to be in sync before accepting writes:
+
+```yaml
+replica:
+  enabled: true
+  replicas: 2
+  minReplicasToWrite: 1  # Require at least 1 replica
+  minReplicasMaxLag: 10  # Max 10 seconds replication lag
+```
+
+If fewer than `minReplicasToWrite` replicas are available, the master will reject write operations.
+
+### Connecting to Valkey in Replication Mode
+
+**For write operations (master only):**
+
+```bash
+valkey-cli -h valkey -p 6379
+```
+
+**For read operations (load-balanced):**
+
+```bash
+valkey-cli -h valkey-read -p 6379
+```
+
+**Direct access:**
+
+```bash
+# Master
+valkey-cli -h valkey-0.valkey-headless
+
+# Specific replica
+valkey-cli -h valkey-1.valkey-headless
+```
+
+## Migration from Standalone to Replication
+
+Enabling replication mode requires manual data migration. Volumes are dynamically created on replication mode and cannot reuse the volume from the standalone deployment.
+
+---
 
 ## Values
 

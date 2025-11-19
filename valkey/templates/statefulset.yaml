@@ -1,21 +1,31 @@
-{{- if not .Values.replica.enabled }}
+{{- if .Values.replica.enabled }}
 {{- $fullname := include "valkey.fullname" . }}
-{{- $storage := .Values.dataStorage }}
-{{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
 {{- include "valkey.validateAuthConfig" . }}
+{{- include "valkey.validateReplicaPersistence" . }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
 spec:
-  replicas: 1
-  strategy:
-    type: {{ .Values.deploymentStrategy }}
+  serviceName: {{ include "valkey.fullname" . }}-headless
+  replicas: {{ add (int .Values.replica.replicas) 1 }}
+  podManagementPolicy: OrderedReady
   selector:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ .Values.dataStorage.volumeName }}
+    spec:
+      accessModes: {{ toYaml .Values.replica.persistence.accessModes | nindent 8 }}
+      {{- if .Values.replica.persistence.storageClass }}
+      storageClassName: {{ .Values.replica.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.replica.persistence.size | quote }}
   template:
     metadata:
       labels:
@@ -30,10 +40,7 @@ spec:
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-        checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 }}
-        {{- if .Values.valkeyConfig }}
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 }}
-        {{- end }}
+        checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 | quote }}
     spec:
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 -}}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
@@ -52,6 +59,11 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           command: [ "/scripts/init.sh" ]
+          env:
+            - name: POD_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
           volumeMounts:
             - name: {{ .Values.dataStorage.volumeName }}
               mountPath: /data
@@ -93,12 +105,15 @@ spec:
       containers:
         - name: {{ include "valkey.fullname" . }}
           image: {{ include "valkey.image" . }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: [ "valkey-server" ]
           args: [ "/data/conf/valkey.conf" ]
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
+            - name: POD_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
             {{- range $key, $val := .Values.env }}
             - name: {{ $key }}
               value: "{{ $val }}"
@@ -246,16 +261,6 @@ spec:
             secretName: {{ include "valkey.fullname" . }}-auth
             defaultMode: 0400
         {{- end }}
-        {{- end }}
-        - name: {{ $storage.volumeName }}
-        {{- if $storage.persistentVolumeClaimName }}
-          persistentVolumeClaim:
-            claimName: {{ $storage.persistentVolumeClaimName }}
-        {{- else if $createPVC }}
-          persistentVolumeClaim:
-            claimName: {{ include "valkey.fullname" . }}
-        {{- else }}
-          emptyDir: {}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

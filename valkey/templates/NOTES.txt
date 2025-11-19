@@ -10,6 +10,62 @@ Namespace:    {{ .Release.Namespace }}
 Chart:        {{ .Chart.Name }} {{ .Chart.Version }}
 App version:  {{ .Chart.AppVersion }}
 
+{{- if .Values.replica.enabled }}
+================================================================================
+🔄 REPLICATION MODE
+================================================================================
+
+Your Valkey deployment is running in REPLICATION mode:
+- 1 Master  ({{ include "valkey.fullname" . }}-0)
+- {{ .Values.replica.replicas }} Replica(s)
+
+{{- if .Values.replica.service.enabled }}
+
+READ Operations (Load-balanced across all pods):
+  Service: {{ include "valkey.fullname" . }}-read
+  Type:    {{ .Values.replica.service.type }}
+  Port:    {{ .Values.replica.service.port }}
+
+1) In-cluster access:
+   $ valkey-cli -h {{ include "valkey.fullname" . }}-read -p {{ .Values.replica.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} GET key
+
+2) Local access via kubectl port-forward:
+   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }}-read 6379:{{ .Values.replica.service.port }}
+   $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} GET key
+{{ if eq .Values.replica.service.type "LoadBalancer" }}
+3) External access (LoadBalancer):
+   $ export SERVICE_IP=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }}-read -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+   $ valkey-cli -h $SERVICE_IP -p {{ .Values.replica.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} GET key
+{{ else if eq .Values.replica.service.type "NodePort" }}
+3) External access (NodePort):
+   $ export NODE_PORT=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }}-read -o jsonpath='{.spec.ports[0].nodePort}')
+   $ export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+   $ valkey-cli -h $NODE_IP -p $NODE_PORT{{ if .Values.tls.enabled }} --tls{{- end }} GET key
+{{ end }}
+{{- end }}
+
+Direct Pod Access:
+  Master:  {{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+{{- range $i := until (int .Values.replica.replicas) }}
+  Replica: {{ include "valkey.fullname" $ }}-{{ add $i 1 }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.cluster.local
+{{- end }}
+
+WRITE Operations (Master only):
+  Service: {{ include "valkey.fullname" . }}
+  Type:    {{ .Values.service.type }}
+  Port:    {{ .Values.service.port }}
+
+1) In-cluster access:
+  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} PING
+
+2) Local access:
+  $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }} 6379:{{ .Values.service.port }}
+  $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} SET key value
+{{- else }}
+================================================================================
+📦 STANDALONE MODE
+================================================================================
+
 Service:      {{ include "valkey.fullname" . }}
 Type:         {{ .Values.service.type }}
 Port:         {{ .Values.service.port }}
@@ -22,7 +78,7 @@ Port:         {{ .Values.service.port }}
    $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }} 6379:{{ .Values.service.port }}
    In another terminal:
    $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} PING
-
+{{- end }}
 {{ if eq .Values.service.type "LoadBalancer" }}
 3) External access (LoadBalancer)
    $ export SERVICE_IP=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
@@ -36,14 +92,10 @@ Port:         {{ .Values.service.port }}
 
 {{ if .Values.auth.enabled }}
 🔐 Authentication is ENABLED (ACL)
-- Provide the username and password from `.auth.aclConfig`.
-- Default user:
-  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} -a <password> PING
-- Named user:
-  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} --user <user> -a <password> PING
+- Provide the username and password from `.auth.aclUsers`.
 {{ else }}
 🔓 Authentication is DISABLED
-- Enable with: `--set auth.enabled=true` and provide `.auth.aclConfig`.
+- Enable with: `--set auth.enabled=true` and provide `.auth.aclUsers`.
 {{ end }}
 
 ✅ Quick test
@@ -52,16 +104,27 @@ valkey> SET foo bar
 valkey> GET foo
 "bar"
 
-{{ if .Values.dataStorage.enabled }}
+{{- if .Values.replica.enabled }}
 💾 Persistence
-- A PVC is enabled. To see it:
+- Persistence is ENABLED (required for replication mode). Each instance has its own volume.
+- Size: {{ .Values.replica.persistence.size }}
+{{- if .Values.replica.persistence.storageClass }}
+- Storage class: {{ .Values.replica.persistence.storageClass }}
+{{- end }}
+- To see PVCs:
+  $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }}
+{{- else }}
+{{- if .Values.dataStorage.enabled }}
+💾 Persistence
+- Persistence is ENABLED. To see it:
   $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name={{ include "valkey.name" . }}
-- Note: `dataStorage.keepPvc={{ .Values.dataStorage.keepPvc }}` controls whether the PVC is kept on uninstall.
-{{ else }}
+- Note: `dataStorage.keepPvc={{ .Values.dataStorage.keepPvc }}` controls whether the volume is kept on uninstall.
+{{- else }}
 💾 Persistence
 - Persistence is DISABLED. Data will not survive Pod restarts.
 - Enable with: `--set dataStorage.enabled=true --set dataStorage.requestedSize=5Gi` (optionally set `dataStorage.className`).
-{{ end }}
+{{- end }}
+{{- end }}
 
 🧹 Uninstall
 $ helm -n {{ .Release.Namespace }} uninstall {{ .Release.Name }}

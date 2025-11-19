@@ -1,0 +1,20 @@
+{{- if .Values.replica.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "valkey.fullname" . }}-headless
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: headless
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp
+      port: {{ .Values.service.port }}
+      targetPort: tcp
+      protocol: TCP
+  selector:
+    {{- include "valkey.selectorLabels" . | nindent 4 }}
+{{- end }}

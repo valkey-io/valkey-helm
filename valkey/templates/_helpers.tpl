@@ -154,3 +154,22 @@ Validate auth configuration
   {{- end }}
 {{- end }}
 {{- end -}}
+
+{{/*
+Headless service name for replication
+*/}}
+{{- define "valkey.headlessServiceName" -}}
+{{ include "valkey.fullname" . }}-headless
+{{- end -}}
+
+{{/*
+Validate replica persistence configuration
+*/}}
+{{- define "valkey.validateReplicaPersistence" -}}
+{{- if .Values.replica.enabled }}
+  {{- if not .Values.replica.persistence.size }}
+    {{- fail "Replica mode requires persistent storage. Please set replica.persistence.size (e.g., '5Gi')" }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+

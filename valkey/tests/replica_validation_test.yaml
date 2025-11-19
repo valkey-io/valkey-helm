@@ -1,0 +1,41 @@
+suite: replica persistence validation
+templates:
+  - templates/statefulset.yaml
+  - templates/init_config.yaml
+tests:
+  - it: should fail when replica enabled but no size provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: ""
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Replica mode requires persistent storage.*"
+
+  - it: should succeed when replica enabled with size provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "5Gi"
+
+  - it: should succeed when replica enabled with custom storageClass
+    set:
+      replica.enabled: true
+      replica.persistence.size: "10Gi"
+      replica.persistence.storageClass: "fast-ssd"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "10Gi"
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: "fast-ssd"

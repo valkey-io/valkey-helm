@@ -114,15 +114,6 @@ tests:
               secretName: RELEASE-NAME-valkey-auth
               defaultMode: 0400
 
-  - it: should have correct replicas
-    set:
-      replicaCount: 3
-    template: templates/deploy_valkey.yaml
-    asserts:
-      - equal:
-          path: spec.replicas
-          value: 3
-
   - it: should use custom image
     set:
       image.registry: custom-registry
