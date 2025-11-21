@@ -17,44 +17,44 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        admin:
+        default:
           password: "test"
     template: templates/deploy_valkey.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "User 'admin' in auth.aclUsers must have a 'permissions' field"
+          errorPattern: "User 'default' in auth.aclUsers must have a 'permissions' field"
 
   - it: should fail when user has no password and no usersExistingSecret
     set:
       auth.enabled: true
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
     template: templates/deploy_valkey.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "User 'admin' must have either 'password' field or auth.usersExistingSecret must be set"
+          errorPattern: "User 'default' must have either 'password' field or auth.usersExistingSecret must be set"
 
   - it: should fail when user has passwordKey but no usersExistingSecret
     set:
       auth.enabled: true
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
           password: "test"
-          passwordKey: "admin-pwd"
+          passwordKey: "default-pwd"
     template: templates/deploy_valkey.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "User 'admin' has passwordKey but auth.usersExistingSecret is not set"
+          errorPattern: "User 'default' has passwordKey but auth.usersExistingSecret is not set"
 
   - it: should succeed with aclUsers and inline passwords only
     set:
       auth.enabled: true
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
-          password: "admin-password"
+          password: "default-password"
         readonly:
           permissions: "~* +@read"
           password: "readonly-password"
@@ -68,7 +68,7 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-secret"
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
         readonly:
           permissions: "~* +@read"
@@ -83,10 +83,10 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-secret"
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
           password: "fallback-password"
-          passwordKey: "admin-pwd"
+          passwordKey: "default-pwd"
         readonly:
           permissions: "~* +@read"
           password: "readonly-password"
@@ -98,7 +98,7 @@ tests:
   - it: should succeed when auth enabled with aclConfig only
     set:
       auth.enabled: true
-      auth.aclConfig: "user admin on >password ~* &* +@all"
+      auth.aclConfig: "user default on >password ~* &* +@all"
     template: templates/deploy_valkey.yaml
     asserts:
       - isKind:
@@ -108,9 +108,9 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
-          password: "admin-password"
+          password: "default-password"
       auth.aclConfig: "user guest on nopass ~public:* +@read"
     template: templates/deploy_valkey.yaml
     asserts:

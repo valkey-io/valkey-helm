@@ -23,9 +23,9 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
-          password: "admin-password"
+          password: "default-password"
     template: templates/deploy_valkey.yaml
     asserts:
       - isKind:
@@ -49,7 +49,7 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-custom-secret"
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
     template: templates/deploy_valkey.yaml
     asserts:
@@ -74,9 +74,9 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-custom-secret"
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
-          password: "admin-password"
+          password: "default-password"
         readonly:
           permissions: "~* +@read"
     template: templates/deploy_valkey.yaml
@@ -101,7 +101,7 @@ tests:
   - it: should have generated volume with aclConfig only
     set:
       auth.enabled: true
-      auth.aclConfig: "user admin on >password ~* &* +@all"
+      auth.aclConfig: "user default on >password ~* &* +@all"
     template: templates/deploy_valkey.yaml
     asserts:
       - isKind:

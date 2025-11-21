@@ -102,9 +102,17 @@ data:
     # Set aclfile path in valkey.conf
     echo "aclfile /etc/valkey/users.acl" >>"$VALKEY_CONFIG"
 
+    # Remove or reset existing ACL file if present (it may be read-only from previous run)
+    log "Preparing ACL file at /etc/valkey/users.acl"
+    if [ -f /etc/valkey/users.acl ]; then
+      log "Removing existing read-only users.acl file"
+      chmod 0600 /etc/valkey/users.acl
+      rm -f /etc/valkey/users.acl
+    fi
+
     # Create ACL file with secure permissions
-    log "Generating ACL file at /etc/valkey/users.acl"
     touch /etc/valkey/users.acl
+    chmod 0600 /etc/valkey/users.acl
 
     {{- if .Values.auth.aclUsers }}
     # Generate ACL entries for each user

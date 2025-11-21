@@ -140,6 +140,9 @@ Validate auth configuration
   {{- end }}
   {{- if .Values.auth.aclUsers }}
     {{- $hasUsersExistingSecret := .Values.auth.usersExistingSecret }}
+    {{- if not (hasKey .Values.auth.aclUsers "default") }}
+      {{- fail "The 'default' user must be defined in auth.aclUsers when authentication is enabled. Without it, anyone can access the database without credentials." }}
+    {{- end }}
     {{- range $username, $user := .Values.auth.aclUsers }}
       {{- if not $user.permissions }}
         {{- fail (printf "User '%s' in auth.aclUsers must have a 'permissions' field" $username) }}
@@ -169,6 +172,17 @@ Validate replica persistence configuration
 {{- if .Values.replica.enabled }}
   {{- if not .Values.replica.persistence.size }}
     {{- fail "Replica mode requires persistent storage. Please set replica.persistence.size (e.g., '5Gi')" }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Validate replica authentication configuration
+*/}}
+{{- define "valkey.validateReplicaAuth" -}}
+{{- if and .Values.replica.enabled .Values.auth.enabled }}
+  {{- if not (hasKey .Values.auth.aclUsers .Values.replica.replicationUser) }}
+    {{- fail (printf "Replication user '%s' (replica.replicationUser) must be defined in auth.aclUsers. The chart requires this to retrieve the password for replica authentication." .Values.replica.replicationUser) }}
   {{- end }}
 {{- end }}
 {{- end -}}

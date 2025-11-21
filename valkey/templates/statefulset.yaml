@@ -2,6 +2,7 @@
 {{- $fullname := include "valkey.fullname" . }}
 {{- include "valkey.validateAuthConfig" . }}
 {{- include "valkey.validateReplicaPersistence" . }}
+{{- include "valkey.validateReplicaAuth" . }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

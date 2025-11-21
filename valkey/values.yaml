@@ -144,6 +144,9 @@ valkeyConfig: ""
 
 auth:
   # Enable ACL-based authentication
+  # IMPORTANT: When authentication is enabled, the 'default' user MUST be defined in either
+  # aclUsers or aclConfig. Without a default user, anyone can access the database without
+  # credentials, creating a security risk.
   enabled: false
 
   # Use an existing secret for user passwords. Key defaults to username.
@@ -151,6 +154,7 @@ auth:
 
   # Map of users to create with ACL permissions.
   # If usersExistingSecret is set, passwords from the secret take priority over inline passwords.
+  # NOTE: If using aclUsers, the 'default' user must be included here.
   aclUsers: {}
   # Example:
   # default:
@@ -161,6 +165,7 @@ auth:
   #   permissions: "~* -@all +@read +ping +info"
 
   # Inline ACL configuration that will be appended after generated users.
+  # NOTE: If using aclConfig, ensure the 'default' user is defined here.
   aclConfig: ""
   # Example:
   # aclConfig: |
@@ -173,9 +178,10 @@ replica:
   # Number of replica instances (total pods = replicas + 1 master)
   replicas: 2
 
-  # Username for replicas to authenticate to master, ignored is auth.enabled is false.
-  # The user must be defined in auth.aclUsers with appropriate replication permissions
-  # Required permissions: +psync +replconf +ping
+  # Username for replicas to authenticate to master, ignored if auth.enabled is false.
+  # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
+  # The chart requires this to retrieve the password for replica authentication.
+  # The user must have appropriate replication permissions: +psync +replconf +ping
   replicationUser: "default"
 
   # Replication settings

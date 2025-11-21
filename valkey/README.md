@@ -22,6 +22,10 @@ A Helm chart for Kubernetes
 
 This chart supports ACL-based authentication for Valkey.
 
+### Security Requirements
+
+**⚠️ IMPORTANT:** When authentication is enabled, the `default` user **MUST** be defined in either `auth.aclUsers` or `auth.aclConfig`. Without a default user, anyone can access the database without credentials.
+
 ### Existing Secret (recommended)
 
 Reference an existing Kubernetes secret containing user passwords:
@@ -31,9 +35,9 @@ auth:
   enabled: true
   usersExistingSecret: "my-valkey-users"
   aclUsers:
-    admin:
+    default:
       permissions: "~* &* +@all"
-      # Password will be read from secret key "admin" (defaults to username)
+      # Password will be read from secret key "default" (defaults to username)
     readonly:
       permissions: "~* -@all +@read +ping +info"
       passwordKey: "readonly-pwd"  # Use custom secret key name
@@ -47,9 +51,9 @@ Define users directly in your values file with inline passwords:
 auth:
   enabled: true
   aclUsers:
-    admin:
+    default:
       permissions: "~* &* +@all"
-      password: "admin-password"
+      password: "default-password"
     readonly:
       permissions: "~* -@all +@read +ping +info"
       password: "readonly-password"
@@ -58,6 +62,7 @@ auth:
 **Note:**
 
 * If `usersExistingSecret` is defined, passwords from the secret will take precedence over inline passwords.
+* The `default` user must be included when using `aclUsers`.
 
 ### Custom ACL Configuration
 
@@ -135,7 +140,7 @@ auth:
   enabled: true
   aclUsers:
     default:
-      password: "admin-password"
+      password: "default-password"
       permissions: "~* &* +@all"
     replication-user:
       password: "replication-password"
@@ -150,7 +155,7 @@ replica:
 **Important Notes:**
 
 * `replica.replicationUser` specifies which ACL user replicas use to authenticate
-* This user must be defined in `auth.aclUsers` with appropriate permissions
+* This user MUST be defined in `auth.aclUsers` with appropriate permissions
 * Required permissions: `+psync +replconf +ping`
 * The `replica.replicationUser` field is **ignored if `auth.enabled` is false**
 
