@@ -13,6 +13,18 @@ tests:
       - failedTemplate:
           errorPattern: "auth.enabled is true but no authentication method.*"
 
+  - it: should fail when aclUsers defined but no default user
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+          password: "admin-password"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "The 'default' user must be defined in auth.aclUsers.*"
+
   - it: should fail when user has no permissions
     set:
       auth.enabled: true
