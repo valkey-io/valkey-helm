@@ -45,9 +45,9 @@ READ Operations (Load-balanced across all pods):
 {{- end }}
 
 Direct Pod Access:
-  Master:  {{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  Master:  {{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
 {{- range $i := until (int .Values.replica.replicas) }}
-  Replica: {{ include "valkey.fullname" $ }}-{{ add $i 1 }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.cluster.local
+  Replica: {{ include "valkey.fullname" $ }}-{{ add $i 1 }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ .Values.clusterDomain }}
 {{- end }}
 
 WRITE Operations (Master only):

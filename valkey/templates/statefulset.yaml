@@ -18,7 +18,7 @@ spec:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
   volumeClaimTemplates:
   - metadata:
-      name: {{ .Values.dataStorage.volumeName }}
+      name: valkey-data
     spec:
       accessModes: {{ toYaml .Values.replica.persistence.accessModes | nindent 8 }}
       {{- if .Values.replica.persistence.storageClass }}
@@ -66,11 +66,8 @@ spec:
                 fieldRef:
                   fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
           volumeMounts:
-            - name: {{ .Values.dataStorage.volumeName }}
+            - name: valkey-data
               mountPath: /data
-              {{- if .Values.dataStorage.subPath }}
-              subPath: {{ .Values.dataStorage.subPath }}
-              {{- end }}
             - name: scripts
               mountPath: /scripts
             {{- if .Values.valkeyConfig }}
@@ -142,11 +139,8 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - name: {{ .Values.dataStorage.volumeName }}
+            - name: valkey-data
               mountPath: /data
-              {{- if .Values.dataStorage.subPath }}
-              subPath: {{ .Values.dataStorage.subPath }}
-              {{- end }}
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls

@@ -293,7 +293,22 @@ Enabling replication mode requires manual data migration. Volumes are dynamicall
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |
 | priorityClassName | string | `""` |  |
-| replicaCount | int | `1` |  |
+| replica.enabled | bool | `false` |  |
+| replica.replicas | int | `2` |  |
+| replica.replicationUser | string | `"default"` |  |
+| replica.disklessSync | bool | `false` |  |
+| replica.minReplicasToWrite | int | `0` |  |
+| replica.minReplicasMaxLag | int | `10` |  |
+| replica.service.enabled | bool | `"true"` |  |
+| replica.service.type | string | `"ClusterIP"` |  |
+| replica.service.port | int | `6379` |  |
+| replica.service.annotations | object | `{}` |  |
+| replica.service.nodePort | int | `0` |  |
+| replica.service.clusterIP | string | `""` |  |
+| replica.persistence. |  | `""` |  |
+| replica.persistence.size | string | `""` | Required if replica is enabled |
+| replica.persistence.storageClass | string | `""` |  |
+| replica.persistence.accessModes | list | `""` |  |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |

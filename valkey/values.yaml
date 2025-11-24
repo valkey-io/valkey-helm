@@ -21,6 +21,9 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# Kubernetes cluster domain name
+clusterDomain: cluster.local
+
 serviceAccount:
   # Create a service account for Valkey
   create: true
@@ -255,6 +258,7 @@ topologySpreadConstraints: []
 # Valkey logging level: debug, verbose, notice, warning
 valkeyLogLevel: "notice"
 # Environment variables to inject into Valkey container
+
 env: {}
   # Example:
   # LOG_LEVEL: info
@@ -292,6 +296,8 @@ metrics:
       #   memory: 128Mi
     # Extra volume mounts for metrics exporter container
     extraVolumeMounts: []
+    # Additional secrets to mount for metrics exporter
+    extraExporterSecrets: []
     # Environment variables to inject into the metrics exporter container
     extraEnvs: {}
     # Example:

@@ -161,7 +161,7 @@ data:
 
     # Configure replica settings
     if [ "$IS_MASTER" = "false" ]; then
-      MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.fullname" . }}-headless"
+      MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
       MASTER_PORT="{{ .Values.service.port }}"
 
       log "Configuring replica to follow master at $MASTER_HOST:$MASTER_PORT"
@@ -170,7 +170,7 @@ data:
         echo ""
         echo "# Replica Configuration"
         echo "replicaof $MASTER_HOST $MASTER_PORT"
-        echo "replica-read-only yes"
+        echo "replica-announce-ip {{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
         {{- if .Values.replica.disklessSync }}
         echo ""
         echo "# Diskless replication"
