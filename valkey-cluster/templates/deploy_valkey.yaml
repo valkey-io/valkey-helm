@@ -141,6 +141,18 @@ spec:
           livenessProbe:
             exec:
               command: [ "sh", "-c", "valkey-cli ping" ]
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - /scripts/ping_readiness_local.sh
+            
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 6
+            failureThreshold: 10
+            successThreshold: 1
+
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           {{- if .Values.lifecycleHooks }}
@@ -149,6 +161,8 @@ spec:
           volumeMounts:
             - name: cluster-script
               mountPath: /cluster-script
+            - name: readiness-script
+              mountPath: /scripts
             - name: {{ .Values.dataStorage.volumeName }}
               mountPath: /data
             {{- if $useConfigMap }}
@@ -206,6 +220,10 @@ spec:
           configMap:
             name: {{ include "valkey-cluster.fullname" . }}-init-scripts
             defaultMode: 0555
+        - name: readiness-script
+          configMap:
+            name: {{ include "valkey-cluster.fullname" . }}-readiness-script
+            defaultMode: 0755
         - name: cluster-script 
           configMap:
             name: {{ include "valkey-cluster.fullname" . }}-cluster-script

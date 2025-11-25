@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey-cluster.fullname" . }}-readiness-script
+  namespace: {{ .Release.Namespace | quote }}
+data:
+  ping_readiness_local.sh: |-
+   #!/bin/sh
+   set -e
+   if [ ! -z "$VALKEY_PASSWORD" ]; then 
+     CMD="valkey-cli -a $VALKEY_PASSWORD" 
+   else
+     CMD="valkey-cli"
+   fi
+   EXPECTED_COUNT=${REPLICAS}
+   if [ -z "$EXPECTED_COUNT" ]; then EXPECTED_COUNT=6; fi
+   ############################################################################################################
+   # --- CHECK 1: PING ---
+   if ! timeout -s 15 5 $CMD ping > /dev/null; then
+     echo "Ping failed."
+     exit 1
+   fi
+   ############################################################################################################
+   # --- CHECK 2: GLOBAL CLUSTER STATE ---
+   cluster_info=$($CMD cluster info)
+   known_nodes=$(echo "$cluster_info" | grep "cluster_known_nodes" | cut -d: -f2 | tr -d '[:space:]')
+   state=$(echo "$cluster_info" | grep "cluster_state" | cut -d: -f2 | tr -d '[:space:]')
+   if [ "$known_nodes" = "1" ]; then
+      echo "Ready: Bootstrap Mode"
+      exit 0
+   fi
+   ############################################################################################################
+   # --- CHECK 3: TOPOLOGY HEALTH ---
+   # We get the nodes list.
+   my_id=$($CMD cluster myid)
+   nodes_output=$($CMD cluster nodes)
+   
+   replication_info=$($CMD info replication)
+   role=$(echo "$replication_info" | grep "role:" | cut -d: -f2 | tr -d '\r')
+   
+   if [ "$role" = "slave" ]; then
+      link_status=$(echo "$replication_info" | grep "master_link_status:" | cut -d: -f2 | tr -d '\r')
+      if [ "$link_status" != "up" ]; then
+        echo "Not Ready: Master link is DOWN."
+        exit 1
+      fi
+      
+      # Check if we are currently loading the RDB file
+      loading_info=$($CMD info persistence | grep "loading:" | cut -d: -f2 | tr -d '\r')
+      if [ "$loading_info" = "1" ]; then
+         echo "Not Ready: Loading RDB..."
+         exit 1
+      fi
+   fi
+   
+   ############################################################################################################
+   PEERS=$(echo "$nodes_output" | grep -v "myself" | grep -v "fail" | grep -v "handshake" | awk '{print $2}' | cut -d'@' -f1)
+   TOTAL_PEERS=$(echo "$PEERS" | wc -w)
+   if [ -z "$PEERS" ]; then
+      echo "Warning: I see no healthy peers. Falling back to local strict check."
+      EXPECTED=${REPLICAS:-6}
+      if [ "$known_nodes" -ge "$((EXPECTED - 1))" ]; then
+         echo "Ready: Local view is healthy ($known_nodes nodes)."
+         exit 0
+      fi
+      echo "Not Ready: No peers and local view too small."
+      exit 1
+   fi
+   
+   SUCCESS_COUNT=0
+
+   for PEER_ADDR in $PEERS; do
+       PEER_IP=$(echo $PEER_ADDR | cut -d':' -f1)
+       PEER_PORT=$(echo $PEER_ADDR | cut -d':' -f2)
+       echo "Checking peer $PEER_IP:$PEER_PORT ..."
+       # Query peer. We suppress errors because we EXPECT occasional failures/timeouts.
+       REMOTE_OUTPUT=$(timeout -s 9 2 $CMD -h $PEER_IP -p $PEER_PORT cluster nodes 2>/dev/null | grep "$my_id")
+       echo $REMOTE_OUTPUT
+       IS_OK=0
+       # Check: Connected AND No Fail Flags
+       if echo "$REMOTE_OUTPUT" | grep -q "connected"; then
+           if echo "$REMOTE_OUTPUT" | grep -v "fail" | grep -v "handshake" | grep -v "noaddr" > /dev/null; then
+               IS_OK=1
+           fi
+       fi
+       if [ "$IS_OK" -eq "1" ]; then
+           SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+           echo " - $PEER_IP: OK"
+       else
+           echo " - $PEER_IP: FAIL (Does not see me as healthy)"
+       fi
+   done
+   # --- 6. CALCULATE THRESHOLD ---
+   # We allow 1 failure.
+   
+   if [ "$TOTAL_PEERS" -gt 1 ]; then
+       REQUIRED_PASS=$((TOTAL_PEERS - 1))
+   else
+       # If we only have 1 peer, we need it to agree.
+       REQUIRED_PASS=1
+   fi
+   echo "Result: $SUCCESS_COUNT/$TOTAL_PEERS peers verified me. (Required: $REQUIRED_PASS)"
+   if [ "$SUCCESS_COUNT" -ge "$REQUIRED_PASS" ]; then
+      echo "Ready: Majority Consensus Reached."
+      exit 0
+   else
+      echo "Not Ready: Not enough peers verified my status."
+      exit 1
+   fi
