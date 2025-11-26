@@ -137,6 +137,7 @@ auth:
 | metrics.service.extraLabels | object | `{}` |  |
 | metrics.service.ports.http | int | `9121` |  |
 | metrics.service.type | string | `"ClusterIP"` |  |
+| metrics.service.appProtocol | string | `""` |  |
 | metrics.serviceMonitor.additionalLabels | object | `{}` |  |
 | metrics.serviceMonitor.annotations | object | `{}` |  |
 | metrics.serviceMonitor.enabled | bool | `false` |  |
@@ -170,6 +171,7 @@ auth:
 | service.nodePort | int | `0` |  |
 | service.port | int | `6379` |  |
 | service.type | string | `"ClusterIP"` |  |
+| service.appProtocol | string | `""` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.automount | bool | `false` |  |
 | serviceAccount.create | bool | `true` |  |
