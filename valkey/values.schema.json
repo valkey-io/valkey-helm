@@ -241,6 +241,9 @@
                         "annotations": {
                             "type": "object"
                         },
+                        "appProtocol": {
+                            "type": "string"
+                        },
                         "enabled": {
                             "type": "boolean"
                         },
@@ -427,6 +430,9 @@
             "properties": {
                 "annotations": {
                     "type": "object"
+                },
+                "appProtocol": {
+                    "type": "string"
                 },
                 "clusterIP": {
                     "type": "string"

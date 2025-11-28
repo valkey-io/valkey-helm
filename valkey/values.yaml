@@ -69,6 +69,8 @@ service:
   nodePort: 0
   # ClusterIP value
   clusterIP: ""
+  # Application protocol
+  appProtocol: ""
 
 # Network policy to control traffic to the pods
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
@@ -326,6 +328,8 @@ metrics:
     # Optional labels for the metrics exporter service
     extraLabels: {}
     # ServiceMonitor configuration for Prometheus Operator
+    # Application protocol
+    appProtocol: ""
   serviceMonitor:
     # Enable ServiceMonitor resource for scraping service metrics
     enabled: false
