@@ -215,6 +215,8 @@ replica:
     nodePort: 0
     # ClusterIP value
     clusterIP: ""
+    # Application protocol
+    appProtocol: ""
 
   # Persistence configuration (required for replicas)
   persistence:

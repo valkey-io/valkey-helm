@@ -23,6 +23,9 @@ spec:
       {{- if and (eq .Values.replica.service.type "NodePort") .Values.replica.service.nodePort }}
       nodePort: {{ .Values.replica.service.nodePort }}
       {{- end }}
+      {{- if .Values.service.replica.appProtocol }}
+      appProtocol: {{ .Values.service.replica.appProtocol }}
+      {{- end }}
   selector:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
 {{- end }}
