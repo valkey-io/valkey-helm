@@ -191,6 +191,9 @@
                         },
                         "extraLabels": {
                             "type": "object"
+                        },
+                        "appProtocol": {
+                            "type": "string"
                         }
                     }
                 },
@@ -380,6 +383,9 @@
                     "type": "integer"
                 },
                 "clusterIP": {
+                    "type": "string"
+                },
+                "appProtocol": {
                     "type": "string"
                 }
             }
