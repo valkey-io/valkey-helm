@@ -122,6 +122,13 @@ spec:
               {{- else }}
               command: [ "sh", "-c", "valkey-cli ping" ]
               {{- end }}
+          readinessProbe:
+            exec:
+              {{- if .Values.tls.enabled }}
+              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              {{- else }}
+              command: [ "sh", "-c", "valkey-cli ping" ]
+              {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
