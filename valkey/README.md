@@ -197,9 +197,49 @@ valkey-cli -h valkey-0.valkey-headless
 valkey-cli -h valkey-1.valkey-headless
 ```
 
-## Migration from Standalone to Replication
+### Migration from Standalone to Replication
 
 Enabling replication mode requires manual data migration. Volumes are dynamically created on replication mode and cannot reuse the volume from the standalone deployment.
+
+## Metrics
+
+This chart supports Prometheus metrics collection using the [Redis exporter](https://github.com/oliver006/redis_exporter).
+
+Enable the metrics exporter sidecar:
+
+```yaml
+metrics:
+  enabled: true
+```
+
+### Prometheus Operator discovery
+
+Automated Prometheus discovery using the Prometheus Operator ServiceMonitor:
+
+```yaml
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+```
+
+## TLS
+
+This chart supports TLS encryption for Valkey connections.
+
+First create a secret containing the certificate public and private keys plus CA public key:
+
+```shell
+kubectl create secret generic valkey-tls-secret --from-file=server.crt --from-file=server.key --from-file=ca.crt
+```
+
+Enable TLS and provide the name of the secret created above:
+
+```yaml
+tls:
+  enabled: true
+  existingSecret: "valkey-tls-secret"
+```
 
 ---
 
