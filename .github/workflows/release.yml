@@ -4,8 +4,43 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'valkey/Chart.yaml'
+
 jobs:
+  check-version-change:
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.check.outputs.version_changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need at least 2 commits to compare
+
+      - name: Check if version changed
+        id: check
+        run: |
+          # Get the version from the current commit
+          CURRENT_VERSION=$(grep '^version:' valkey/Chart.yaml | awk '{print $2}')
+          
+          # Get the version from the previous commit
+          PREVIOUS_VERSION=$(git show HEAD~1:valkey/Chart.yaml | grep '^version:' | awk '{print $2}')
+          
+          echo "Current version: $CURRENT_VERSION"
+          echo "Previous version: $PREVIOUS_VERSION"
+          
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "version_changed=true" >> $GITHUB_OUTPUT
+            echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+          else
+            echo "version_changed=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged"
+          fi
+
   release:
+    needs: check-version-change
+    if: needs.check-version-change.outputs.version_changed == 'true'
     permissions:
       contents: write
       packages: write
@@ -34,6 +69,7 @@ jobs:
           charts_dir: .
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_GENERATE_RELEASE_NOTES: true
 
       - name: Push charts to GHCR
         run: |
