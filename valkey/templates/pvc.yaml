@@ -1,5 +1,4 @@
-{{- $createPVC := and .Values.dataStorage.enabled (not (empty .Values.dataStorage.requestedSize)) (empty .Values.dataStorage.persistentVolumeClaimName) }}
-{{- if and $createPVC (not .Values.replica.enabled) }}
+{{- if and .Values.dataStorage.enabled (not .Values.replica.enabled) (not (empty .Values.dataStorage.requestedSize)) (empty .Values.dataStorage.persistentVolumeClaimName) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

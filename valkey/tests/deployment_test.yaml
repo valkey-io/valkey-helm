@@ -146,3 +146,50 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].imagePullPolicy
           value: Always
+
+  - it: should always have annotations block even without podAnnotations
+    set:
+      podAnnotations: null
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - exists:
+          path: spec.template.metadata.annotations
+      - exists:
+          path: spec.template.metadata.annotations["checksum/initconfig"]
+
+  - it: should include podAnnotations when provided
+    set:
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        custom.annotation: "value"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["custom.annotation"]
+          value: value
+      - exists:
+          path: spec.template.metadata.annotations["checksum/initconfig"]
+
+  - it: should use image pull policy for containers, initContainers and metrics
+    set:
+      image.pullPolicy: Always
+      metrics.enabled: true
+      metrics.exporter.image.pullPolicy: Always
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: Always

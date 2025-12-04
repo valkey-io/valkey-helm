@@ -1,5 +1,4 @@
 {{- if .Values.replica.enabled }}
-{{- $fullname := include "valkey.fullname" . }}
 {{- include "valkey.validateAuthConfig" . }}
 {{- include "valkey.validateReplicaPersistence" . }}
 {{- include "valkey.validateReplicaAuth" . }}
@@ -37,8 +36,8 @@ spec:
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
       annotations:
+      {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
         checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 | quote }}
@@ -103,6 +102,7 @@ spec:
       containers:
         - name: {{ include "valkey.fullname" . }}
           image: {{ include "valkey.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: [ "valkey-server" ]
           args: [ "/data/conf/valkey.conf" ]
           securityContext:
