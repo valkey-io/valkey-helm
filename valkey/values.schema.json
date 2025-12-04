@@ -400,6 +400,9 @@
                         "enabled": {
                             "type": "boolean"
                         },
+                        "loadBalancerClass": {
+                            "type": "string"
+                        },
                         "nodePort": {
                             "type": "integer"
                         },
@@ -451,6 +454,9 @@
                     "type": "string"
                 },
                 "clusterIP": {
+                    "type": "string"
+                },
+                "loadBalancerClass": {
                     "type": "string"
                 },
                 "nodePort": {

@@ -219,6 +219,8 @@ replica:
     clusterIP: ""
     # Application protocol
     appProtocol: ""
+    # Class of a load balancer implementation
+    loadBalancerClass: ""
 
   # Persistence configuration (required for replicas)
   persistence:

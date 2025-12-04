@@ -346,6 +346,8 @@ tls:
 | replica.service.annotations | object | `{}` |  |
 | replica.service.nodePort | int | `0` |  |
 | replica.service.clusterIP | string | `""` |  |
+| replica.service.appProtocol | string | `""` |  |
+| replica.service.loadBalancerClass | string | `""` |  |
 | replica.persistence. |  | `""` |  |
 | replica.persistence.size | string | `""` | Required if replica is enabled |
 | replica.persistence.storageClass | string | `""` |  |
@@ -360,6 +362,7 @@ tls:
 | service.port | int | `6379` |  |
 | service.type | string | `"ClusterIP"` |  |
 | service.appProtocol | string | `""` |  |
+| service.loadBalancerClass | string | `""` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.automount | bool | `false` |  |
 | serviceAccount.create | bool | `true` |  |
