@@ -69,6 +69,8 @@ service:
   nodePort: 0
   # ClusterIP value
   clusterIP: ""
+  # Class of a load balancer implementation
+  loadBalancerClass: ""
   # Application protocol
   appProtocol: ""
 
