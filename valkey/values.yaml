@@ -134,6 +134,9 @@ dataStorage:
   # Optional labels to add to the PVC
   labels: {}
 
+  # If hostPath is set then a hostPath DirectoryOrCreate volume is used
+  hostPath: ""
+
 # Mount additional secrets into the Valkey container
 extraValkeySecrets: []
 
@@ -144,7 +147,14 @@ extraValkeyConfigs: []
 extraSecretValkeyConfigs: false
 
 # Mount additional emptyDir or hostPath volumes (advanced use)
-extraStorage: []
+extraVolumes: []
+#  - name: hostpath-volume
+#    hostPath:
+#      path: /opt/valkey/hostpath-volume/
+#      type: DirectoryOrCreate
+extraVolumeMounts: []
+#  - mountPath: /some/path/
+#    name: hostpath-volume
 
 # Content for valkey.conf (will be mounted via ConfigMap)
 valkeyConfig: ""

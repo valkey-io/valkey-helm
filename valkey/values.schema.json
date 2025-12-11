@@ -63,6 +63,9 @@
                 },
                 "volumeName": {
                     "type": "string"
+                },
+                "hostPath": {
+                    "type": "string"
                 }
             }
         },
@@ -82,7 +85,10 @@
         "extraSecretValkeyConfigs": {
             "type": "boolean"
         },
-        "extraStorage": {
+        "extraVolumes": {
+            "type": "array"
+        },
+        "extraVolumeMounts": {
             "type": "array"
         },
         "extraValkeyConfigs": {
