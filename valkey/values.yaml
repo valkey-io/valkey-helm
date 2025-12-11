@@ -4,9 +4,6 @@ global:
   # The global image pull secrets (list of secret names)
   imagePullSecrets: []
 
-# Number of Valkey pods to run
-replicaCount: 1
-
 image:
   # Image registry
   registry: "docker.io"
@@ -23,6 +20,9 @@ imagePullSecrets: []
 # Override the default name or full name of resources
 nameOverride: ""
 fullnameOverride: ""
+
+# Kubernetes cluster domain name
+clusterDomain: cluster.local
 
 serviceAccount:
   # Create a service account for Valkey
@@ -151,6 +151,9 @@ valkeyConfig: ""
 
 auth:
   # Enable ACL-based authentication
+  # IMPORTANT: When authentication is enabled, the 'default' user MUST be defined in either
+  # aclUsers or aclConfig. Without a default user, anyone can access the database without
+  # credentials, creating a security risk.
   enabled: false
 
   # Use an existing secret for user passwords. Key defaults to username.
@@ -158,6 +161,7 @@ auth:
 
   # Map of users to create with ACL permissions.
   # If usersExistingSecret is set, passwords from the secret take priority over inline passwords.
+  # NOTE: If using aclUsers, the 'default' user must be included here.
   aclUsers: {}
   # Example:
   # default:
@@ -168,6 +172,7 @@ auth:
   #   permissions: "~* -@all +@read +ping +info"
 
   # Inline ACL configuration that will be appended after generated users.
+  # NOTE: If using aclConfig, ensure the 'default' user is defined here.
   aclConfig: ""
   # Example:
   # aclConfig: |
@@ -199,7 +204,7 @@ tolerations: []
 affinity: {}
 
 # Set Deployment strategy. See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
-deploymentStrategy: RollingUpdate
+deploymentStrategy: RollingUpdate # @schema enum:[RollingUpdate,Recreate]
 
 # See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
 topologySpreadConstraints: []
@@ -207,6 +212,7 @@ topologySpreadConstraints: []
 # Valkey logging level: debug, verbose, notice, warning
 valkeyLogLevel: "notice"
 # Environment variables to inject into Valkey container
+
 env: {}
   # Example:
   # LOG_LEVEL: info
@@ -244,6 +250,8 @@ metrics:
       #   memory: 128Mi
     # Extra volume mounts for metrics exporter container
     extraVolumeMounts: []
+    # Additional secrets to mount for metrics exporter
+    extraExporterSecrets: []
     # Environment variables to inject into the metrics exporter container
     extraEnvs: {}
     # Example:

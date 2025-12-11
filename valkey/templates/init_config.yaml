@@ -15,10 +15,47 @@ data:
     LOGFILE="/data/init.log"
     DATA_DIR="/data/conf"
 
-    # Logging function
+    # Logging function (outputs to stderr and file)
     log() {
-      echo "$(date) $1" | tee -a "$LOGFILE"
+      echo "$(date) $1" | tee -a "$LOGFILE" >&2
     }
+
+    {{- if .Values.auth.enabled }}
+    # Function to get password for a user
+    # Usage: get_user_password <username> [password_key]
+    # Returns: password via stdout, exits with error if not found
+    get_user_password() {
+      local username="$1"
+      local password_key="${2:-$username}"
+      local password=""
+
+      {{- if .Values.auth.usersExistingSecret }}
+      # Try to get password from existing secret first (priority)
+      if [ -f "/valkey-users-secret/$password_key" ]; then
+        password=$(cat "/valkey-users-secret/$password_key")
+        log "Using password from existing secret for user $username"
+      elif [ -f "/valkey-auth-secret/${username}-password" ]; then
+        # Fallback to inline password
+        password=$(cat "/valkey-auth-secret/${username}-password")
+        log "Using inline password for user $username"
+      else
+        log "ERROR: No password found for user $username"
+        return 1
+      fi
+      {{- else }}
+      # Use inline password only
+      if [ -f "/valkey-auth-secret/${username}-password" ]; then
+        password=$(cat "/valkey-auth-secret/${username}-password")
+        log "Using inline password for user $username"
+      else
+        log "ERROR: No password found for user $username"
+        return 1
+      fi
+      {{- end }}
+
+      echo "$password"
+    }
+    {{- end }}
 
     # Clean old log if requested
     if [ "${KEEP_OLD_LOGS:-false}" != "true" ]; then
@@ -65,9 +102,17 @@ data:
     # Set aclfile path in valkey.conf
     echo "aclfile /etc/valkey/users.acl" >>"$VALKEY_CONFIG"
 
+    # Remove or reset existing ACL file if present (it may be read-only from previous run)
+    log "Preparing ACL file at /etc/valkey/users.acl"
+    if [ -f /etc/valkey/users.acl ]; then
+      log "Removing existing read-only users.acl file"
+      chmod 0600 /etc/valkey/users.acl
+      rm -f /etc/valkey/users.acl
+    fi
+
     # Create ACL file with secure permissions
-    log "Generating ACL file at /etc/valkey/users.acl"
     touch /etc/valkey/users.acl
+    chmod 0600 /etc/valkey/users.acl
 
     {{- if .Values.auth.aclUsers }}
     # Generate ACL entries for each user
@@ -76,32 +121,7 @@ data:
     {{- $passwordKey := $user.passwordKey | default $username }}
 
     # User: {{ $username }}
-    PASSWORD=""
-    {{- if $.Values.auth.usersExistingSecret }}
-    # Try to get password from existing secret first (priority)
-    if [ -f /valkey-users-secret/{{ $passwordKey }} ]; then
-      PASSWORD=$(cat /valkey-users-secret/{{ $passwordKey }})
-      log "Using password from existing secret for user {{ $username }}"
-    {{- if $user.password }}
-    elif [ -f /valkey-auth-secret/{{ $username }}-password ]; then
-      # Fallback to inline password
-      PASSWORD=$(cat /valkey-auth-secret/{{ $username }}-password)
-      log "Using inline password for user {{ $username }}"
-    {{- end }}
-    else
-      log "ERROR: No password found for user {{ $username }}"
-      exit 1
-    fi
-    {{- else if $user.password }}
-    # Use inline password only
-    if [ -f /valkey-auth-secret/{{ $username }}-password ]; then
-      PASSWORD=$(cat /valkey-auth-secret/{{ $username }}-password)
-      log "Using inline password for user {{ $username }}"
-    else
-      log "ERROR: No password found for user {{ $username }}"
-      exit 1
-    fi
-    {{- end }}
+    PASSWORD=$(get_user_password "{{ $username }}" "{{ $passwordKey }}") || exit 1
 
     # Hash the password and write ACL entry
     PASSHASH=$(echo -n "$PASSWORD" | sha256sum | cut -f 1 -d " ")
