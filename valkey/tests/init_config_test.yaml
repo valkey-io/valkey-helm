@@ -33,7 +33,7 @@ tests:
           pattern: "chmod 0400 /etc/valkey/users\\.acl"
       - matchRegex:
           path: data["init.sh"]
-          pattern: "cat /valkey-auth-secret/admin-password"
+          pattern: 'cat "/valkey-auth-secret/\$\{username\}-password"'
 
   - it: should configure ACL file with usersExistingSecret
     set:
@@ -50,7 +50,7 @@ tests:
           pattern: "aclfile /etc/valkey/users\\.acl"
       - matchRegex:
           path: data["init.sh"]
-          pattern: "/valkey-users-secret/admin"
+          pattern: 'cat "/valkey-users-secret/\$password_key"'
 
   - it: should append aclConfig to generated users
     set:

@@ -23,9 +23,9 @@ tests:
     set:
       auth.enabled: true
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
-          password: "admin-password"
+          password: "default-password"
     template: templates/deploy_valkey.yaml
     asserts:
       - isKind:
@@ -49,7 +49,7 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-custom-secret"
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
     template: templates/deploy_valkey.yaml
     asserts:
@@ -74,9 +74,9 @@ tests:
       auth.enabled: true
       auth.usersExistingSecret: "my-custom-secret"
       auth.aclUsers:
-        admin:
+        default:
           permissions: "~* &* +@all"
-          password: "admin-password"
+          password: "default-password"
         readonly:
           permissions: "~* +@read"
     template: templates/deploy_valkey.yaml
@@ -101,7 +101,7 @@ tests:
   - it: should have generated volume with aclConfig only
     set:
       auth.enabled: true
-      auth.aclConfig: "user admin on >password ~* &* +@all"
+      auth.aclConfig: "user default on >password ~* &* +@all"
     template: templates/deploy_valkey.yaml
     asserts:
       - isKind:
@@ -113,15 +113,6 @@ tests:
             secret:
               secretName: RELEASE-NAME-valkey-auth
               defaultMode: 0400
-
-  - it: should have correct replicas
-    set:
-      replicaCount: 3
-    template: templates/deploy_valkey.yaml
-    asserts:
-      - equal:
-          path: spec.replicas
-          value: 3
 
   - it: should use custom image
     set:
@@ -154,4 +145,51 @@ tests:
           value: Always
       - equal:
           path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
+
+  - it: should always have annotations block even without podAnnotations
+    set:
+      podAnnotations: null
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - exists:
+          path: spec.template.metadata.annotations
+      - exists:
+          path: spec.template.metadata.annotations["checksum/initconfig"]
+
+  - it: should include podAnnotations when provided
+    set:
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        custom.annotation: "value"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["custom.annotation"]
+          value: value
+      - exists:
+          path: spec.template.metadata.annotations["checksum/initconfig"]
+
+  - it: should use image pull policy for containers, initContainers and metrics
+    set:
+      image.pullPolicy: Always
+      metrics.enabled: true
+      metrics.exporter.image.pullPolicy: Always
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
           value: Always

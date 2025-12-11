@@ -4,6 +4,7 @@ metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: primary
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
