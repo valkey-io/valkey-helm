@@ -30,8 +30,8 @@ This chart bootstraps a [Valkey](https://valkey.io) deployment using the Helm pa
 
 | Name     | Email         |
 | -------- | ------------- |
-| mk-raven | [maikebit@gmail.com] |
-| sgissi   | [silvio@gissilabs.com] |
+| mk-raven | maikebit at gmail.com |
+| sgissi   | silvio at gissilabs.com |
 
 ---
 

@@ -97,8 +97,6 @@ replica:
 
 This chart supports ACL-based authentication for Valkey.
 
-### Security Requirements
-
 **⚠️ IMPORTANT:** When authentication is enabled, the `default` user **MUST** be defined in either `auth.aclUsers` or `auth.aclConfig`. Without a default user, anyone can access the database without credentials.
 
 ### Existing Secret (recommended)
@@ -137,7 +135,6 @@ auth:
 **Note:**
 
 * If `usersExistingSecret` is defined, passwords from the secret will take precedence over inline passwords.
-* The `default` user must be included when using `aclUsers`.
 
 ### Custom ACL Configuration
 
@@ -216,8 +213,6 @@ tls:
   enabled: true
   existingSecret: "valkey-tls-secret"
 ```
-
----
 
 ## Values
 
