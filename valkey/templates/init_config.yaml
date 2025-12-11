@@ -31,9 +31,9 @@ data:
 
     log "Creating configuration in $DATA_DIR..."
     mkdir -p "$DATA_DIR"
-    rm -f "$VALKEY_CONFIG" 
+    rm -f "$VALKEY_CONFIG"
 
- 
+
     # Base valkey.conf
     log "Generating base valkey.conf"
     {

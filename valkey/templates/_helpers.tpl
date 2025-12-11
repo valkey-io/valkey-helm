@@ -117,6 +117,7 @@ imagePullSecrets:
 {{- end }}
 {{- end }}
 {{- end -}}
+
 {{/*
 Check if there are any users with inline passwords
 */}}

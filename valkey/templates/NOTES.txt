@@ -52,15 +52,23 @@ valkey> SET foo bar
 valkey> GET foo
 "bar"
 
-{{ if .Values.dataStorage.enabled }}
 💾 Persistence
+{{ if .Values.dataStorage.enabled -}}
+{{ if .Values.dataStorage.hostPath -}}
+- A hostPath volume is used (path=`{{ .Values.dataStorage.hostPath }}`).
+{{ else -}}
 - A PVC is enabled. To see it:
   $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name={{ include "valkey.name" . }}
 - Note: `dataStorage.keepPvc={{ .Values.dataStorage.keepPvc }}` controls whether the PVC is kept on uninstall.
-{{ else }}
-💾 Persistence
+{{ end -}}
+{{ else -}}
 - Persistence is DISABLED. Data will not survive Pod restarts.
-- Enable with: `--set dataStorage.enabled=true --set dataStorage.requestedSize=5Gi` (optionally set `dataStorage.className`).
+- Enable with:
+    `--set dataStorage.enabled=true --set dataStorage.requestedSize=5Gi` (optionally set `dataStorage.className`) to automatially create a PVC
+    or
+    `--set dataStorage.enabled=true --set dataStorage.persistentVolumeClaimName=valkey-data-pvc` to use an existing PVC
+    or
+    `--set dataStorage.enabled=true --set dataStorage.hostPath=/some/path/` to use a hostPath volume.
 {{ end }}
 
 🧹 Uninstall
