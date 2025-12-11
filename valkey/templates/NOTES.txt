@@ -36,14 +36,10 @@ Port:         {{ .Values.service.port }}
 
 {{ if .Values.auth.enabled }}
 🔐 Authentication is ENABLED (ACL)
-- Provide the username and password from `.auth.aclConfig`.
-- Default user:
-  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} -a <password> PING
-- Named user:
-  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} --user <user> -a <password> PING
+- Provide the username and password from `.auth.aclUsers`.
 {{ else }}
 🔓 Authentication is DISABLED
-- Enable with: `--set auth.enabled=true` and provide `.auth.aclConfig`.
+- Enable with: `--set auth.enabled=true` and provide `.auth.aclUsers`.
 {{ end }}
 
 ✅ Quick test
@@ -55,16 +51,16 @@ valkey> GET foo
 💾 Persistence
 {{ if .Values.dataStorage.enabled -}}
 {{ if .Values.dataStorage.hostPath -}}
-- A hostPath volume is used (path=`{{ .Values.dataStorage.hostPath }}`).
+- Persistence is ENABLED. A hostPath volume is used at path='`{{ .Values.dataStorage.hostPath }}`'.
 {{ else -}}
-- A PVC is enabled. To see it:
+- Persistence is ENABLED. To see it:
   $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name={{ include "valkey.name" . }}
 - Note: `dataStorage.keepPvc={{ .Values.dataStorage.keepPvc }}` controls whether the PVC is kept on uninstall.
 {{ end -}}
 {{ else -}}
 - Persistence is DISABLED. Data will not survive Pod restarts.
 - Enable with:
-    `--set dataStorage.enabled=true --set dataStorage.requestedSize=5Gi` (optionally set `dataStorage.className`) to automatially create a PVC
+    `--set dataStorage.enabled=true --set dataStorage.requestedSize=5Gi` (optionally set `dataStorage.className`)
     or
     `--set dataStorage.enabled=true --set dataStorage.persistentVolumeClaimName=valkey-data-pvc` to use an existing PVC
     or

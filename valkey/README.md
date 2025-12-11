@@ -8,18 +8,54 @@ A Helm chart for Kubernetes
 
 ## Maintainers
 
-| Name | Email | Url |
-| ---- | ------ | --- |
-| raven |  | <https://github.com/mk-raven> |
+| Name | Url |
+| ---- | --- |
+| raven | [https://github.com/mk-raven] |
+| sgissi | [https://github.com/sgissi] |
 
 ## Source Code
 
 * <https://github.com/valkey-io/valkey-helm.git>
 * <https://valkey.io>
 
+## Deployment
+
+Deploy a single Valkey instance:
+
+```bash
+helm install valkey valkey/valkey
+```
+
+**Services:**
+
+* `valkey`: Master/read-write service
+
+## Storage
+
+Persistence is optional. By default, data is stored in an ephemeral volume and lost on pod restart.
+
+**Enable persistent storage:**
+
+```yaml
+dataStorage:
+  enabled: true
+  requestedSize: 10Gi
+  className: "fast-ssd"  # Optional
+```
+
+**Use existing PVC:**
+
+```yaml
+dataStorage:
+  enabled: true
+  persistentVolumeClaimName: "my-existing-pvc"
+```
+
 ## Authentication
 
 This chart supports ACL-based authentication for Valkey.
+
+**⚠️ IMPORTANT:** When authentication is enabled, the `default` user **MUST** be defined in either `auth.aclUsers` or `auth.aclConfig`. Without a default user, anyone can access the database without credentials.
 
 ### Existing Secret (recommended)
 
@@ -30,9 +66,9 @@ auth:
   enabled: true
   usersExistingSecret: "my-valkey-users"
   aclUsers:
-    admin:
+    default:
       permissions: "~* &* +@all"
-      # Password will be read from secret key "admin" (defaults to username)
+      # Password will be read from secret key "default" (defaults to username)
     readonly:
       permissions: "~* -@all +@read +ping +info"
       passwordKey: "readonly-pwd"  # Use custom secret key name
@@ -46,9 +82,9 @@ Define users directly in your values file with inline passwords:
 auth:
   enabled: true
   aclUsers:
-    admin:
+    default:
       permissions: "~* &* +@all"
-      password: "admin-password"
+      password: "default-password"
     readonly:
       permissions: "~* -@all +@read +ping +info"
       password: "readonly-password"
@@ -68,6 +104,46 @@ auth:
   aclConfig: |
     user default on >defaultpassword ~* &* +@all
     user guest on nopass ~public:* +@read
+```
+
+## Metrics
+
+This chart supports Prometheus metrics collection using the [Redis exporter](https://github.com/oliver006/redis_exporter).
+
+Enable the metrics exporter sidecar:
+
+```yaml
+metrics:
+  enabled: true
+```
+
+### Prometheus Operator discovery
+
+Automated Prometheus discovery using the Prometheus Operator ServiceMonitor:
+
+```yaml
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+```
+
+## TLS
+
+This chart supports TLS encryption for Valkey connections.
+
+First create a secret containing the certificate public and private keys plus CA public key:
+
+```shell
+kubectl create secret generic valkey-tls-secret --from-file=server.crt --from-file=server.key --from-file=ca.crt
+```
+
+Enable TLS and provide the name of the secret created above:
+
+```yaml
+tls:
+  enabled: true
+  existingSecret: "valkey-tls-secret"
 ```
 
 ## Values
@@ -163,7 +239,6 @@ auth:
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |
 | priorityClassName | string | `""` |  |
-| replicaCount | int | `1` |  |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
@@ -174,6 +249,7 @@ auth:
 | service.port | int | `6379` |  |
 | service.type | string | `"ClusterIP"` |  |
 | service.appProtocol | string | `""` |  |
+| service.loadBalancerClass | string | `""` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.automount | bool | `false` |  |
 | serviceAccount.create | bool | `true` |  |
