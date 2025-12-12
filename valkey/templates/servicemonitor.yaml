@@ -27,7 +27,7 @@ spec:
       honorLabels: {{ . }}
       {{- end }}
       {{- with .Values.metrics.serviceMonitor.relabelings }}
-      relabelings: 
+      relabelings:
         {{- toYaml . | nindent 6 }}
       {{- end }}
       {{- with .Values.metrics.serviceMonitor.metricRelabelings }}

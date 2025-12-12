@@ -104,8 +104,8 @@ valkey> SET foo bar
 valkey> GET foo
 "bar"
 
-{{- if .Values.replica.enabled }}
 💾 Persistence
+{{- if .Values.replica.enabled }}
 - Persistence is ENABLED (required for replication mode). Each instance has its own volume.
 - Size: {{ .Values.replica.persistence.size }}
 {{- if .Values.replica.persistence.storageClass }}
@@ -114,15 +114,22 @@ valkey> GET foo
 - To see PVCs:
   $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }}
 {{- else }}
-{{- if .Values.dataStorage.enabled }}
-💾 Persistence
+{{ if .Values.dataStorage.enabled -}}
+{{ if .Values.dataStorage.hostPath -}}
+- Persistence is ENABLED. A hostPath volume is used at path='`{{ .Values.dataStorage.hostPath }}`'.
+{{ else -}}
 - Persistence is ENABLED. To see it:
   $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name={{ include "valkey.name" . }}
-- Note: `dataStorage.keepPvc={{ .Values.dataStorage.keepPvc }}` controls whether the volume is kept on uninstall.
-{{- else }}
-💾 Persistence
+- Note: `dataStorage.keepPvc={{ .Values.dataStorage.keepPvc }}` controls whether the PVC is kept on uninstall.
+{{ end -}}
+{{ else -}}
 - Persistence is DISABLED. Data will not survive Pod restarts.
-- Enable with: `--set dataStorage.enabled=true --set dataStorage.requestedSize=5Gi` (optionally set `dataStorage.className`).
+- Enable with:
+    `--set dataStorage.enabled=true --set dataStorage.requestedSize=5Gi` (optionally set `dataStorage.className`)
+    or
+    `--set dataStorage.enabled=true --set dataStorage.persistentVolumeClaimName=valkey-data-pvc` to use an existing PVC
+    or
+    `--set dataStorage.enabled=true --set dataStorage.hostPath=/some/path/` to use a hostPath volume.
 {{- end }}
 {{- end }}
 

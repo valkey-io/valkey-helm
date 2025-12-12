@@ -42,7 +42,7 @@ spec:
       priorityClassName: {{ .Values.priorityClassName | quote }}
       {{- end }}
       securityContext:
-      {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
         - name: {{ include "valkey.fullname" . }}-init
           image: {{ include "valkey.image" . }}
@@ -82,6 +82,9 @@ spec:
               mountPath: /valkey-auth-secret
               readOnly: true
             {{- end }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- with .Values.initResources }}
           resources:
@@ -146,6 +149,9 @@ spec:
             {{- range $config := .Values.extraValkeyConfigs }}
             - name: {{ $config.name }}-valkey
               mountPath: {{ $config.mountPath }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
         {{- if .Values.metrics.enabled }}
         - name: metrics
@@ -254,8 +260,15 @@ spec:
         {{- else if $createPVC }}
           persistentVolumeClaim:
             claimName: {{ include "valkey.fullname" . }}
+        {{- else if $storage.hostPath }}
+          hostPath:
+            path: {{ $storage.hostPath }}
+            type: DirectoryOrCreate
         {{- else }}
           emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

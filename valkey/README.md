@@ -235,10 +235,12 @@ tls:
 | dataStorage.requestedSize | string | `""` |  |
 | dataStorage.subPath | string | `""` |  |
 | dataStorage.volumeName | string | `"valkey-data"` |  |
+| dataStorage.hostPath | string | `""` |  |
 | deploymentStrategy | string | `"RollingUpdate"` |  |
 | env | object | `{}` |  |
 | extraSecretValkeyConfigs | bool | `false` |  |
-| extraStorage | list | `[]` |  |
+| extraVolumes | list | `[]` |  |
+| extraVolumeMounts | list | `[]` |  |
 | extraValkeyConfigs | list | `[]` |  |
 | extraValkeySecrets | list | `[]` |  |
 | fullnameOverride | string | `""` |  |
