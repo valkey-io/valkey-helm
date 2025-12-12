@@ -18,7 +18,9 @@ A Helm chart for Kubernetes
 * <https://github.com/valkey-io/valkey-helm.git>
 * <https://valkey.io>
 
-## Deployment
+## Deployment Modes
+
+### Standalone Mode (Default)
 
 Deploy a single Valkey instance:
 
@@ -30,7 +32,35 @@ helm install valkey valkey/valkey
 
 * `valkey`: Master/read-write service
 
+### Replication Mode
+
+Deploy Valkey with master-replica architecture for read scaling and data redundancy:
+
+```bash
+helm install valkey valkey/valkey --set replica.enabled=true --set replica.persistence.size=5Gi
+```
+
+**Services:**
+
+* `valkey`: Master/write service
+* `valkey-read`: Read service (load-balances across all pods) - optional
+* `valkey-headless`: Headless service for pod discovery
+
+**Write Safety Configuration:**
+
+Ensure data durability by requiring a minimum number of replicas to be in sync before accepting writes:
+
+```yaml
+replica:
+  minReplicasToWrite: 1  # Require at least 1 replica
+  minReplicasMaxLag: 10  # Max 10 seconds replication lag
+```
+
+If fewer than `minReplicasToWrite` replicas are available, the master will reject write operations.
+
 ## Storage
+
+### Standalone Storage
 
 Persistence is optional. By default, data is stored in an ephemeral volume and lost on pod restart.
 
@@ -49,6 +79,18 @@ dataStorage:
 dataStorage:
   enabled: true
   persistentVolumeClaimName: "my-existing-pvc"
+```
+
+### Replication Storage
+
+Persistent storage is **mandatory** in replication mode. Without it, the primary might comes up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
+
+```yaml
+replica:
+  enabled: true
+  persistence:
+    size: 10Gi  # Required
+    storageClass: "fast-ssd"  # Optional
 ```
 
 ## Authentication
@@ -105,6 +147,32 @@ auth:
     user default on >defaultpassword ~* &* +@all
     user guest on nopass ~public:* +@read
 ```
+
+### Replication with Authentication
+
+When using ACL authentication in replication mode, replicas need credentials to authenticate to the master:
+
+```yaml
+auth:
+  enabled: true
+  usersExistingSecret: "my-valkey-users"
+  aclUsers:
+    default:
+      permissions: "~* &* +@all"
+    replication-user:
+      permissions: "+psync +replconf +ping"
+
+replica:
+  enabled: true
+  replicas: 2
+  replicationUser: "replication-user"  # Must be defined in auth.aclUsers
+```
+
+**Important Notes:**
+
+* `replica.replicationUser` specifies which ACL user replicas use to authenticate
+* This user MUST be defined in `auth.aclUsers` with appropriate permissions
+* Minimum permissions: `+psync +replconf +ping`
 
 ## Metrics
 
@@ -239,6 +307,24 @@ tls:
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |
 | priorityClassName | string | `""` |  |
+| replica.enabled | bool | `false` |  |
+| replica.replicas | int | `2` |  |
+| replica.replicationUser | string | `"default"` |  |
+| replica.disklessSync | bool | `false` |  |
+| replica.minReplicasToWrite | int | `0` |  |
+| replica.minReplicasMaxLag | int | `10` |  |
+| replica.service.enabled | bool | `"true"` |  |
+| replica.service.type | string | `"ClusterIP"` |  |
+| replica.service.port | int | `6379` |  |
+| replica.service.annotations | object | `{}` |  |
+| replica.service.nodePort | int | `0` |  |
+| replica.service.clusterIP | string | `""` |  |
+| replica.service.appProtocol | string | `""` |  |
+| replica.service.loadBalancerClass | string | `""` |  |
+| replica.persistence. |  | `""` |  |
+| replica.persistence.size | string | `""` | Required if replica is enabled |
+| replica.persistence.storageClass | string | `""` |  |
+| replica.persistence.accessModes | list | `""` |  |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |

@@ -158,3 +158,33 @@ Validate auth configuration
   {{- end }}
 {{- end }}
 {{- end -}}
+
+{{/*
+Headless service name for replication
+*/}}
+{{- define "valkey.headlessServiceName" -}}
+{{ include "valkey.fullname" . }}-headless
+{{- end -}}
+
+{{/*
+Validate replica persistence configuration
+*/}}
+{{- define "valkey.validateReplicaPersistence" -}}
+{{- if .Values.replica.enabled }}
+  {{- if not .Values.replica.persistence.size }}
+    {{- fail "Replica mode requires persistent storage. Please set replica.persistence.size (e.g., '5Gi')" }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Validate replica authentication configuration
+*/}}
+{{- define "valkey.validateReplicaAuth" -}}
+{{- if and .Values.replica.enabled .Values.auth.enabled }}
+  {{- if not (hasKey .Values.auth.aclUsers .Values.replica.replicationUser) }}
+    {{- fail (printf "Replication user '%s' (replica.replicationUser) must be defined in auth.aclUsers. The chart requires this to retrieve the password for replica authentication." .Values.replica.replicationUser) }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
