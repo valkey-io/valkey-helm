@@ -353,6 +353,75 @@
         "priorityClassName": {
             "type": "string"
         },
+        "replica": {
+            "type": "object",
+            "properties": {
+                "disklessSync": {
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "minReplicasMaxLag": {
+                    "type": "integer"
+                },
+                "minReplicasToWrite": {
+                    "type": "integer"
+                },
+                "persistence": {
+                    "type": "object",
+                    "properties": {
+                        "accessModes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "size": {
+                            "type": "string"
+                        },
+                        "storageClass": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "replicas": {
+                    "type": "integer"
+                },
+                "replicationUser": {
+                    "type": "string"
+                },
+                "service": {
+                    "type": "object",
+                    "properties": {
+                        "annotations": {
+                            "type": "object"
+                        },
+                        "appProtocol": {
+                            "type": "string"
+                        },
+                        "clusterIP": {
+                            "type": "string"
+                        },
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "loadBalancerClass": {
+                            "type": "string"
+                        },
+                        "nodePort": {
+                            "type": "integer"
+                        },
+                        "port": {
+                            "type": "integer"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "resources": {
             "type": "object"
         },

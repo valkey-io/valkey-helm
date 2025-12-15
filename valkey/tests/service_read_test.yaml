@@ -1,0 +1,105 @@
+suite: replica read service configuration
+templates:
+  - templates/service-read.yaml
+tests:
+  - it: should have correct default service type when replica is enabled
+    set:
+      replica.enabled: true
+    template: templates/service-read.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: ClusterIP
+  - it: should be able to set custom clusterIP
+    set:
+      replica.enabled: true
+      replica.service.clusterIP: "10.0.0.2"
+    template: templates/service-read.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.clusterIP
+          value: "10.0.0.2"
+  - it: should have correct default ports
+    set:
+      replica.enabled: true
+    template: templates/service-read.yaml
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            port: 6379
+            targetPort: tcp
+            protocol: TCP
+            name: tcp
+  - it: should be able to set custom nodePort
+    set:
+      replica.enabled: true
+      replica.service.type: "NodePort"
+      replica.service.nodePort: 30081
+    template: templates/service-read.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30081
+  - it: should be able to set custom appProtocol
+    set:
+      replica.enabled: true
+      replica.service.appProtocol: "my-protocol"
+    template: templates/service-read.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.ports[0].appProtocol
+          value: "my-protocol"
+  - it: should be able to set custom loadBalancerClass
+    set:
+      replica.enabled: true
+      replica.service.loadBalancerClass: "custom-lb-class"
+    template: templates/service-read.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.loadBalancerClass
+          value: "custom-lb-class"
+  - it: shouldn't have loadBalancerClass by default
+    set:
+      replica.enabled: true
+    template: templates/service-read.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - notExists:
+          path: spec.loadBalancerClass
+  - it: should have correct selector labels
+    set:
+      replica.enabled: true
+    template: templates/service-read.yaml
+    asserts:
+      - isSubset:
+          path: spec.selector
+          content:
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/name: valkey
+  - it: should not render when replica is disabled
+    set:
+      replica.enabled: false
+    template: templates/service-read.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+  - it: should not render when replica.service is disabled
+    set:
+      replica.enabled: true
+      replica.service.enabled: false
+    template: templates/service-read.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
