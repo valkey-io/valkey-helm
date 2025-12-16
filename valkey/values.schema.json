@@ -403,6 +403,9 @@
                         "clusterIP": {
                             "type": "string"
                         },
+                        "loadBalancerIP": {
+                            "type": "string"
+                        },
                         "enabled": {
                             "type": "boolean"
                         },
@@ -460,6 +463,9 @@
                     "type": "string"
                 },
                 "clusterIP": {
+                    "type": "string"
+                },
+                "loadBalancerIP": {
                     "type": "string"
                 },
                 "loadBalancerClass": {

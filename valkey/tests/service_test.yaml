@@ -20,6 +20,16 @@ tests:
       - equal:
           path: spec.clusterIP
           value: "10.0.0.1"
+  - it: should be able to set custom loadBalancerIP
+    set:
+      service.loadBalancerIP: "10.0.0.2"
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.loadBalancerIP
+          value: "10.0.0.2"
   - it: should have correct default ports
     template: templates/service.yaml
     asserts:

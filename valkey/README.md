@@ -319,6 +319,7 @@ tls:
 | replica.service.annotations | object | `{}` |  |
 | replica.service.nodePort | int | `0` |  |
 | replica.service.clusterIP | string | `""` |  |
+| replica.service.loadBalancerIP | string | `""` |  |
 | replica.service.appProtocol | string | `""` |  |
 | replica.service.loadBalancerClass | string | `""` |  |
 | replica.persistence. |  | `""` |  |
