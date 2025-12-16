@@ -2,6 +2,27 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
+        "additionalPorts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "port": {
+                        "type": "integer"
+                    },
+                    "targetPort": {
+                        "type": "integer"
+                    },
+                    "protocol": {
+                        "type": "string"
+                    }
+                },
+                "required": ["name", "port", "protocol"]
+            }
+        },
         "affinity": {
             "type": "object"
         },
