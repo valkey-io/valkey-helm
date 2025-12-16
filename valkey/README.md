@@ -221,6 +221,7 @@ tls:
 | global.imageRegistry | string | '' |  |
 | global.imagePullSecrets | list | `[]` |  |
 | affinity | object | `{}` |  |
+| additionalPorts | list | `[]` | |
 | auth.aclConfig | string | `""` |  |
 | auth.aclUsers | object | `{}` | |
 | auth.enabled | bool | `false` |  |
