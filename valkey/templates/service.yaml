@@ -28,6 +28,14 @@ spec:
       {{- if .Values.service.appProtocol }}
       appProtocol: {{ .Values.service.appProtocol }}
       {{- end }}
+    {{- if .Values.additionalPorts }}
+    {{- range .Values.additionalPorts }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ .protocol }}
+    {{- end }}
+    {{- end }}
   selector:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
     {{- if .Values.replica.enabled }}

@@ -15,6 +15,14 @@ spec:
       port: {{ .Values.service.port }}
       targetPort: tcp
       protocol: TCP
+    {{- if .Values.additionalPorts }}
+    {{- range .Values.additionalPorts }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ .protocol }}
+    {{- end }}
+    {{- end }}
   selector:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
 {{- end }}

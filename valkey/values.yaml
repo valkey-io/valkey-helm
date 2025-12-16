@@ -74,6 +74,16 @@ service:
   # Application protocol
   appProtocol: ""
 
+# Additional ports to expose (e.g. cluster bus or sidecar containers)
+# n.b. cluster mode requires a headless service and pod-pod connectivity, so replica.enabled must be true
+additionalPorts: []
+  # Example:
+  # - name: cluster-bus
+  #   port: 16379
+  #   targetPort: 16379
+  #   protocol: TCP
+
+  
 # Network policy to control traffic to the pods
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
 networkPolicy: {}

@@ -112,6 +112,13 @@ spec:
             - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            {{- if .Values.additionalPorts }}
+            {{- range .Values.additionalPorts }}
+            - name: {{ .name }}
+              containerPort: {{ .port }}
+              protocol: {{ .protocol }}
+            {{- end }}
+            {{- end }}
           startupProbe:
             exec:
               {{- if .Values.tls.enabled }}
