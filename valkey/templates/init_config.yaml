@@ -9,10 +9,6 @@ data:
     #!/bin/sh
     set -eu
 
-    if set -o pipefail 2>/dev/null; then
-      set -o pipefail
-    fi
-
     # Default config paths
     VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
 
