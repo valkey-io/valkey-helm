@@ -74,11 +74,14 @@ jobs:
       - name: Push charts to GHCR
         run: |
           shopt -s nullglob
+          repo=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          echo "${GITHUB_TOKEN}" | helm login ghcr.io/${repo} --username ${GITHUB_ACTOR} --password-stdin
           for pkg in .cr-release-packages/*; do
             if [ -z "${pkg:-}" ]; then
               break
             fi
-            lowercase=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-            echo "Pushing package - ${pkg} to ghcr.io repository - ${lowercase}"
-            helm push "${pkg}" "oci://ghcr.io/${lowercase}"
+            echo "Pushing package - ${pkg} to ghcr.io repository - ${repo}"
+            helm push "${pkg}" "oci://ghcr.io/${repo}"
           done
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
