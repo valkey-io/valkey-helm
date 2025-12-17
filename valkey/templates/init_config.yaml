@@ -7,7 +7,11 @@ metadata:
 data:
   init.sh: |-
     #!/bin/sh
-    set -euo pipefail
+    set -eu
+
+    if set -o pipefail 2>/dev/null; then
+      set -o pipefail
+    fi
 
     # Default config paths
     VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
@@ -25,9 +29,9 @@ data:
     # Usage: get_user_password <username> [password_key]
     # Returns: password via stdout, exits with error if not found
     get_user_password() {
-      local username="$1"
-      local password_key="${2:-$username}"
-      local password=""
+      username="$1"
+      password_key="${2:-$username}"
+      password=""
 
       {{- if .Values.auth.usersExistingSecret }}
       # Try to get password from existing secret first (priority)
