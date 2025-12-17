@@ -193,3 +193,55 @@ tests:
       - equal:
           path: spec.template.spec.containers[1].imagePullPolicy
           value: Always
+
+  - it: should not have imagePullSecrets when not configured
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+
+  - it: should render imagePullSecrets from values.imagePullSecrets
+    set:
+      imagePullSecrets:
+        - myregistrykey
+        - anotherregistrykey
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: myregistrykey
+            - name: anotherregistrykey
+
+  - it: should render imagePullSecrets from global.imagePullSecrets
+    set:
+      global.imagePullSecrets:
+        - globalregistrykey
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: globalregistrykey
+
+  - it: should merge global and local imagePullSecrets
+    set:
+      global.imagePullSecrets:
+        - globalregistrykey
+      imagePullSecrets:
+        - localregistrykey
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: globalregistrykey
+            - name: localregistrykey

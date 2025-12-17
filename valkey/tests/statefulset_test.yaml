@@ -92,3 +92,64 @@ tests:
       - equal:
           path: spec.template.spec.containers[1].imagePullPolicy
           value: Always
+
+  - it: should not have imagePullSecrets when not configured
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+
+  - it: should render imagePullSecrets from values.imagePullSecrets
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      imagePullSecrets:
+        - myregistrykey
+        - anotherregistrykey
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: myregistrykey
+            - name: anotherregistrykey
+
+  - it: should render imagePullSecrets from global.imagePullSecrets
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      global.imagePullSecrets:
+        - globalregistrykey
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: globalregistrykey
+
+  - it: should merge global and local imagePullSecrets
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      global.imagePullSecrets:
+        - globalregistrykey
+      imagePullSecrets:
+        - localregistrykey
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: globalregistrykey
+            - name: localregistrykey
