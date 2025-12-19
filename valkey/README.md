@@ -196,6 +196,30 @@ metrics:
     enabled: true
 ```
 
+## High Availability
+
+### PodDisruptionBudget
+
+A PodDisruptionBudget (PDB) helps maintain availability during voluntary disruptions like node drains, rolling updates, or cluster maintenance by ensuring a minimum number of replicas remain available.
+
+**Enable PDB for replica mode:**
+
+```yaml
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1  # Allow at most 1 pod to be unavailable
+```
+
+**Or use minAvailable to guarantee a specific number of replicas:**
+
+```yaml
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2  # Always keep at least 2 replicas running
+```
+
+**Note:** PodDisruptionBudget is only created when `replica.enabled` is `true`. It uses the same selector labels as the StatefulSet to target the Valkey pods.
+
 ## TLS
 
 This chart supports TLS encryption for Valkey connections.
@@ -303,6 +327,10 @@ tls:
 | podAnnotations | object | `{}` |  |
 | podLabels | object | `{}` |  |
 | commonLabels | object | `{}` |  |
+| podDisruptionBudget.enabled | bool | `false` |  |
+| podDisruptionBudget.minAvailable | int or string | `null` | Minimum pods available during disruptions |
+| podDisruptionBudget.maxUnavailable | int or string | `1` | Maximum pods unavailable during disruptions |
+| podDisruptionBudget.unhealthyPodEvictionPolicy | string | `null` | Policy for evicting unhealthy pods |
 | podSecurityContext.fsGroup | int | `1000` |  |
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |
