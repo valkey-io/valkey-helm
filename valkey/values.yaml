@@ -329,6 +329,8 @@ metrics:
       #   drop:
       #     - ALL
       # readOnlyRootFilesystem: true
+    # ACL user to log in to valkey as in order to collect metrics
+    metricsUser: default
 
   # Service configuration for the metrics exporter
   service:
