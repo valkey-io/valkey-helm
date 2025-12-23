@@ -23,6 +23,17 @@ tests:
       - equal:
           path: spec.clusterIP
           value: "10.0.0.2"
+  - it: should be able to set custom loadBalancerIP
+    set:
+      replica.enabled: true
+      replica.service.loadBalancerIP: "10.0.0.5"
+    template: templates/service-read.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.loadBalancerIP
+          value: "10.0.0.5"
   - it: should have correct default ports
     set:
       replica.enabled: true

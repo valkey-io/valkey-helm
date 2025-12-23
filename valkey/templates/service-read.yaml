@@ -15,6 +15,9 @@ spec:
   {{- if .Values.replica.service.clusterIP }}
   clusterIP: {{ .Values.replica.service.clusterIP }}
   {{- end }}
+  {{- if .Values.replica.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.replica.service.loadBalancerIP }}
+  {{- end }}
   {{- if .Values.replica.service.loadBalancerClass }}
   loadBalancerClass: {{ .Values.replica.service.loadBalancerClass }}
   {{- end }}
