@@ -1,4 +1,4 @@
-{{- if .Values.replica.enabled }}
+{{- if or .Values.replica.enabled .Values.cluster.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -15,6 +15,12 @@ spec:
       port: {{ .Values.service.port }}
       targetPort: tcp
       protocol: TCP
+    {{- if .Values.cluster.enabled }}
+    - name: tcp-bus
+      port: {{ .Values.cluster.busPort }}
+      targetPort: tcp-bus
+      protocol: TCP
+    {{- end }}
   selector:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
 {{- end }}

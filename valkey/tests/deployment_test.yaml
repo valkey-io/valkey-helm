@@ -3,6 +3,42 @@ templates:
   - templates/deploy_valkey.yaml
   - templates/init_config.yaml
 tests:
+  - it: should not create Deployment when replica.enabled is true
+    set:
+      replica.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create Deployment when cluster.enabled is true
+    set:
+      cluster.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create Deployment when both replica.enabled and cluster.enabled are true
+    set:
+      replica.enabled: true
+      cluster.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create Deployment when both replica.enabled and cluster.enabled are false
+    set:
+      replica.enabled: false
+      cluster.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+
   - it: should not have auth volumes when auth disabled
     set:
       auth.enabled: false
