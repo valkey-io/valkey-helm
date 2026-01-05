@@ -250,6 +250,50 @@ replica:
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
   persistentVolumeClaimRetentionPolicy: {}
 
+# Cluster mode configuration for Valkey Cluster (sharded deployment)
+# Note: cluster.enabled and replica.enabled are mutually exclusive
+cluster:
+  # Enable cluster mode (creates a sharded Valkey cluster)
+  enabled: false
+
+  # Number of shards (primary nodes). Minimum recommended is 3 for cluster mode.
+  # Each shard handles a portion of the hash slot range (16384 slots total).
+  shards: 3
+
+  # Number of replicas per shard (for high availability within each shard)
+  # Total nodes = shards × (1 + replicasPerShard)
+  # For example: 3 shards with 1 replica each = 6 nodes total
+  replicasPerShard: 1
+
+  # Username for cluster replication authentication, ignored if auth.enabled is false.
+  # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
+  # The user must have appropriate replication permissions: +psync +replconf +ping
+  replicationUser: "default"
+
+  # Cluster node timeout in milliseconds (how long before a node is considered failed)
+  nodeTimeout: 15000
+
+  # Require all hash slots to be covered for the cluster to accept writes
+  # Set to false to allow partial cluster operation
+  requireFullCoverage: true
+
+  # Allow cluster to serve read requests when in down state
+  allowReadsWhenDown: false
+
+  # Persistence configuration (required for cluster mode)
+  persistence:
+    # Size of the PVC for each node (required when cluster.enabled is true)
+    size: ""
+    # Storage class name (empty = use default storage class)
+    storageClass: ""
+    # Access modes for the PVC
+    accessModes:
+      - ReadWriteOnce
+
+  # Bus port for cluster communication (default: service.port + 10000)
+  # This port is used for node-to-node communication in the cluster
+  busPort: 16379
+
 tls:
   # Enable TLS
   enabled: false

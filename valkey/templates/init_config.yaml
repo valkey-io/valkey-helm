@@ -219,6 +219,62 @@ data:
     {{- end }}
     {{- end }}
 
+    {{- if .Values.cluster.enabled }}
+    # Cluster mode configuration
+    log "Configuring cluster mode"
+
+    # Use POD_INDEX from Kubernetes metadata
+    POD_INDEX=${POD_INDEX:-0}
+
+    # Configure cluster-enabled settings
+    {
+      echo ""
+      echo "# Cluster Configuration"
+      echo "cluster-enabled yes"
+      echo "cluster-config-file /data/nodes.conf"
+      echo "cluster-node-timeout {{ .Values.cluster.nodeTimeout }}"
+      {{- if not .Values.cluster.requireFullCoverage }}
+      echo "cluster-require-full-coverage no"
+      {{- end }}
+      {{- if .Values.cluster.allowReadsWhenDown }}
+      echo "cluster-allow-reads-when-down yes"
+      {{- end }}
+      echo ""
+      echo "# Cluster node announcement"
+      echo "cluster-announce-hostname {{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+      echo "cluster-announce-port {{ .Values.service.port }}"
+      echo "cluster-announce-bus-port {{ .Values.cluster.busPort }}"
+      echo "cluster-preferred-endpoint-type hostname"
+    } >>"$VALKEY_CONFIG"
+
+    log "Cluster node $POD_INDEX configured with announce IP"
+
+    {{- if .Values.auth.enabled }}
+    # Configure cluster authentication
+    {{- $replUsername := .Values.cluster.replicationUser }}
+    REPL_PASSWORD=$(get_user_password "{{ $replUsername }}") || exit 1
+
+    {
+      echo ""
+      echo "# Cluster authentication"
+      echo "masterauth $REPL_PASSWORD"
+      echo "masteruser {{ $replUsername }}"
+    } >>"$VALKEY_CONFIG"
+    log "Configured cluster authentication with user {{ $replUsername }}"
+    {{- end }}
+
+    {{- if .Values.tls.enabled }}
+    # TLS for cluster
+    {
+      echo ""
+      echo "# TLS for cluster"
+      echo "tls-replication yes"
+      echo "tls-cluster yes"
+    } >>"$VALKEY_CONFIG"
+    log "Enabled TLS for cluster communication"
+    {{- end }}
+    {{- end }}
+
     # Append extra configs if present
     if [ -f /usr/local/etc/valkey/valkey.conf ]; then
       log "Appending /usr/local/etc/valkey/valkey.conf"

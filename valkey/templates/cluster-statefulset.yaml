@@ -1,21 +1,31 @@
-{{- if not (or .Values.replica.enabled .Values.cluster.enabled) }}
-{{- $fullname := include "valkey.fullname" . }}
-{{- $storage := .Values.dataStorage }}
-{{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
+{{- if .Values.cluster.enabled }}
 {{- include "valkey.validateAuthConfig" . }}
+{{- include "valkey.validateClusterConfig" . }}
+{{- include "valkey.validateClusterAuth" . }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
 spec:
-  replicas: 1
-  strategy:
-    type: {{ .Values.deploymentStrategy }}
+  serviceName: {{ include "valkey.fullname" . }}-headless
+  replicas: {{ include "valkey.clusterNodeCount" . }}
+  podManagementPolicy: Parallel
   selector:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: valkey-data
+    spec:
+      accessModes: {{ toYaml .Values.cluster.persistence.accessModes | nindent 8 }}
+      {{- if .Values.cluster.persistence.storageClass }}
+      storageClassName: {{ .Values.cluster.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.cluster.persistence.size | quote }}
   template:
     metadata:
       labels:
@@ -27,22 +37,22 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
-        {{- with .Values.podAnnotations }}
+      {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
-        checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 }}
+      {{- end }}
+        checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 | quote }}
         {{- if .Values.valkeyConfig }}
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 | quote }}
         {{- end }}
     spec:
-      {{- include "valkey.imagePullSecrets" . | nindent 6 }}
+      {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName | quote }}
       {{- end }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
         - name: {{ include "valkey.fullname" . }}-init
           image: {{ include "valkey.image" . }}
@@ -52,12 +62,18 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           command: [ "/scripts/init.sh" ]
+          env:
+            - name: POD_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+            - name: CLUSTER_SHARDS
+              value: {{ .Values.cluster.shards | quote }}
+            - name: CLUSTER_REPLICAS_PER_SHARD
+              value: {{ .Values.cluster.replicasPerShard | quote }}
           volumeMounts:
-            - name: {{ .Values.dataStorage.volumeName }}
+            - name: valkey-data
               mountPath: /data
-              {{- if .Values.dataStorage.subPath }}
-              subPath: {{ .Values.dataStorage.subPath }}
-              {{- end }}
             - name: scripts
               mountPath: /scripts
             {{- if .Values.valkeyConfig }}
@@ -83,9 +99,6 @@ spec:
               readOnly: true
             {{- end }}
             {{- end }}
-            {{- with .Values.extraVolumeMounts }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
           {{- with .Values.initResources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -97,11 +110,28 @@ spec:
         - name: {{ include "valkey.fullname" . }}
           image: {{ include "valkey.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: [ "valkey-server" ]
-          args: [ "/data/conf/valkey.conf" ]
+          command: [ "/bin/sh", "-c" ]
+          args:
+            - |
+              /cluster-script/init-cluster.sh &
+              valkey-server /data/conf/valkey.conf
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
+            - name: POD_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: VALKEY_NODES
+              value: {{ include "valkey.clusterNodes" . | quote }}
+            - name: CLUSTER_NODE_COUNT
+              value: {{ include "valkey.clusterNodeCount" . | quote }}
+            - name: CLUSTER_REPLICAS_PER_SHARD
+              value: {{ .Values.cluster.replicasPerShard | quote }}
             {{- range $key, $val := .Values.env }}
             - name: {{ $key }}
               value: "{{ $val }}"
@@ -112,6 +142,9 @@ spec:
             - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            - name: tcp-bus
+              containerPort: {{ .Values.cluster.busPort }}
+              protocol: TCP
           startupProbe:
             exec:
               {{- if .Values.tls.enabled }}
@@ -119,6 +152,10 @@ spec:
               {{- else }}
               command: [ "sh", "-c", "valkey-cli ping" ]
               {{- end }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
           livenessProbe:
             exec:
               {{- if .Values.tls.enabled }}
@@ -129,11 +166,10 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - name: {{ .Values.dataStorage.volumeName }}
+            - name: valkey-data
               mountPath: /data
-              {{- if .Values.dataStorage.subPath }}
-              subPath: {{ .Values.dataStorage.subPath }}
-              {{- end }}
+            - name: cluster-script
+              mountPath: /cluster-script
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
@@ -149,9 +185,6 @@ spec:
             {{- range $config := .Values.extraValkeyConfigs }}
             - name: {{ $config.name }}-valkey
               mountPath: {{ $config.mountPath }}
-            {{- end }}
-            {{- with .Values.extraVolumeMounts }}
-            {{- toYaml . | nindent 12 }}
             {{- end }}
         {{- if .Values.metrics.enabled }}
         - name: metrics
@@ -203,6 +236,10 @@ spec:
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts
             defaultMode: 0555
+        - name: cluster-script
+          configMap:
+            name: {{ include "valkey.fullname" . }}-cluster-script
+            defaultMode: 0555
         {{- if .Values.auth.enabled }}
         - name: valkey-acl
           emptyDir:
@@ -252,23 +289,6 @@ spec:
             secretName: {{ include "valkey.fullname" . }}-auth
             defaultMode: 0400
         {{- end }}
-        {{- end }}
-        - name: {{ $storage.volumeName }}
-        {{- if $storage.persistentVolumeClaimName }}
-          persistentVolumeClaim:
-            claimName: {{ $storage.persistentVolumeClaimName }}
-        {{- else if $createPVC }}
-          persistentVolumeClaim:
-            claimName: {{ include "valkey.fullname" . }}
-        {{- else if $storage.hostPath }}
-          hostPath:
-            path: {{ $storage.hostPath }}
-            type: DirectoryOrCreate
-        {{- else }}
-          emptyDir: {}
-        {{- end }}
-        {{- with .Values.extraVolumes }}
-        {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

@@ -28,8 +28,15 @@ spec:
       {{- if .Values.service.appProtocol }}
       appProtocol: {{ .Values.service.appProtocol }}
       {{- end }}
+    {{- if .Values.cluster.enabled }}
+    - port: {{ .Values.cluster.busPort }}
+      targetPort: tcp-bus
+      protocol: TCP
+      name: tcp-bus
+    {{- end }}
   selector:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
     {{- if .Values.replica.enabled }}
     statefulset.kubernetes.io/pod-name: {{ include "valkey.fullname" . }}-0
     {{- end }}
+    {{- /* In cluster mode, the service routes to all nodes; clients handle redirections */}}
