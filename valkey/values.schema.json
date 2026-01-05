@@ -499,6 +499,9 @@
                 "caPublicKey": {
                     "type": "string"
                 },
+                "alternativeClientCa": {
+                    "type": "string"
+                },
                 "dhParamKey": {
                     "type": "string"
                 },
