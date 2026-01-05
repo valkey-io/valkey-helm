@@ -1,0 +1,11 @@
+{{- if .Values.cluster.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-cluster-script
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+data:
+  init-cluster.sh: |-
+{{ tpl (.Files.Get "scripts/cluster-init-script.sh") . | indent 4 }}
+{{- end }}
