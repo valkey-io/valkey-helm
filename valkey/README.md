@@ -196,13 +196,11 @@ metrics:
     enabled: true
 ```
 
-## High Availability
+## PodDisruptionBudget
 
-### PodDisruptionBudget
+A PodDisruptionBudget helps keep enough read-replicas available during voluntary disruptions like node drains or rolling updates.
 
-A PodDisruptionBudget (PDB) helps maintain availability during voluntary disruptions like node drains, rolling updates, or cluster maintenance by ensuring a minimum number of replicas remain available.
-
-**Enable PDB for replica mode:**
+**Enable PDB (only works in replicated mode):**
 
 ```yaml
 podDisruptionBudget:
@@ -217,8 +215,6 @@ podDisruptionBudget:
   enabled: true
   minAvailable: 2  # Always keep at least 2 replicas running
 ```
-
-**Note:** PodDisruptionBudget is only created when `replica.enabled` is `true`. It uses the same selector labels as the StatefulSet to target the Valkey pods.
 
 ## TLS
 
