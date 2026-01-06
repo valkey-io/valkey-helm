@@ -273,21 +273,18 @@ deploymentStrategy: RollingUpdate # @schema enum:[RollingUpdate,Recreate]
 # See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
 topologySpreadConstraints: []
 
-# PodDisruptionBudget configuration
-# Helps ensure availability during voluntary disruptions (node drains, rolling updates, etc.)
+# PodDisruptionBudget configuration (only used in replicated mode)
+# Helps keep enough replicas available during voluntary disruptions
 podDisruptionBudget:
   # Enable PodDisruptionBudget
   enabled: false
   # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
-  # Default: null (will use maxUnavailable instead)
   minAvailable: null
   # Maximum number of pods that can be unavailable during disruptions
-  # Default: 1 (recommended for stateful workloads to maintain quorum)
   maxUnavailable: 1
   # Unhealthy pod eviction policy (optional)
   # Valid values: IfHealthyBudget, AlwaysAllow
-  # See: https://kubernetes.io/docs/tasks/run-application/configure-pdb/#unhealthy-pod-eviction-policy
-  unhealthyPodEvictionPolicy: null
+  unhealthyPodEvictionPolicy: ""
 
 # Valkey logging level: debug, verbose, notice, warning
 valkeyLogLevel: "notice"
