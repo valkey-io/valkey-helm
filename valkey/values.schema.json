@@ -563,7 +563,7 @@
                 },
                 "unhealthyPodEvictionPolicy": {
                     "type": ["string", "null"],
-                    "enum": ["IfHealthyBudget", "AlwaysAllow", null]
+                    "enum": ["IfHealthyBudget", "AlwaysAllow", "", null]
                 }
             }
         },
