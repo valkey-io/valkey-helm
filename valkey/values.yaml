@@ -445,4 +445,5 @@ metrics:
     #   labels:
     #     severity: error
 
+# Extra Containers to add to the valkey pod deployment or stateful set
 extraContainers: []
