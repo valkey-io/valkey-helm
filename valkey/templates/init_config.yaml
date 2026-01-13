@@ -186,7 +186,9 @@ data:
       {{- if .Values.auth.enabled }}
       # Get the password for the replication user
       {{- $replUsername := .Values.replica.replicationUser }}
-      REPL_PASSWORD=$(get_user_password "{{ $replUsername }}") || exit 1
+      {{- $replUser := index .Values.auth.aclUsers $replUsername }}
+      {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
+      REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
 
       # Write masterauth configuration
       echo "masterauth $REPL_PASSWORD" >>"$VALKEY_CONFIG"
