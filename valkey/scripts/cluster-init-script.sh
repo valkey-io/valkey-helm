@@ -12,11 +12,28 @@ REPLICAS_PER_SHARD=${CLUSTER_REPLICAS_PER_SHARD:-1}
 PRIMARIES=$(( CLUSTER_NODE_COUNT / (1 + REPLICAS_PER_SHARD) ))
 
 {{- if and .Values.auth.enabled .Values.auth.aclUsers }}
-AUTH_OPTION="-a $(cat /etc/valkey/users.acl | grep '^user {{ .Values.cluster.replicationUser }} ' | sed 's/.*#\([a-f0-9]*\).*/\1/' | head -1)"
-# If we have the password from environment, use that instead
-if [ -n "${VALKEY_AUTH_PASSWORD}" ]; then
-  AUTH_OPTION="-a ${VALKEY_AUTH_PASSWORD}"
+# Get password for cluster replication user from mounted secret
+{{- $replUsername := .Values.cluster.replicationUser }}
+{{- $replUser := index .Values.auth.aclUsers $replUsername }}
+{{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
+{{- if .Values.auth.usersExistingSecret }}
+if [ -f "/valkey-users-secret/{{ $replPasswordKey }}" ]; then
+  AUTH_PASSWORD=$(cat "/valkey-users-secret/{{ $replPasswordKey }}")
+elif [ -f "/valkey-auth-secret/{{ $replUsername }}-password" ]; then
+  AUTH_PASSWORD=$(cat "/valkey-auth-secret/{{ $replUsername }}-password")
+else
+  echo "ERROR: No password found for cluster replication user {{ $replUsername }}"
+  exit 1
 fi
+{{- else }}
+if [ -f "/valkey-auth-secret/{{ $replUsername }}-password" ]; then
+  AUTH_PASSWORD=$(cat "/valkey-auth-secret/{{ $replUsername }}-password")
+else
+  echo "ERROR: No password found for cluster replication user {{ $replUsername }}"
+  exit 1
+fi
+{{- end }}
+AUTH_OPTION="-a ${AUTH_PASSWORD}"
 {{- else }}
 AUTH_OPTION=""
 {{- end }}

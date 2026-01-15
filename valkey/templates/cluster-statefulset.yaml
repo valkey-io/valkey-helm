@@ -177,6 +177,16 @@ spec:
             {{- if .Values.auth.enabled }}
             - name: valkey-acl
               mountPath: /etc/valkey
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
             {{- end }}
             {{- range $secret := .Values.extraValkeySecrets }}
             - name: {{ $secret.name }}-valkey
