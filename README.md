@@ -63,14 +63,17 @@ Cluster mode features:
 
 | Name     | Email         |
 | -------- | ------------- |
-| mk-raven | \[] |
+| mk-raven | maikebit at gmail.com |
+| sgissi   | silvio at gissilabs.com |
 
 ---
 
 ## Slack
-You can also provide feedback or join the conversation with other developers, users, and contributors on the #[Valkey-helm](https://valkey-oss-developer.slack.com/archives/C09JZ6N2AAV) Slack channel. 
+
+You can also provide feedback or join the conversation with other developers, users, and contributors on the #[Valkey-helm](https://valkey-oss-developer.slack.com/archives/C09JZ6N2AAV) Slack channel.
 
 ---
+
 ## License
 
 BSD 3-Clause License

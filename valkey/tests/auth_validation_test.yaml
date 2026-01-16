@@ -1,0 +1,229 @@
+suite: auth configuration validation
+templates:
+  - templates/deploy_valkey.yaml
+  - templates/statefulset.yaml
+  - templates/init_config.yaml
+tests:
+  - it: should fail when auth enabled but no method configured
+    set:
+      auth.enabled: true
+      auth.aclUsers: {}
+      auth.aclConfig: ""
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "auth.enabled is true but no authentication method.*"
+
+  - it: should fail when aclUsers defined but no default user
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+          password: "admin-password"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "The 'default' user must be defined in auth.aclUsers.*"
+
+  - it: should fail when user has no permissions
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "test"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "User 'default' in auth.aclUsers must have a 'permissions' field"
+
+  - it: should fail when user has no password and no usersExistingSecret
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "User 'default' must have either 'password' field or auth.usersExistingSecret must be set"
+
+  - it: should fail when user has passwordKey but no usersExistingSecret
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "test"
+          passwordKey: "default-pwd"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "User 'default' has passwordKey but auth.usersExistingSecret is not set"
+
+  - it: should succeed with aclUsers and inline passwords only
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+        readonly:
+          permissions: "~* +@read"
+          password: "readonly-password"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should succeed with aclUsers and usersExistingSecret only
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+        readonly:
+          permissions: "~* +@read"
+          passwordKey: "readonly-pwd"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should succeed with mixed inline and existing secret passwords
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "fallback-password"
+          passwordKey: "default-pwd"
+        readonly:
+          permissions: "~* +@read"
+          password: "readonly-password"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should succeed when auth enabled with aclConfig only
+    set:
+      auth.enabled: true
+      auth.aclConfig: "user default on >password ~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should succeed with aclUsers and aclConfig combined
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+      auth.aclConfig: "user guest on nopass ~public:* +@read"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should succeed when auth disabled
+    set:
+      auth.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should fail when replica enabled with auth and replicationUser not in aclUsers
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "repl-user"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+        admin:
+          permissions: "~* &* +@all"
+          password: "admin-password"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Replication user 'repl-user'.*must be defined in auth.aclUsers.*"
+
+  - it: should succeed when replica enabled with auth and replicationUser exists in aclUsers
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "repl-user"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+        repl-user:
+          permissions: "+psync +replconf +ping"
+          password: "repl-password"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  - it: should succeed when replica enabled with auth and default user as replicationUser
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "default"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  - it: should succeed when replica enabled but auth disabled (no replication user check)
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "repl-user"
+      auth.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  - it: should fail when replica enabled with aclConfig but replicationUser not in aclUsers
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "repl-user"
+      auth.enabled: true
+      auth.aclConfig: "user default on >password ~* &* +@all\nuser repl-user on >password +psync +replconf +ping"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Replication user 'repl-user'.*must be defined in auth.aclUsers.*"
+
+  - it: should fail when replica enabled with mixed aclUsers and aclConfig but replicationUser only in aclConfig
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "repl-user"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+      auth.aclConfig: "user repl-user on >password +psync +replconf +ping"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Replication user 'repl-user'.*must be defined in auth.aclUsers.*"

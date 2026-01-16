@@ -1,0 +1,34 @@
+{{- if and .Values.replica.enabled .Values.replica.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "valkey.fullname" . }}-read
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: read
+  {{- with .Values.replica.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.replica.service.type }}
+  {{- if .Values.replica.service.clusterIP }}
+  clusterIP: {{ .Values.replica.service.clusterIP }}
+  {{- end }}
+  {{- if .Values.replica.service.loadBalancerClass }}
+  loadBalancerClass: {{ .Values.replica.service.loadBalancerClass }}
+  {{- end }}
+  ports:
+    - name: tcp
+      port: {{ .Values.replica.service.port }}
+      targetPort: tcp
+      protocol: TCP
+      {{- if and (eq .Values.replica.service.type "NodePort") .Values.replica.service.nodePort }}
+      nodePort: {{ .Values.replica.service.nodePort }}
+      {{- end }}
+      {{- if .Values.replica.service.appProtocol }}
+      appProtocol: {{ .Values.replica.service.appProtocol }}
+      {{- end }}
+  selector:
+    {{- include "valkey.selectorLabels" . | nindent 4 }}
+{{- end }}

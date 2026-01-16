@@ -1,0 +1,155 @@
+suite: statefulset configuration
+templates:
+  - templates/statefulset.yaml
+  - templates/init_config.yaml
+tests:
+  - it: should fail when replica enabled but no size provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: ""
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Replica mode requires persistent storage.*"
+
+  - it: should succeed when replica enabled with size provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "5Gi"
+
+  - it: should succeed when replica enabled with custom storageClass
+    set:
+      replica.enabled: true
+      replica.persistence.size: "10Gi"
+      replica.persistence.storageClass: "fast-ssd"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "10Gi"
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: "fast-ssd"
+
+  - it: should always have annotations block even without podAnnotations
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podAnnotations: null
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - exists:
+          path: spec.template.metadata.annotations
+      - exists:
+          path: spec.template.metadata.annotations["checksum/initconfig"]
+
+  - it: should include podAnnotations when provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        custom.annotation: "value"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["custom.annotation"]
+          value: value
+      - exists:
+          path: spec.template.metadata.annotations["checksum/initconfig"]
+
+  - it: should use image pull policy for containers, initContainers and metrics
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      image.pullPolicy: Always
+      metrics.enabled: true
+      metrics.exporter.image.pullPolicy: Always
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: Always
+
+  - it: should not have imagePullSecrets when not configured
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+
+  - it: should render imagePullSecrets from values.imagePullSecrets
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      imagePullSecrets:
+        - myregistrykey
+        - anotherregistrykey
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: myregistrykey
+            - name: anotherregistrykey
+
+  - it: should render imagePullSecrets from global.imagePullSecrets
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      global.imagePullSecrets:
+        - globalregistrykey
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: globalregistrykey
+
+  - it: should merge global and local imagePullSecrets
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      global.imagePullSecrets:
+        - globalregistrykey
+      imagePullSecrets:
+        - localregistrykey
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: globalregistrykey
+            - name: localregistrykey

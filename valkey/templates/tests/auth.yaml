@@ -1,0 +1,144 @@
+{{- if .Values.auth.enabled }}
+{{- if include "valkey.hasInlinePasswords" . | eq "true" }}
+{{- $firstUsername := "" }}
+{{- range $username, $user := .Values.auth.aclUsers }}
+  {{- if $user.password }}
+    {{- if not $firstUsername }}
+      {{- $firstUsername = $username }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "valkey.fullname" . }}-test-auth-generated
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test-auth
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Testing authentication with user {{ $firstUsername }} (inline passwords)..."
+
+          # Extract password from secret
+          PASSWORD=$(cat /valkey-auth/{{ $firstUsername }}-password)
+          USERNAME="{{ $firstUsername }}"
+
+          {{- if .Values.tls.enabled }}
+          # TLS flags
+          TLS_FLAGS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }}"
+          {{- else }}
+          TLS_FLAGS=""
+          {{- end }}
+
+          # Test authentication
+          PING_RESULT=$(valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} $TLS_FLAGS --user "$USERNAME" --pass "$PASSWORD" PING)
+          if [ "$PING_RESULT" != "PONG" ]; then
+            echo "✗ Authentication test failed: expected 'PONG', got '$PING_RESULT'"
+            exit 1
+          fi
+          echo "✓ PING successful: $PING_RESULT"
+
+          # Test that we can set and get a value (if permissions allow)
+          if valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} $TLS_FLAGS --user "$USERNAME" --pass "$PASSWORD" SET test-key-generated "test-value" 2>/dev/null; then
+            VALUE=$(valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} $TLS_FLAGS --user "$USERNAME" --pass "$PASSWORD" GET test-key-generated)
+            if [ "$VALUE" = "test-value" ]; then
+              echo "✓ Authentication test passed with write permissions"
+              exit 0
+            else
+              echo "✗ Authentication test failed: expected 'test-value', got '$VALUE'"
+              exit 1
+            fi
+          else
+            echo "✓ Authentication test passed (read-only or restricted permissions)"
+            exit 0
+          fi
+      volumeMounts:
+        - name: valkey-auth
+          mountPath: /valkey-auth
+          readOnly: true
+        {{- if .Values.tls.enabled }}
+        - name: valkey-tls
+          mountPath: /tls
+          readOnly: true
+        {{- end }}
+  volumes:
+    - name: valkey-auth
+      secret:
+        secretName: {{ include "valkey.fullname" . }}-auth
+    {{- if .Values.tls.enabled }}
+    - name: valkey-tls
+      secret:
+        secretName: {{ .Values.tls.existingSecret }}
+    {{- end }}
+{{- end }}
+{{- end }}
+---
+{{- if and .Values.auth.enabled .Values.auth.usersExistingSecret }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "valkey.fullname" . }}-test-auth-existing
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test-auth
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Testing authentication with usersExistingSecret..."
+
+          {{- if .Values.tls.enabled }}
+          # TLS flags
+          TLS_FLAGS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }}"
+          {{- else }}
+          TLS_FLAGS=""
+          {{- end }}
+
+          # Test basic connection (no auth - will fail if auth is properly configured)
+          PING_RESULT=$(valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} $TLS_FLAGS PING 2>&1 || true)
+          if [ "$PING_RESULT" = "PONG" ]; then
+            echo "✗ Authentication test failed: server allows unauthenticated access"
+            exit 1
+          fi
+
+          echo "✓ Authentication is enforced (unauthenticated access denied)"
+          echo "✓ Received expected error: $PING_RESULT"
+          echo "⚠ Manual verification recommended for usersExistingSecret configuration"
+          exit 0
+      volumeMounts:
+        - name: valkey-users-secret
+          mountPath: /valkey-users-secret
+          readOnly: true
+        {{- if .Values.tls.enabled }}
+        - name: valkey-tls
+          mountPath: /tls
+          readOnly: true
+        {{- end }}
+  volumes:
+    - name: valkey-users-secret
+      secret:
+        secretName: {{ .Values.auth.usersExistingSecret }}
+    {{- if .Values.tls.enabled }}
+    - name: valkey-tls
+      secret:
+        secretName: {{ .Values.tls.existingSecret }}
+    {{- end }}
+{{- end }}

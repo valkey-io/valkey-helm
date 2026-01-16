@@ -1,0 +1,147 @@
+suite: init configuration
+templates:
+  - templates/init_config.yaml
+tests:
+  - it: should not configure ACL when auth disabled
+    set:
+      auth.enabled: false
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile"
+
+  - it: should configure ACL file at /etc/valkey/users.acl with inline passwords
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+          password: "admin-password"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile /etc/valkey/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "mkdir -p /etc/valkey"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "chmod 0400 /etc/valkey/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'cat "/valkey-auth-secret/\$\{username\}-password"'
+
+  - it: should configure ACL file with usersExistingSecret
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile /etc/valkey/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'cat "/valkey-users-secret/\$password_key"'
+
+  - it: should append aclConfig to generated users
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+          password: "admin-password"
+      auth.aclConfig: |
+        user guest on nopass ~public:* +@read
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile /etc/valkey/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "Appending custom ACL configuration"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "/valkey-auth-secret/aclConfig"
+
+  - it: should have error handling for missing passwords
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+          password: "admin-password"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "ERROR.*No password found"
+
+  - it: should use aclConfig only
+    set:
+      auth.enabled: true
+      auth.aclConfig: |
+        user admin on >password ~* &* +@all
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile /etc/valkey/users\\.acl"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "/valkey-auth-secret/aclConfig"
+
+  - it: should use passwordKey for replica authentication when configured
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "default"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          passwordKey: "valkey-password"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REPL_PASSWORD=\$\(get_user_password "default" "valkey-password"\)'
+
+  - it: should default to username for replica authentication when passwordKey not configured
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "default"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REPL_PASSWORD=\$\(get_user_password "default" "default"\)'
+
+  - it: should have correct metadata
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey

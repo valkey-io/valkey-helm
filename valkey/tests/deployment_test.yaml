@@ -1,0 +1,247 @@
+suite: deployment configuration
+templates:
+  - templates/deploy_valkey.yaml
+  - templates/init_config.yaml
+tests:
+  - it: should not have auth volumes when auth disabled
+    set:
+      auth.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "valkey-users-secret")]
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "valkey-auth-secret")]
+      - notExists:
+          path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "valkey-users-secret")]
+      - notExists:
+          path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "valkey-auth-secret")]
+
+  - it: should have generated volume with inline passwords
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-auth-secret
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 0400
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
+            readOnly: true
+
+  - it: should have users-secret volume with usersExistingSecret
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-users-secret
+            secret:
+              secretName: my-custom-secret
+              defaultMode: 0400
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+            mountPath: /valkey-users-secret
+            readOnly: true
+
+  - it: should have both volumes with mixed passwords
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+        readonly:
+          permissions: "~* +@read"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-users-secret
+            secret:
+              secretName: my-custom-secret
+              defaultMode: 0400
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-auth-secret
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 0400
+
+  - it: should have generated volume with aclConfig only
+    set:
+      auth.enabled: true
+      auth.aclConfig: "user default on >password ~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-auth-secret
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 0400
+
+  - it: should use custom image
+    set:
+      image.registry: custom-registry
+      image.repository: valkey/valkey
+      image.tag: "7.0.0"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: custom-registry/valkey/valkey:7.0.0
+
+  - it: should have service account
+    set:
+      serviceAccount.create: true
+      serviceAccount.name: "custom-sa"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: custom-sa
+
+  - it: should use image pull policy for containers and initContainers
+    set:
+      image.pullPolicy: Always
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
+
+  - it: should always have annotations block even without podAnnotations
+    set:
+      podAnnotations: null
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - exists:
+          path: spec.template.metadata.annotations
+      - exists:
+          path: spec.template.metadata.annotations["checksum/initconfig"]
+
+  - it: should include podAnnotations when provided
+    set:
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        custom.annotation: "value"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["custom.annotation"]
+          value: value
+      - exists:
+          path: spec.template.metadata.annotations["checksum/initconfig"]
+
+  - it: should use image pull policy for containers, initContainers and metrics
+    set:
+      image.pullPolicy: Always
+      metrics.enabled: true
+      metrics.exporter.image.pullPolicy: Always
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: Always
+
+  - it: should not have imagePullSecrets when not configured
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+
+  - it: should render imagePullSecrets from values.imagePullSecrets
+    set:
+      imagePullSecrets:
+        - myregistrykey
+        - anotherregistrykey
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: myregistrykey
+            - name: anotherregistrykey
+
+  - it: should render imagePullSecrets from global.imagePullSecrets
+    set:
+      global.imagePullSecrets:
+        - globalregistrykey
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: globalregistrykey
+
+  - it: should merge global and local imagePullSecrets
+    set:
+      global.imagePullSecrets:
+        - globalregistrykey
+      imagePullSecrets:
+        - localregistrykey
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: globalregistrykey
+            - name: localregistrykey

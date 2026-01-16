@@ -1,0 +1,78 @@
+suite: service configuration
+templates:
+  - templates/service.yaml
+tests:
+  - it: should have correct default service type
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: ClusterIP
+  - it: should be able to set custom clusterIP
+    set:
+      service.clusterIP: "10.0.0.1"
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.clusterIP
+          value: "10.0.0.1"
+  - it: should have correct default ports
+    template: templates/service.yaml
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            port: 6379
+            targetPort: tcp
+            protocol: TCP
+            name: tcp
+  - it: should be able to set custom nodePort
+    set:
+      service.type: "NodePort"
+      service.nodePort: 30080
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30080
+  - it: should be able to set custom appProtocol
+    set:
+      service.appProtocol: "my-protocol"
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.ports[0].appProtocol
+          value: "my-protocol"
+  - it: should be able to set custom loadBalancerClass
+    set:
+      service.loadBalancerClass: "custom-lb-class"
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.loadBalancerClass
+          value: "custom-lb-class"
+  - it: shouldn't have loadBalancerClass by default
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - notExists:
+          path: spec.loadBalancerClass
+  - it: should have correct selector labels
+    template: templates/service.yaml
+    asserts:
+      - isSubset:
+          path: spec.selector
+          content:
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/name: valkey

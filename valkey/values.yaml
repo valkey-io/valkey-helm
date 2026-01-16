@@ -1,9 +1,14 @@
-# Number of Valkey pods to run
-replicaCount: 1
+global:
+  # The global image registry (this will override the registry of all container images defined in this chart)
+  imageRegistry: ""
+  # The global image pull secrets (list of secret names)
+  imagePullSecrets: []
 
 image:
-  # Valkey Docker image to use
-  repository: docker.io/valkey/valkey
+  # Image registry
+  registry: "docker.io"
+  # Valkey container image repository
+  repository: valkey/valkey
   # Image pull policy (Always, IfNotPresent, Never)
   pullPolicy: IfNotPresent
   # Image tag (leave empty to use .Chart.AppVersion)
@@ -15,6 +20,9 @@ imagePullSecrets: []
 # Override the default name or full name of resources
 nameOverride: ""
 fullnameOverride: ""
+
+# Kubernetes cluster domain name
+clusterDomain: cluster.local
 
 serviceAccount:
   # Create a service account for Valkey
@@ -30,11 +38,17 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
+# Common labels to add to all resources (Deployment, Service, ConfigMap, etc.)
+commonLabels: {}
+
 # Security context for the pod (applies to all containers)
 podSecurityContext:
   fsGroup: 1000
   runAsUser: 1000
   runAsGroup: 1000
+
+# Priority class name for pod scheduling (leave empty to use cluster's default)
+priorityClassName: ""
 
 # Security context for the Valkey containers
 securityContext:
@@ -50,6 +64,15 @@ service:
   type: ClusterIP
   # Port on which Valkey will be exposed
   port: 6379
+  annotations: {}
+  # NodePort value (if service.type is NodePort)
+  nodePort: 0
+  # ClusterIP value
+  clusterIP: ""
+  # Class of a load balancer implementation
+  loadBalancerClass: ""
+  # Application protocol
+  appProtocol: ""
 
 # Network policy to control traffic to the pods
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
@@ -75,13 +98,19 @@ initResources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
-# Persistent storage configuration
+# Additional init containers
+extraInitContainers: []
+
+# Persistent storage configuration (standalone deployment only)
 dataStorage:
   # Enable persistent volume claim creation
   enabled: false
 
   # Use existing PVC by name (skip dynamic provisioning if set)
   persistentVolumeClaimName: ""
+
+  # Subpath inside PVC to mount
+  subPath: ""
 
   # Name of the volume (referenced in deployment)
   volumeName: "valkey-data"
@@ -105,6 +134,9 @@ dataStorage:
   # Optional labels to add to the PVC
   labels: {}
 
+  # If hostPath is set then a hostPath DirectoryOrCreate volume is used
+  hostPath: ""
+
 # Mount additional secrets into the Valkey container
 extraValkeySecrets: []
 
@@ -115,21 +147,116 @@ extraValkeyConfigs: []
 extraSecretValkeyConfigs: false
 
 # Mount additional emptyDir or hostPath volumes (advanced use)
-extraStorage: []
+extraVolumes: []
+#  - name: hostpath-volume
+#    hostPath:
+#      path: /opt/valkey/hostpath-volume/
+#      type: DirectoryOrCreate
+extraVolumeMounts: []
+#  - mountPath: /some/path/
+#    name: hostpath-volume
 
 # Content for valkey.conf (will be mounted via ConfigMap)
 valkeyConfig: ""
 
 auth:
   # Enable ACL-based authentication
+  # IMPORTANT: When authentication is enabled, the 'default' user MUST be defined in either
+  # aclUsers or aclConfig. Without a default user, anyone can access the database without
+  # credentials, creating a security risk.
   enabled: false
 
-  # Default ACL rules (used only if auth.enabled is true)
-  aclConfig: |
-    # Users and permissions can be defined here
-    # Example:
-    # user default off
-    # user default on >defaultpassword ~*  &* +@all 
+  # Use an existing secret for user passwords. Key defaults to username.
+  usersExistingSecret: ""
+
+  # Map of users to create with ACL permissions.
+  # If usersExistingSecret is set, passwords from the secret take priority over inline passwords.
+  # NOTE: If using aclUsers, the 'default' user must be included here.
+  aclUsers: {}
+  # Example:
+  # default:
+  #   permissions: "~* &* +@all"
+  #   password: "secretpass"        # Inline password (fallback if usersExistingSecret not set)
+  #   passwordKey: "admin-pwd"      # Key in usersExistingSecret (defaults to username)
+  # read-user:
+  #   permissions: "~* -@all +@read +ping +info"
+
+  # Inline ACL configuration that will be appended after generated users.
+  # NOTE: If using aclConfig, ensure the 'default' user is defined here.
+  aclConfig: ""
+  # Example:
+  # aclConfig: |
+  #   user default on >secretpass ~* &* +@all
+
+# Replica configuration for master-replica replication mode
+replica:
+  enabled: false
+
+  # Number of replica instances (total pods = replicas + 1 master)
+  replicas: 2
+
+  # Username for replicas to authenticate to master, ignored if auth.enabled is false.
+  # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
+  # The chart requires this to retrieve the password for replica authentication.
+  # The user must have appropriate replication permissions: +psync +replconf +ping
+  replicationUser: "default"
+
+  # Replication settings
+  # Use diskless replication (sync directly from memory) vs disk-based
+  disklessSync: false
+
+  # Write safety - require minimum number of healthy replicas to accept writes
+  # Set to 0 to disable this check, or 1+ to require minimum replicas before accepting writes
+  # This ensures data durability by requiring at least N replicas to be in sync
+  minReplicasToWrite: 0
+
+  # Maximum replication lag in seconds before a replica is considered unhealthy
+  minReplicasMaxLag: 10
+
+  # Read service configuration
+  service:
+    # Enable read service (load balances read traffic across all pods)
+    enabled: true
+    # Service type (ClusterIP, NodePort, LoadBalancer)
+    type: ClusterIP
+    # Port on which the read service will be exposed
+    port: 6379
+    # Optional annotations for the read service
+    annotations: {}
+    # NodePort value (if service.type is NodePort)
+    nodePort: 0
+    # ClusterIP value
+    clusterIP: ""
+    # Application protocol
+    appProtocol: ""
+    # Class of a load balancer implementation
+    loadBalancerClass: ""
+
+  # Persistence configuration (required for replicas)
+  persistence:
+    # Size of the PVC for each replica (required when replica.enabled is true)
+    size: ""
+    # Storage class name (empty = use default storage class)
+    storageClass: ""
+    # Access modes for the PVC
+    accessModes:
+      - ReadWriteOnce
+
+tls:
+  # Enable TLS
+  enabled: false
+  # Name of the Secret containing TLS keys (required)
+  existingSecret: ""
+  # Secret key name containing server public certificate
+  serverPublicKey: server.crt
+  # Secret key name containing server private key
+  serverKey: server.key
+  # Secret key name containing Certificate Authority public certificate
+  caPublicKey: ca.crt
+  # Secret key name containing DH parameters (optional)
+  dhParamKey: ""
+  # Require that clients authenticate with a certificate
+  requireClientCertificate: false
 
 # Node selector for pod assignment
 nodeSelector: {}
@@ -141,23 +268,179 @@ tolerations: []
 affinity: {}
 
 # Set Deployment strategy. See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
-deploymentStrategy: RollingUpdate
+deploymentStrategy: RollingUpdate # @schema enum:[RollingUpdate,Recreate]
 
 # See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
-topologySpreadConstraints: {}
+topologySpreadConstraints: []
 
 # Valkey logging level: debug, verbose, notice, warning
 valkeyLogLevel: "notice"
+# Environment variables to inject into Valkey container
+
+env: {}
+  # Example:
+  # LOG_LEVEL: info
 
 metrics:
   # Enable Prometheus exporter sidecar
   enabled: false
-
+  # Exporter configuration
   exporter:
+    # Command to run in the metrics exporter container (overrides args)
+    command: []
+    # Arguments to pass to the metrics exporter container
+    args: []
+      # Example:
+      # - --redis.addr=redis:6379
+    # Port on which the metrics exporter will listen
+    port: 9121
+    # Image configuration
+    image:
+      # Image registry
+      registry: ghcr.io
+      # Prometheus exporter container image repository
+      repository: oliver006/redis_exporter
+      # Image pull policy (Always, IfNotPresent, Never)
+      pullPolicy: IfNotPresent
+      # Image tag (leave empty to use latest)
+      tag: "v1.79.0"
+    resources: {}
+      # Example:
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+      # requests:
+      #   cpu: 100m
+      #   memory: 128Mi
+    # Extra volume mounts for metrics exporter container
+    extraVolumeMounts: []
     # Additional secrets to mount for metrics exporter
     extraExporterSecrets: []
+    # Environment variables to inject into the metrics exporter container
+    extraEnvs: {}
+    # Example:
+    # LOG_LEVEL: info
+    securityContext: {}
+      # Example:
+      # runAsNonRoot: true
+      # runAsUser: 1000
+      # runAsGroup: 1000
+      # capabilities:
+      #   drop:
+      #     - ALL
+      # readOnlyRootFilesystem: true
 
-# Environment variables to inject into Valkey container
-env: {}
-  # Example:
-  # LOG_LEVEL: info
+  # Service configuration for the metrics exporter
+  service:
+    # Enable a separate service for the metrics exporter
+    enabled: true
+    # Service type (ClusterIP, NodePort, LoadBalancer)
+    type: ClusterIP
+    # Port on which the metrics exporter service will be exposed
+    ports:
+      http: 9121
+    # Optional annotations for the metrics exporter service
+    annotations: {}
+    # Optional labels for the metrics exporter service
+    extraLabels: {}
+    # ServiceMonitor configuration for Prometheus Operator
+    # Application protocol
+    appProtocol: ""
+  serviceMonitor:
+    # Enable ServiceMonitor resource for scraping service metrics
+    enabled: false
+    # Port name or number to scrape metrics from
+    port: metrics
+    # Extra labels for the ServiceMonitor resource
+    extraLabels: {}
+    # Extra annotations for the ServiceMonitor resource
+    annotations: {}
+    # How often Prometheus should scrape metrics
+    interval: 30s
+    # Maximum duration allowed for a scrape request
+    scrapeTimeout: ""
+    # Relabeling rules applied before scraping metrics
+    relabelings: []
+    # Relabeling rules applied before ingesting metrics
+    metricRelabelings: []
+    # Set honorLabels to true to preserve original metric labels
+    honorLabels: false
+    # Extra labels to help Prometheus discover ServiceMonitor resources
+    additionalLabels: {}
+    # Pod labels to copy onto the generated metrics
+    podTargetLabels: []
+    # Maximum number of samples to collect per Pod scrape
+    sampleLimit: false
+    # Maximum number of scrape targets allowed
+    targetLimit: false
+  podMonitor:
+    # Enable PodMonitor resource for scraping pod metrics
+    enabled: false
+    # Port name or number to scrape metrics from
+    port: metrics
+    # Extra labels for the ServiceMonitor resource
+    extraLabels: {}
+    # Extra annotations for the ServiceMonitor resource
+    annotations: {}
+    # Frequency for Prometheus to scrape pod metrics
+    interval: 30s
+    # Time limit for each scrape operation
+    scrapeTimeout: ""
+    # Relabeling rules to apply before scraping pod metrics
+    relabelings: []
+    # Relabeling rules to apply before ingesting pod metrics
+    metricRelabelings: []
+    # If true, keeps original labels from the pod metrics
+    honorLabels: false
+    # Additional labels for Prometheus to find PodMonitor resources
+    additionalLabels: {}
+    # Pod labels to attach to the metrics
+    podTargetLabels: []
+    # Maximum samples to scrape from each Pod
+    sampleLimit: false
+    # Maximum number of pods to scrape
+    targetLimit: false
+
+  # PrometheusRule configuration for alerting rules (used by kube-prometheus-stack)
+  prometheusRule:
+    # Enable creation of PrometheusRule resource
+    enabled: false
+    # Extra labels to add to the PrometheusRule resource
+    extraLabels: {}
+    # Extra annotations to add to the PrometheusRule resource
+    extraAnnotations: {}
+    # List of Prometheus alerting rules
+    rules: []
+    # Example alerting rules:
+    # - alert: ValkeyDown
+    #   annotations:
+    #     summary: Valkey instance {{ "{{ $labels.instance }}" }} down
+    #     description: Valkey instance {{ "{{ $labels.instance }}" }} is down.
+    #   expr: |
+    #     redis_up{service="{{ include "valkey.fullname" . }}-metrics"} == 0
+    #   for: 2m
+    #   labels:
+    #     severity: error
+    # - alert: ValkeyMemoryHigh
+    #   annotations:
+    #     summary: Valkey instance {{ "{{ $labels.instance }}" }} is using too much memory
+    #     description: |
+    #        Valkey instance {{ "{{ $labels.instance }}" }} is using {{ "{{ $value }}" }}% of its available memory.
+    #   expr: |
+    #      redis_memory_used_bytes{service="{{ include "valkey.fullname" . }}-metrics"} * 100
+    #      /
+    #      redis_memory_max_bytes{service="{{ include "valkey.fullname" . }}-metrics"}
+    #      > 90 <= 100
+    #   for: 2m
+    #   labels:
+    #     severity: error
+    # - alert: ValkeyKeyEviction
+    #   annotations:
+    #     summary: Valkey instance {{ "{{ $labels.instance }}" }} has evicted keys
+    #     description: |
+    #        Valkey instance {{ "{{ $labels.instance }}" }} has evicted {{ "{{ $value }}" }} keys in the last 5 minutes.
+    #   expr: |
+    #     increase(redis_evicted_keys_total{service="{{ include "valkey.fullname" . }}-metrics"}[5m]) > 0
+    #   for: 1s
+    #   labels:
+    #     severity: error
