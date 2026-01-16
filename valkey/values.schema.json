@@ -543,6 +543,9 @@
         },
         "valkeyLogLevel": {
             "type": "string"
+        },
+        "workloadAnnotations": {
+            "type": "object"
         }
     }
 }
