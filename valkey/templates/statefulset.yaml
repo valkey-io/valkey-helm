@@ -12,6 +12,10 @@ spec:
   serviceName: {{ include "valkey.fullname" . }}-headless
   replicas: {{ add (int .Values.replica.replicas) 1 }}
   podManagementPolicy: OrderedReady
+  {{- if .Values.replica.persistentVolumeClaimRetentionPolicy }}
+  persistentVolumeClaimRetentionPolicy:
+    {{- toYaml .Values.replica.persistentVolumeClaimRetentionPolicy | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
