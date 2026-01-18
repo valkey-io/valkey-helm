@@ -115,14 +115,14 @@ spec:
           startupProbe:
             exec:
               {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              command: [ "sh", "-c", "valkey-cli --cacert {{ .Values.tls.caPublicKey }} --tls ping" ]
               {{- else }}
               command: [ "sh", "-c", "valkey-cli ping" ]
               {{- end }}
           livenessProbe:
             exec:
               {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              command: [ "sh", "-c", "valkey-cli --cacert {{ .Values.tls.caPublicKey }} --tls ping" ]
               {{- else }}
               command: [ "sh", "-c", "valkey-cli ping" ]
               {{- end }}

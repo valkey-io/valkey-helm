@@ -75,11 +75,11 @@ data:
     log "Generating base valkey.conf"
     {
 {{- if .Values.tls.enabled }}
-      echo "tls-cert-file /tls/{{ .Values.tls.serverPublicKey }}"
-      echo "tls-key-file /tls/{{ .Values.tls.serverKey }}"
-      echo "tls-ca-cert-file /tls/{{ .Values.tls.caPublicKey }}"
+      echo "tls-cert-file {{ .Values.tls.serverPublicKey }}"
+      echo "tls-key-file {{ .Values.tls.serverKey }}"
+      echo "tls-ca-cert-file {{ .Values.tls.caPublicKey }}"
       {{- if .Values.tls.dhParamKey }}
-      echo "tls-dh-params-file /tls/{{ .Values.tls.dhParamKey }}"
+      echo "tls-dh-params-file {{ .Values.tls.dhParamKey }}"
       {{- end }}
       {{- if not .Values.tls.requireClientCertificate }}
       echo "tls-auth-clients no"
@@ -228,4 +228,3 @@ data:
       log "Appending files in /extravalkeyconfigs/"
       cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
     fi
-

@@ -248,11 +248,11 @@ tls:
   # Name of the Secret containing TLS keys (required)
   existingSecret: ""
   # Secret key name containing server public certificate
-  serverPublicKey: server.crt
+  serverPublicKey: /tls/server.crt
   # Secret key name containing server private key
-  serverKey: server.key
+  serverKey: /tls/server.key
   # Secret key name containing Certificate Authority public certificate
-  caPublicKey: ca.crt
+  caPublicKey: /tls/ca.crt
   # Secret key name containing DH parameters (optional)
   dhParamKey: ""
   # Require that clients authenticate with a certificate
