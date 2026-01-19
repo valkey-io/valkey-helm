@@ -46,12 +46,15 @@ podSecurityContext:
   fsGroup: 1000
   runAsUser: 1000
   runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
 # Priority class name for pod scheduling (leave empty to use cluster's default)
 priorityClassName: ""
 
 # Security context for the Valkey containers
 securityContext:
+  allowPrivilegeEscalation: false
   capabilities:
     drop:
       - ALL
