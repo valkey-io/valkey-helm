@@ -245,3 +245,80 @@ tests:
           value:
             - name: globalregistrykey
             - name: localregistrykey
+
+  - it: should render extraVolumes
+    set:
+      extraVolumes:
+        - name: extra-config
+          configMap:
+            name: my-config
+        - name: extra-secret
+          secret:
+            secretName: my-secret
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-config
+            configMap:
+              name: my-config
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-secret
+            secret:
+              secretName: my-secret
+
+  - it: should render extraVolumeMounts for main container
+    set:
+      extraVolumeMounts:
+        - name: extra-config
+          mountPath: /extra-config
+          readOnly: true
+        - name: extra-data
+          mountPath: /data/extra
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-config
+            mountPath: /extra-config
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-data
+            mountPath: /data/extra
+
+  - it: should render both extraVolumes and extraVolumeMounts together
+    set:
+      extraVolumes:
+        - name: extra-config
+          configMap:
+            name: my-config
+      extraVolumeMounts:
+        - name: extra-config
+          mountPath: /extra-config
+          readOnly: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-config
+            configMap:
+              name: my-config
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-config
+            mountPath: /extra-config
+            readOnly: true
