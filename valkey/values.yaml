@@ -21,6 +21,9 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# Override the namespace of resources
+namespaceOverride: ""
+
 # Kubernetes cluster domain name
 clusterDomain: cluster.local
 
