@@ -3,7 +3,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: {{ include "valkey.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "valkey.namespace" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/part-of: valkey
