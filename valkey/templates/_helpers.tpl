@@ -8,7 +8,7 @@ Expand the name of the chart.
 {{/*
 Return the namespace to use for namespaced resources.
 */}}
-{{- define "cilium.namespace" -}}
+{{- define "valkey.namespace" -}}
 {{- .Values.namespaceOverride | default .Release.Namespace -}}
 {{- end -}}
 
