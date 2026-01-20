@@ -7,7 +7,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "valkey.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "valkey.namespace" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
 spec:
