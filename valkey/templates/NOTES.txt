@@ -10,7 +10,56 @@ Namespace:    {{ .Release.Namespace }}
 Chart:        {{ .Chart.Name }} {{ .Chart.Version }}
 App version:  {{ .Chart.AppVersion }}
 
-{{- if .Values.replica.enabled }}
+{{- if .Values.cluster.enabled }}
+================================================================================
+🌐 CLUSTER MODE (Sharded)
+================================================================================
+
+Your Valkey deployment is running in CLUSTER mode:
+- {{ .Values.cluster.shards }} Shard(s) (primary nodes)
+- {{ .Values.cluster.replicasPerShard }} Replica(s) per shard
+- {{ include "valkey.clusterNodeCount" . }} Total node(s)
+
+Hash slots (16384 total) are distributed across the {{ .Values.cluster.shards }} shards.
+
+Service:      {{ include "valkey.fullname" . }}
+Type:         {{ .Values.service.type }}
+Port:         {{ .Values.service.port }}
+Bus Port:     {{ .Values.cluster.busPort }} (for inter-node communication)
+
+1) In-cluster access
+   From another Pod:
+   $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} -c PING
+
+   Note: Use the `-c` flag to enable cluster mode in valkey-cli.
+
+2) Local access via kubectl port-forward
+   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }} 6379:{{ .Values.service.port }}
+   In another terminal:
+   $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} -c PING
+{{ if eq .Values.service.type "LoadBalancer" }}
+3) External access (LoadBalancer)
+   $ export SERVICE_IP=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+   $ valkey-cli -h $SERVICE_IP -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} -c PING
+{{ else if eq .Values.service.type "NodePort" }}
+3) External access (NodePort)
+   $ export NODE_PORT=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
+   $ export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+   $ valkey-cli -h $NODE_IP -p $NODE_PORT{{ if .Values.tls.enabled }} --tls{{- end }} -c PING
+{{ end }}
+Direct Pod Access (Headless Service):
+{{- $shards := int .Values.cluster.shards }}
+{{- $replicasPerShard := int .Values.cluster.replicasPerShard }}
+{{- $totalNodes := mul $shards (add 1 $replicasPerShard) }}
+{{- range $i := until (int $totalNodes) }}
+  {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
+{{- end }}
+
+Cluster Info:
+  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }} cluster info
+  $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }} cluster nodes
+
+{{- else if .Values.replica.enabled }}
 ================================================================================
 🔄 REPLICATION MODE
 ================================================================================
@@ -99,13 +148,29 @@ Port:         {{ .Values.service.port }}
 {{ end }}
 
 ✅ Quick test
+{{- if .Values.cluster.enabled }}
+$ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }} -c
+valkey> SET foo bar
+valkey> GET foo
+"bar"
+valkey> CLUSTER INFO
+{{- else }}
 $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
 valkey> SET foo bar
 valkey> GET foo
 "bar"
+{{- end }}
 
 💾 Persistence
-{{- if .Values.replica.enabled }}
+{{- if .Values.cluster.enabled }}
+- Persistence is ENABLED (required for cluster mode). Each node has its own volume.
+- Size: {{ .Values.cluster.persistence.size }}
+{{- if .Values.cluster.persistence.storageClass }}
+- Storage class: {{ .Values.cluster.persistence.storageClass }}
+{{- end }}
+- To see PVCs:
+  $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }}
+{{- else if .Values.replica.enabled }}
 - Persistence is ENABLED (required for replication mode). Each instance has its own volume.
 - Size: {{ .Values.replica.persistence.size }}
 {{- if .Values.replica.persistence.storageClass }}
