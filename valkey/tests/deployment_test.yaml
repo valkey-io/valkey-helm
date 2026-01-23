@@ -2,6 +2,7 @@ suite: deployment configuration
 templates:
   - templates/deploy_valkey.yaml
   - templates/init_config.yaml
+  - templates/secret.yaml
 tests:
   - it: should not have auth volumes when auth disabled
     set:
@@ -322,3 +323,16 @@ tests:
             name: extra-config
             mountPath: /extra-config
             readOnly: true
+  - it: adds auth secret annotations
+    set:
+      auth:
+        enabled: true
+        aclConfig: "acl config"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - exists:
+          path: spec.template.metadata.annotations
+      - exists:
+          path: spec.template.metadata.annotations["checksum/auth-secret"]

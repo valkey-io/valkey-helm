@@ -188,3 +188,11 @@ Validate replica authentication configuration
 {{- end }}
 {{- end -}}
 
+{{- define "valkey.renderAuthSecret" -}}
+{{- $hasInlinePass := eq (include "valkey.hasInlinePasswords" .) "true" -}}
+{{- if and .Values.auth.enabled (or $hasInlinePass .Values.auth.aclConfig) -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}

@@ -2,6 +2,7 @@ suite: statefulset configuration
 templates:
   - templates/statefulset.yaml
   - templates/init_config.yaml
+  - templates/secret.yaml
 tests:
   - it: should fail when replica enabled but no size provided
     set:
@@ -236,3 +237,24 @@ tests:
             name: extra-config
             mountPath: /extra-config
             readOnly: true
+  - it: adds auth secret annotations
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth:
+        enabled: true
+        aclUsers:
+          default:
+            permissions: "default perm"
+            password: "default pass"
+          replica:
+            permissions: "replica perm"    
+            password: "replica pass"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - exists:
+          path: spec.template.metadata.annotations
+      - exists:
+          path: spec.template.metadata.annotations["checksum/auth-secret"]
