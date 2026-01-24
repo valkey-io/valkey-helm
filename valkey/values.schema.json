@@ -22,6 +22,52 @@
                 }
             }
         },
+        "cluster": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "shards": {
+                    "type": "integer"
+                },
+                "replicasPerShard": {
+                    "type": "integer"
+                },
+                "replicationUser": {
+                    "type": "string"
+                },
+                "nodeTimeout": {
+                    "type": "integer"
+                },
+                "requireFullCoverage": {
+                    "type": "boolean"
+                },
+                "allowReadsWhenDown": {
+                    "type": "boolean"
+                },
+                "persistence": {
+                    "type": "object",
+                    "properties": {
+                        "size": {
+                            "type": "string"
+                        },
+                        "storageClass": {
+                            "type": "string"
+                        },
+                        "accessModes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "busPort": {
+                    "type": "integer"
+                }
+            }
+        },
         "clusterDomain": {
             "type": "string"
         },
@@ -347,6 +393,14 @@
                 },
                 "runAsUser": {
                     "type": "integer"
+                },
+                "seccompProfile": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string"
+                        }
+                    }
                 }
             }
         },
@@ -441,6 +495,9 @@
         "securityContext": {
             "type": "object",
             "properties": {
+                "allowPrivilegeEscalation": {
+                    "type": "boolean"
+                },
                 "capabilities": {
                     "type": "object",
                     "properties": {
