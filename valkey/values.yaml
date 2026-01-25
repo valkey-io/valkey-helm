@@ -245,6 +245,11 @@ replica:
     accessModes:
       - ReadWriteOnce
 
+  # PersistentVolumeClaim retention policy for StatefulSet
+  # Controls when PVCs are deleted (requires Kubernetes 1.23+)
+  # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
+  persistentVolumeClaimRetentionPolicy: {}
+
 tls:
   # Enable TLS
   enabled: false
