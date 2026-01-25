@@ -236,3 +236,21 @@ tests:
             name: extra-config
             mountPath: /extra-config
             readOnly: true
+
+  - it: should include persistentVolumeClaimRetentionPolicy when configured
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.persistentVolumeClaimRetentionPolicy:
+        whenDeleted: Retain
+        whenScaled: Delete
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Retain
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenScaled
+          value: Delete
