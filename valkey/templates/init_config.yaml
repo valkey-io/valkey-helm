@@ -229,3 +229,27 @@ data:
       cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
     fi
 
+    {{- if and (.Values.metrics.enabled .Values.auth.enabled) }}
+    # Remove or reset existing password map if present (it may be read-only from previous run)
+    log "Preparing exporter password map file at /etc/valkey/exporter.map"
+    if [ -f /etc/valkey/exporter.map ]; then
+      log "Removing existing exporter password map file"
+      chmod 0600 /etc/valkey/exporter.map
+      rm -f /etc/valkey/exporter.map
+    fi
+
+    # Create redis_exporter password map file
+    touch /etc/valkey/exporter.map
+    chmod 0600 /etc/valkey/exporter.map
+
+    log "Creating password file for redis_exporter"
+    # Get the password for the metrics user
+    {{- $metricsUsername := .Values.metrics.exporter.metricsUser }}
+    METRICS_PASSWORD=$(get_user_password "{{ $metricsUsername }}") || exit 1
+    {
+      echo "{"
+      echo "  \"rediss://{{ $metricsUsername }}@{{ include "valkey.fullname" . }}:{{ .Values.service.port }}\": \"$METRICS_PASSWORD\""
+      echo "}"
+    } > /etc/valkey/exporter.map
+    {{- end }}
+

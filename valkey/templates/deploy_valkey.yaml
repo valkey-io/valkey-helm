@@ -186,13 +186,35 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.metrics.exporter.extraVolumeMounts }}
           volumeMounts:
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            - name: valkey-acl
+              mountPath: /acl
+            {{- end }}
+            {{- with .Values.metrics.exporter.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- end }}
           env:
             - name: REDIS_ALIAS
               value: {{ include "valkey.fullname" . }}
+            - name: REDIS_ADDR
+              {{- if .Values.tls.enabled }}
+              value: "rediss://{{ include "valkey.fullname" . }}:{{ .Values.service.port }}"
+              {{- else }}
+              value: "redis://{{ include "valkey.fullname" . }}:{{ .Values.service.port }}"
+              {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: REDIS_EXPORTER_TLS_CA_CERT_FILE
+              value: "/tls/{{ .Values.tls.caPublicKey }}"
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            - name: REDIS_PASSWORD_FILE
+              value: "/acl/exporter.map"
+            {{- end }}
             {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
             - name: {{ $key }}
               value: "{{ $val }}"
