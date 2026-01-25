@@ -132,14 +132,14 @@ spec:
           startupProbe:
             exec:
               {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              command: [ "sh", "-c", "valkey-cli --cacert {{ .Values.tls.caPublicKey }} --tls ping" ]
               {{- else }}
               command: [ "sh", "-c", "valkey-cli ping" ]
               {{- end }}
           livenessProbe:
             exec:
               {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              command: [ "sh", "-c", "valkey-cli --cacert {{ .Values.tls.caPublicKey }} --tls ping" ]
               {{- else }}
               command: [ "sh", "-c", "valkey-cli ping" ]
               {{- end }}
@@ -148,7 +148,7 @@ spec:
           volumeMounts:
             - name: valkey-data
               mountPath: /data
-            {{- if .Values.tls.enabled }}
+            {{- if .Values.tls.existingSecret }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
             {{- end }}
@@ -233,10 +233,10 @@ spec:
             secretName: {{ .name }}
             defaultMode: {{ .defaultMode | default 0440 }}
         {{- end }}
-        {{- if .Values.tls.enabled }}
+        {{- if .Values.tls.existingSecret }}
         - name: {{ include "valkey.fullname" . }}-tls
           secret:
-            secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            secretName: {{ .Values.tls.existingSecret }}
             defaultMode: 0400
         {{- end }}
         {{- range .Values.extraValkeyConfigs }}

@@ -35,7 +35,7 @@ spec:
 
           {{- if .Values.tls.enabled }}
           # TLS flags
-          TLS_FLAGS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }}"
+          TLS_FLAGS="--tls --cacert {{ .Values.tls.caPublicKey }}"
           {{- else }}
           TLS_FLAGS=""
           {{- end }}
@@ -107,7 +107,7 @@ spec:
 
           {{- if .Values.tls.enabled }}
           # TLS flags
-          TLS_FLAGS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }}"
+          TLS_FLAGS="--tls --cacert {{ .Values.tls.caPublicKey }}"
           {{- else }}
           TLS_FLAGS=""
           {{- end }}
