@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "valkey.fullname" . }}
+  namespace: {{ include "valkey.namespace" . }}
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  serviceName: {{ include "valkey.fullname" . }}-headless
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "valkey.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "valkey.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/scripts: {{ include (print $.Template.BasePath "/configmap-scripts.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: valkey
+        image: {{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          {{- toYaml .Values.containerSecurityContext | nindent 10 }}
+        enableServiceLinks: {{ .Values.replica.enableServiceLinks }}
+        command: ["/bin/bash", "/scripts/start-valkey.sh"]
+        {{- if or .Values.replica.extraEnvVars .Values.replica.extraEnvVarsCM }}
+        env:
+        {{- if .Values.replica.extraEnvVars }}
+        {{- toYaml .Values.replica.extraEnvVars | nindent 8 }}
+        {{- end }}
+        {{- if .Values.replica.extraEnvVarsCM }}
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.replica.extraEnvVarsCM }}
+        {{- end }}
+        {{- end }}
+        ports:
+        - name: valkey
+          containerPort: {{ .Values.service.port }}
+        {{- if .Values.livenessProbe.enabled }}
+        livenessProbe:
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          exec:
+            command: ["sh", "/health/ping-liveness.sh", "{{ .Values.livenessProbe.timeoutSeconds }}"]
+        {{- end }}
+        {{- if .Values.readinessProbe.enabled }}
+        readinessProbe:
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          exec:
+            command: ["sh", "/health/ping-readiness.sh", "{{ .Values.readinessProbe.timeoutSeconds }}"]
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: scripts
+          mountPath: /scripts
+        - name: health
+          mountPath: /health
+      {{- if .Values.sentinel.enabled }}
+      - name: sentinel
+        image: {{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          {{- toYaml .Values.containerSecurityContext | nindent 10 }}
+        command: ["/bin/bash", "/scripts/start-sentinel.sh"]
+        ports:
+        - name: sentinel
+          containerPort: {{ .Values.sentinel.port }}
+        livenessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          exec:
+            command: ["sh", "/health/ping-sentinel.sh", "5"]
+        readinessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          exec:
+            command: ["sh", "/health/ping-sentinel.sh", "1"]
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: scripts
+          mountPath: /scripts
+        - name: health
+          mountPath: /health
+      {{- end }}
+      volumes:
+      - name: scripts
+        configMap:
+          name: {{ include "valkey.fullname" . }}-scripts
+          defaultMode: 0755
+      - name: health
+        configMap:
+          name: {{ include "valkey.fullname" . }}-health
+          defaultMode: 0755
+      {{- if .Values.persistence.existingClaim }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.existingClaim }}
+      {{- end }}
+  {{- if not .Values.persistence.existingClaim }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      {{- if .Values.persistence.storageClass }}
+      storageClassName: {{ .Values.persistence.storageClass }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}
+  {{- end }}
