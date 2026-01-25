@@ -237,6 +237,9 @@ replica:
 
   # Persistence configuration (required for replicas)
   persistence:
+    # Enable persistence on Valkey using a Persistent Volume Claim
+    # IMPORTANT: If disabled, an emptyDir volume is used. This is not recommended and data loss will occur on primary restart.
+    enabled: true
     # Size of the PVC for each replica (required when replica.enabled is true)
     size: ""
     # Storage class name (empty = use default storage class)
@@ -244,6 +247,8 @@ replica:
     # Access modes for the PVC
     accessModes:
       - ReadWriteOnce
+    # EmptyDir params applies if persistence is disabled
+    emptyDir: {}
 
   # PersistentVolumeClaim retention policy for StatefulSet
   # Controls when PVCs are deleted (requires Kubernetes 1.23+)

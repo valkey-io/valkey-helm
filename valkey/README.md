@@ -83,12 +83,15 @@ dataStorage:
 
 ### Replication Storage
 
-Persistent storage is **mandatory** in replication mode. Without it, the primary might comes up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
+Persistent storage is **highly recommended** in replication mode. Without it, the primary might comes up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
+
+If you don't mind losing your data after a restart, then you can consider disabling persistence and RDB/AOF backups in valkey configuration.
 
 ```yaml
 replica:
   enabled: true
   persistence:
+    enabled: true  # Default
     size: 10Gi  # Required
     storageClass: "fast-ssd"  # Optional
 ```
