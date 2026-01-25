@@ -261,6 +261,9 @@ tls:
   serverKey: server.key
   # Secret key name containing Certificate Authority public certificate
   caPublicKey: ca.crt
+  # in case the caPublicKey does not work for the client (e.g. valkey-cli), you can set an alternative CA cert as an absolute path here. 
+  # Useful e.g. for trust-manager in combination with cert-manager-generated ACME certs.
+  alternativeClientCa: ""
   # Secret key name containing DH parameters (optional)
   dhParamKey: ""
   # Require that clients authenticate with a certificate
