@@ -171,7 +171,7 @@ Validate replica persistence configuration
 */}}
 {{- define "valkey.validateReplicaPersistence" -}}
 {{- if .Values.replica.enabled }}
-  {{- if not .Values.replica.persistence.size }}
+  {{- if and (not .Values.replica.persistence.size) .Values.replica.persistence.enabled }}
     {{- fail "Replica mode requires persistent storage. Please set replica.persistence.size (e.g., '5Gi')" }}
   {{- end }}
 {{- end }}
