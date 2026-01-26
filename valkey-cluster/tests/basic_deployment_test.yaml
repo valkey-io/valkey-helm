@@ -1,0 +1,16 @@
+suite: Basic Deployment Test
+templates:
+  - templates/deploy_valkey.yaml
+  - templates/init_config.yaml
+tests:
+  - it: Should return true
+    template: templates/deploy_valkey.yaml
+    set:
+      replicaCount: 8
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 8
+          

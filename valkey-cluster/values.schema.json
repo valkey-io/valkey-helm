@@ -1,0 +1,301 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "affinity": {
+            "type": "object"
+        },
+        "auth": {
+            "type": "object",
+            "properties": {
+                "aclConfig": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "commonLabels": {
+            "type": "object"
+        },
+        "containerPorts": {
+            "type": "object",
+            "properties": {
+                "bus": {
+                    "type": "integer"
+                },
+                "valkey": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dataStorage": {
+            "type": "object",
+            "properties": {
+                "accessModes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "annotations": {
+                    "type": "object"
+                },
+                "className": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "labels": {
+                    "type": "object"
+                },
+                "persistentVolumeClaimName": {
+                    "type": "string"
+                },
+                "requestedSize": {
+                    "type": "string"
+                },
+                "volumeName": {
+                    "type": "string"
+                }
+            }
+        },
+        "env": {
+            "type": "object"
+        },
+        "existingSecret": {
+            "type": "string"
+        },
+        "existingSecretPasswordKey": {
+            "type": "string"
+        },
+        "extraSecretValkeyConfigs": {
+            "type": "boolean"
+        },
+        "extraStorage": {
+            "type": "array"
+        },
+        "extraValkeyConfigs": {
+            "type": "array"
+        },
+        "extraValkeySecrets": {
+            "type": "array"
+        },
+        "fullnameOverride": {
+            "type": "string"
+        },
+        "global": {
+            "type": "object",
+            "properties": {
+                "imageRegistry": {
+                    "type": "string"
+                }
+            }
+        },
+        "image": {
+            "type": "object",
+            "properties": {
+                "registry": {
+                    "type": "string"
+                },
+                "pullPolicy": {
+                    "type": "string"
+                },
+                "repository": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "imagePullSecrets": {
+            "type": "array"
+        },
+        "initResources": {
+            "type": "object"
+        },
+        "lifecycleHooks": {
+            "type": "object"
+        },
+        "metrics": {
+            "type": "object",
+            "properties": {
+                "containerPorts": {
+                    "type": "object",
+                    "properties": {
+                        "http": {
+                            "type": "integer"
+                        }
+                    }
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "exporter": {
+                    "type": "object",
+                    "properties": {
+                        "extraExporterSecrets": {
+                            "type": "array"
+                        }
+                    }
+                },
+                "extraArgs": {
+                    "type": "object"
+                },
+                "image": {
+                    "type": "object",
+                    "properties": {
+                        "registry": {
+                            "type": "string"
+                        },
+                        "repository": {
+                            "type": "string"
+                        },
+                        "tag": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "resources": {
+                    "type": "object"
+                },
+                "service": {
+                    "type": "object",
+                    "properties": {
+                        "clusterIP": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "nameOverride": {
+            "type": "string"
+        },
+        "networkPolicy": {
+            "type": "object"
+        },
+        "nodeSelector": {
+            "type": "object"
+        },
+        "pdb": {
+            "type": "object",
+            "properties": {
+                "create": {
+                    "type": "boolean"
+                },
+                "maxUnavailable": {
+                    "type": "string"
+                },
+                "minAvailable": {
+                    "type": "string"
+                }
+            }
+        },
+        "podAnnotations": {
+            "type": "object"
+        },
+        "podDisruptionBudget": {
+            "type": "object"
+        },
+        "podLabels": {
+            "type": "object"
+        },
+        "podSecurityContext": {
+            "type": "object",
+            "properties": {
+                "fsGroup": {
+                    "type": "integer"
+                },
+                "runAsGroup": {
+                    "type": "integer"
+                },
+                "runAsUser": {
+                    "type": "integer"
+                }
+            }
+        },
+        "replicaCount": {
+            "type": "integer"
+        },
+        "resources": {
+            "type": "object"
+        },
+        "securityContext": {
+            "type": "object",
+            "properties": {
+                "capabilities": {
+                    "type": "object",
+                    "properties": {
+                        "drop": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "readOnlyRootFilesystem": {
+                    "type": "boolean"
+                },
+                "runAsNonRoot": {
+                    "type": "boolean"
+                },
+                "runAsUser": {
+                    "type": "integer"
+                }
+            }
+        },
+        "service": {
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "serviceAccount": {
+            "type": "object",
+            "properties": {
+                "annotations": {
+                    "type": "object"
+                },
+                "automount": {
+                    "type": "boolean"
+                },
+                "create": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "tls": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "tolerations": {
+            "type": "array"
+        },
+        "topologySpreadConstraints": {
+            "type": "object"
+        },
+        "valkeyConfig": {
+            "type": "string"
+        },
+        "valkeyLogLevel": {
+            "type": "string"
+        }
+    }
+}
