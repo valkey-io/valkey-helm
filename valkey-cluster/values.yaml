@@ -9,6 +9,8 @@ existingSecretPasswordKey: ""
 
 existingSecret: ""
 
+podManagementPolicy: "OrderedReady"
+
 # The same values will be used for service creation
 containerPorts:
   # Port on which Valkey will be exposed

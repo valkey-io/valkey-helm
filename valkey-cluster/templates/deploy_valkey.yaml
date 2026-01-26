@@ -14,6 +14,7 @@ metadata:
 spec:
   serviceName: {{ include "valkey-cluster.fullname" . }}-headless
   replicas: {{ .Values.replicaCount }}
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
   selector:
     matchLabels:
       {{- include "valkey-cluster.selectorLabels" . | nindent 6 }}
