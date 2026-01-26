@@ -76,3 +76,58 @@ tests:
           content:
             app.kubernetes.io/instance: RELEASE-NAME
             app.kubernetes.io/name: valkey
+  - it: should pin to pod-0 when replica.enabled is true
+    set:
+      replica.enabled: true
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-valkey-0
+  - it: should not pin to pod-0 when cluster.enabled is true
+    set:
+      cluster.enabled: true
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - notExists:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+  - it: should not pin to pod-0 when both replica.enabled and cluster.enabled are false
+    set:
+      replica.enabled: false
+      cluster.enabled: false
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - notExists:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+  - it: should have cluster bus port when cluster.enabled is true
+    set:
+      cluster.enabled: true
+      cluster.busPort: 16379
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - contains:
+          path: spec.ports
+          content:
+            port: 16379
+            targetPort: tcp-bus
+            protocol: TCP
+            name: tcp-bus
+  - it: should not have cluster bus port when cluster.enabled is false
+    set:
+      cluster.enabled: false
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - notContains:
+          path: spec.ports
+          content:
+            name: tcp-bus

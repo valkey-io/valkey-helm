@@ -58,6 +58,60 @@ replica:
 
 If fewer than `minReplicasToWrite` replicas are available, the master will reject write operations.
 
+### Cluster Mode
+
+Deploy a sharded Valkey cluster for horizontal scaling and high availability:
+
+```bash
+helm install valkey valkey/valkey --set cluster.enabled=true --set cluster.persistence.size=5Gi
+```
+
+**Architecture:**
+
+* Data is automatically sharded across multiple primary nodes (16384 hash slots distributed across shards)
+* Each shard can have replicas for high availability within the shard
+* Total nodes = `shards` × (1 + `replicasPerShard`)
+
+**Default Configuration (6 nodes):**
+
+```yaml
+cluster:
+  enabled: true
+  shards: 3              # Minimum 3 shards required
+  replicasPerShard: 1    # 1 replica per shard
+  persistence:
+    size: 5Gi            # Required
+```
+
+This creates 6 nodes: 3 primary shards + 3 replicas.
+
+**High Availability Configuration (15 nodes):**
+
+```yaml
+cluster:
+  enabled: true
+  shards: 5              # 5 primary shards
+  replicasPerShard: 2    # 2 replicas per shard for extra redundancy
+  persistence:
+    size: 10Gi
+    storageClass: "fast-ssd"
+```
+
+**Services:**
+
+* `valkey`: Main service for client connections (routes to all nodes)
+* `valkey-headless`: Headless service for pod discovery and cluster communication
+
+**Cluster Configuration Options:**
+
+```yaml
+cluster:
+  nodeTimeout: 15000          # Milliseconds before a node is considered failed
+  requireFullCoverage: true   # Require all hash slots covered to accept writes
+  allowReadsWhenDown: false   # Allow reads when cluster is in down state
+  busPort: 16379              # Port for inter-node cluster communication
+```
+
 ## Storage
 
 ### Standalone Storage
@@ -91,6 +145,20 @@ replica:
   persistence:
     size: 10Gi  # Required
     storageClass: "fast-ssd"  # Optional
+```
+
+### Cluster Storage
+
+Persistent storage is **mandatory** in cluster mode. Each node in the cluster maintains its own data partition and cluster state configuration.
+
+```yaml
+cluster:
+  enabled: true
+  persistence:
+    size: 10Gi  # Required
+    storageClass: "fast-ssd"  # Optional
+    accessModes:
+      - ReadWriteOnce
 ```
 
 ## Authentication
@@ -171,6 +239,35 @@ replica:
 **Important Notes:**
 
 * `replica.replicationUser` specifies which ACL user replicas use to authenticate
+* This user MUST be defined in `auth.aclUsers` with appropriate permissions
+* Minimum permissions: `+psync +replconf +ping`
+
+### Cluster with Authentication
+
+When using ACL authentication in cluster mode, nodes need credentials to authenticate with each other for cluster operations:
+
+```yaml
+auth:
+  enabled: true
+  usersExistingSecret: "my-valkey-users"
+  aclUsers:
+    default:
+      permissions: "~* &* +@all"
+    cluster-user:
+      permissions: "+psync +replconf +ping"
+
+cluster:
+  enabled: true
+  shards: 3
+  replicasPerShard: 1
+  replicationUser: "cluster-user"  # Must be defined in auth.aclUsers
+  persistence:
+    size: 5Gi
+```
+
+**Important Notes:**
+
+* `cluster.replicationUser` specifies which ACL user cluster nodes use to authenticate
 * This user MUST be defined in `auth.aclUsers` with appropriate permissions
 * Minimum permissions: `+psync +replconf +ping`
 
@@ -325,6 +422,17 @@ tls:
 | replica.persistence.size | string | `""` | Required if replica is enabled |
 | replica.persistence.storageClass | string | `""` |  |
 | replica.persistence.accessModes | list | `""` |  |
+| cluster.enabled | bool | `false` | Enable cluster mode (mutually exclusive with replica.enabled) |
+| cluster.shards | int | `3` | Number of primary shards (minimum 3) |
+| cluster.replicasPerShard | int | `1` | Number of replicas per shard |
+| cluster.replicationUser | string | `"default"` | ACL user for cluster authentication (must be in auth.aclUsers) |
+| cluster.nodeTimeout | int | `15000` | Milliseconds before node is considered failed |
+| cluster.requireFullCoverage | bool | `true` | Require all slots covered to accept writes |
+| cluster.allowReadsWhenDown | bool | `false` | Allow reads when cluster is down |
+| cluster.busPort | int | `16379` | Port for inter-node cluster communication |
+| cluster.persistence.size | string | `""` | Required if cluster is enabled |
+| cluster.persistence.storageClass | string | `""` |  |
+| cluster.persistence.accessModes | list | `["ReadWriteOnce"]` |  |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
