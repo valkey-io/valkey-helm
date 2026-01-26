@@ -196,6 +196,26 @@ metrics:
     enabled: true
 ```
 
+## PodDisruptionBudget
+
+A PodDisruptionBudget helps keep enough read-replicas available during voluntary disruptions like node drains or rolling updates.
+
+**Enable PDB (only works in replicated mode):**
+
+```yaml
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1  # Allow at most 1 pod to be unavailable
+```
+
+**Or use minAvailable to guarantee a specific number of replicas:**
+
+```yaml
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2  # Always keep at least 2 replicas running
+```
+
 ## TLS
 
 This chart supports TLS encryption for Valkey connections.
@@ -303,6 +323,10 @@ tls:
 | podAnnotations | object | `{}` |  |
 | podLabels | object | `{}` |  |
 | commonLabels | object | `{}` |  |
+| podDisruptionBudget.enabled | bool | `false` |  |
+| podDisruptionBudget.minAvailable | int or string | `null` | Minimum pods available during disruptions |
+| podDisruptionBudget.maxUnavailable | int or string | `1` | Maximum pods unavailable during disruptions |
+| podDisruptionBudget.unhealthyPodEvictionPolicy | string | `null` | Policy for evicting unhealthy pods |
 | podSecurityContext.fsGroup | int | `1000` |  |
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |

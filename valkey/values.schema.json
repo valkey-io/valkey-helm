@@ -538,6 +538,48 @@
         "topologySpreadConstraints": {
             "type": "array"
         },
+        "podDisruptionBudget": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "minAvailable": {
+                    "oneOf": [
+                        {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        {
+                            "type": "string",
+                            "pattern": "^[0-9]+%$"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "maxUnavailable": {
+                    "oneOf": [
+                        {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        {
+                            "type": "string",
+                            "pattern": "^[0-9]+%$"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "unhealthyPodEvictionPolicy": {
+                    "type": ["string", "null"],
+                    "enum": ["IfHealthyBudget", "AlwaysAllow", "", null]
+                }
+            }
+        },
         "valkeyConfig": {
             "type": "string"
         },

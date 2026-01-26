@@ -1,0 +1,179 @@
+suite: poddisruptionbudget configuration
+templates:
+  - templates/poddisruptionbudget.yaml
+tests:
+  - it: should not create PDB when disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create PDB when replica is disabled
+    set:
+      replica.enabled: false
+      podDisruptionBudget.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create PDB when enabled with replica
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: should use minAvailable when set
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: 2
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.minAvailable
+          value: 2
+      - isNull:
+          path: spec.maxUnavailable
+
+  - it: should use minAvailable over maxUnavailable when both set
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: 3
+      podDisruptionBudget.maxUnavailable: 2
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.minAvailable
+          value: 3
+      - isNull:
+          path: spec.maxUnavailable
+
+  - it: should use maxUnavailable when minAvailable is null
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: null
+      podDisruptionBudget.maxUnavailable: 2
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.maxUnavailable
+          value: 2
+      - isNull:
+          path: spec.minAvailable
+
+  - it: should support percentage values for minAvailable
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: "50%"
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.minAvailable
+          value: "50%"
+      - isNull:
+          path: spec.maxUnavailable
+
+  - it: should support percentage values for maxUnavailable
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: null
+      podDisruptionBudget.maxUnavailable: "25%"
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.maxUnavailable
+          value: "25%"
+      - isNull:
+          path: spec.minAvailable
+
+  - it: should include unhealthyPodEvictionPolicy when set
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.unhealthyPodEvictionPolicy: "IfHealthyBudget"
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: "IfHealthyBudget"
+
+  - it: should not include unhealthyPodEvictionPolicy when null
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.unhealthyPodEvictionPolicy: null
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - isNull:
+          path: spec.unhealthyPodEvictionPolicy
+
+  - it: should include standard labels
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - isNotNull:
+          path: metadata.labels["helm.sh/chart"]
+
+  - it: should work with custom fullname override
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      fullnameOverride: "my-custom-valkey"
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: metadata.name
+          value: "my-custom-valkey"
