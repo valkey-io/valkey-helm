@@ -2,8 +2,8 @@ apiVersion: v2
 name: valkey-cluster
 description: A Helm chart for Kubernetes
 type: application
-version: 0.7.6
-appVersion: "8.1.4"
+version: v0.9.3-cluster-mode
+appVersion: "9.0.1"
 home: https://valkey.io/valkey-helm/
 sources:
   - https://github.com/valkey-io/valkey-helm.git

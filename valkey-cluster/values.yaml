@@ -34,7 +34,7 @@ image:
   # Image pull policy (Always, IfNotPresent, Never)
   pullPolicy: IfNotPresent
   # Image tag (leave empty to use .Chart.AppVersion)
-  tag: "8.1.4"
+  tag: ""
 
 # List of image pull secrets (for private registries)
 imagePullSecrets: []
