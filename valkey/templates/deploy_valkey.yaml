@@ -198,6 +198,9 @@ spec:
               value: "{{ $val }}"
             {{- end }}
         {{- end }}
+      {{- with .Values.extraContainers }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
         - name: scripts
           configMap:
