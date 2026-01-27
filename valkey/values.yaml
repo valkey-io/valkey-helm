@@ -38,6 +38,9 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
+# Annotations for the Deployment/StatefulSet resource
+workloadAnnotations: {}
+
 # Common labels to add to all resources (Deployment, Service, ConfigMap, etc.)
 commonLabels: {}
 
