@@ -21,7 +21,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: test-auth
-      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      image: {{ include "valkey.image" . | quote }}
       command:
         - sh
         - -c
@@ -97,7 +97,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: test-auth
-      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      image: {{ include "valkey.image" . | quote }}
       command:
         - sh
         - -c
