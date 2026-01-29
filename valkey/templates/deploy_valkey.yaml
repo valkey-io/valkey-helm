@@ -90,9 +90,11 @@ spec:
           securityContext:
             {{- include "renderTplValues" (dict "value" .Values.securityContext "indent" 12 "root" $ ) }}
           env:
-            {{- range $key, $val := .Values.env }}
+            {{- range $key, $env := .Values.env }}
+              {{- if $env.enabled }}
             - name: {{ $key }}
-              value: "{{ $val }}"
+              value: "{{ $env.value }}"
+              {{- end }}
             {{- end }}
             - name: VALKEY_LOGLEVEL
               value: "{{ .Values.valkeyLogLevel }}"

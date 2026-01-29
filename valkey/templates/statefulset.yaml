@@ -103,9 +103,11 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
-            {{- range $key, $val := .Values.env }}
+            {{- range $key, $env := .Values.env }}
+              {{- if $env.enabled }}
             - name: {{ $key }}
-              value: "{{ $val }}"
+              value: "{{ $env.value }}"
+              {{- end }}
             {{- end }}
             - name: VALKEY_LOGLEVEL
               value: "{{ .Values.valkeyLogLevel }}"
