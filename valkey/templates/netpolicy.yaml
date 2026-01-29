@@ -3,14 +3,10 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "valkey.fullname" $ }}
-  {{- with .labels }}
   labels:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with .annotations }}
+    {{- include "renderTplValues" (dict "value" .labels "indent" 4 "root" $ ) }}
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- include "renderTplValues" (dict "value" .annotations "indent" 4 "root" $ ) }}
 spec:
   podSelector:
     matchLabels:
@@ -22,12 +18,8 @@ spec:
   {{- if .egress }}
     - Egress
   {{- end }}
-  {{- with .ingress }}
   ingress:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with .egress }}
+    {{- include "renderTplValues" (dict "value" .ingress "indent" 4 "root" $ ) }}
   egress:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- include "renderTplValues" (dict "value" .egress "indent" 4 "root" $ ) }}
 {{- end }}
