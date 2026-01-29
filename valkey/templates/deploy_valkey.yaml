@@ -197,6 +197,13 @@ spec:
             - name: {{ $key }}
               value: "{{ $val }}"
             {{- end }}
+          {{- with .Values.metrics.exporter.extraEnvFromSecrets }}
+          envFrom:
+            {{- range . }}
+            - secretRef:
+                name: {{ .name }}
+            {{- end }}
+          {{- end }}
         {{- end }}
       volumes:
         - name: scripts

@@ -328,6 +328,9 @@ metrics:
     extraEnvs: {}
     # Example:
     # LOG_LEVEL: info
+    extraEnvFromSecrets: []
+    # Example:
+    #  - name: my-secret
     securityContext: {}
       # Example:
       # runAsNonRoot: true
