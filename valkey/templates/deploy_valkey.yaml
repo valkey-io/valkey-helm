@@ -75,9 +75,7 @@ spec:
               readOnly: true
             {{- end }}
             {{- end }}
-            {{- with .Values.extraVolumeMounts }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            {{- include "renderTplValues" (dict "value" .Values.extraVolumeMounts "indent" 12 "root" $ ) }}
           resources:
             {{- include "renderTplValues" (dict "value" .Values.initResources "indent" 12 "root" $ ) }}
       {{- include "renderTplValues" (dict "value" .Values.extraInitContainers "indent" 8 "root" $ ) }}
@@ -140,9 +138,7 @@ spec:
             - name: {{ $config.name }}-valkey
               mountPath: {{ $config.mountPath }}
             {{- end }}
-            {{- with .Values.extraVolumeMounts }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            {{- include "renderTplValues" (dict "value" .Values.extraVolumeMounts "indent" 12 "root" $ ) }}
         {{- if .Values.metrics.enabled }}
         - name: metrics
           image: {{ include "valkey.metrics.exporter.image" . }}
@@ -169,9 +165,7 @@ spec:
           resources:
             {{- include "renderTplValues" (dict "value" .Values.metrics.exporter.resources "indent" 12 "root" $ ) }}
           volumeMounts:
-            {{- with .Values.extraVolumeMounts }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            {{- include "renderTplValues" (dict "value" .Values.metrics.exporter.extraVolumeMounts "indent" 12 "root" $ ) }}
           env:
             - name: REDIS_ALIAS
               value: {{ include "valkey.fullname" . }}
