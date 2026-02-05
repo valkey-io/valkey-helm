@@ -392,6 +392,19 @@
                         }
                     }
                 },
+                "persistentVolumeClaimRetentionPolicy": {
+                    "type": "object",
+                    "properties": {
+                        "whenDeleted": {
+                            "type": "string",
+                            "enum": ["Delete", "Retain"]
+                        },
+                        "whenScaled": {
+                            "type": "string",
+                            "enum": ["Delete", "Retain"]
+                        }
+                    }
+                },
                 "replicas": {
                     "type": "integer"
                 },
