@@ -169,9 +169,7 @@ spec:
           resources:
             {{- include "renderTplValues" (dict "value" .Values.metrics.exporter.resources "indent" 12 "root" $ ) }}
           volumeMounts:
-            {{- with .Values.extraVolumeMounts }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            {{- include "renderTplValues" (dict "value" .Values.metrics.exporter.extraVolumeMounts "indent" 12 "root" $ ) }}
           env:
             - name: REDIS_ALIAS
               value: {{ include "valkey.fullname" . }}
