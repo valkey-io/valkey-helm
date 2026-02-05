@@ -40,9 +40,7 @@ helm.sh/chart: {{ include "valkey.chart" . }}
 app.kubernetes.io/version: {{ mustRegexReplaceAllLiteral "@sha.*" .Values.image.tag "" | default .Chart.AppVersion | trunc 63 | trimSuffix "-" | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-{{- with .Values.commonLabels }}
-{{- toYaml . | nindent 0 }}
-{{- end }}
+{{- include "renderTplValues" (dict "value" .Values.commonLabels "indent" 8) }}
 {{- end }}
 
 {{/*
@@ -188,3 +186,14 @@ Validate replica authentication configuration
 {{- end }}
 {{- end -}}
 
+{{- define "renderTplValues" -}}
+{{- $val := .value -}}
+{{- $root := .root -}}
+{{- if and (not (kindIs "invalid" $val)) (or (typeOf $val) "string") (or (not (kindIs "map" $val)) (gt (len $val) 0)) (or (not (kindIs "slice" $val)) (gt (len $val) 0)) -}}
+  {{- if eq (typeOf $val) "string" -}}
+    {{- tpl $val $root | nindent .indent }}
+  {{- else -}}
+    {{- toYaml $val | nindent .indent }}
+  {{- end -}}
+{{- end -}}
+{{- end -}}

@@ -287,7 +287,9 @@ valkeyLogLevel: "notice"
 
 env: {}
   # Example:
-  # LOG_LEVEL: info
+  # LOG_LEVEL:
+  #   enabled: yes
+  #   value: info
 
 metrics:
   # Enable Prometheus exporter sidecar

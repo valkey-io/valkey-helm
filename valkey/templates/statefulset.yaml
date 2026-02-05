@@ -23,7 +23,7 @@ spec:
   - metadata:
       name: valkey-data
     spec:
-      accessModes: {{ toYaml .Values.replica.persistence.accessModes | nindent 8 }}
+      accessModes: {{- include "renderTplValues" (dict "value" .Values.replica.persistence.accessModes "indent" 8 "root" $ ) }}
       {{- if .Values.replica.persistence.storageClass }}
       storageClassName: {{ .Values.replica.persistence.storageClass | quote }}
       {{- end }}
@@ -34,16 +34,10 @@ spec:
     metadata:
       labels:
         {{- include "valkey.selectorLabels" . | nindent 8 }}
-        {{- with .Values.commonLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- include "renderTplValues" (dict "value" .Values.commonLabels "indent" 8 "root" $ ) }}
+        {{- include "renderTplValues" (dict "value" .Values.podLabels "indent" 8 "root" $ ) }}
       annotations:
-      {{- with .Values.podAnnotations }}
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- include "renderTplValues" (dict "value" .Values.podAnnotations "indent" 8 "root" $ ) }}
         checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 | quote }}
         {{- if .Values.valkeyConfig }}
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 | quote }}
@@ -56,15 +50,13 @@ spec:
       priorityClassName: {{ .Values.priorityClassName | quote }}
       {{- end }}
       securityContext:
-      {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- include "renderTplValues" (dict "value" .Values.podSecurityContext "indent" 8 "root" $ ) }}
       initContainers:
         - name: {{ include "valkey.fullname" . }}-init
           image: {{ include "valkey.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.securityContext }}
           securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- include "renderTplValues" (dict "value" .Values.securityContext "indent" 12 "root" $ ) }}
           command: [ "/scripts/init.sh" ]
           env:
             - name: POD_INDEX
@@ -99,13 +91,9 @@ spec:
               readOnly: true
             {{- end }}
             {{- end }}
-          {{- with .Values.initResources }}
           resources:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-      {{- with .Values.extraInitContainers }}
-      {{- toYaml . | nindent 8 }}
-      {{- end }}
+            {{- include "renderTplValues" (dict "value" .Values.initResources "indent" 12 "root" $ ) }}
+      {{- include "renderTplValues" (dict "value" .Values.extraInitContainers "indent" 8 "root" $ ) }}
       containers:
         - name: {{ include "valkey.fullname" . }}
           image: {{ include "valkey.image" . }}
@@ -113,15 +101,17 @@ spec:
           command: [ "valkey-server" ]
           args: [ "/data/conf/valkey.conf" ]
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
+            {{- include "renderTplValues" (dict "value" .Values.securityContext "indent" 12 "root" $ ) }}
           env:
             - name: POD_INDEX
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
-            {{- range $key, $val := .Values.env }}
+            {{- range $key, $env := .Values.env }}
+              {{- if $env.enabled }}
             - name: {{ $key }}
-              value: "{{ $val }}"
+              value: "{{ $env.value }}"
+              {{- end }}
             {{- end }}
             - name: VALKEY_LOGLEVEL
               value: "{{ .Values.valkeyLogLevel }}"
@@ -144,7 +134,7 @@ spec:
               command: [ "sh", "-c", "valkey-cli ping" ]
               {{- end }}
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- include "renderTplValues" (dict "value" .Values.resources "indent" 12 "root" $ ) }}
           volumeMounts:
             - name: valkey-data
               mountPath: /data
@@ -164,25 +154,17 @@ spec:
             - name: {{ $config.name }}-valkey
               mountPath: {{ $config.mountPath }}
             {{- end }}
-            {{- with .Values.extraVolumeMounts }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            {{- include "renderTplValues" (dict "value" .Values.extraVolumeMounts "indent" 12 "root" $ ) }}
         {{- if .Values.metrics.enabled }}
         - name: metrics
           image: {{ include "valkey.metrics.exporter.image" . }}
           imagePullPolicy: {{ .Values.metrics.exporter.image.pullPolicy | quote }}
-          {{- with .Values.metrics.exporter.securityContext }}
           securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.metrics.exporter.command }}
+            {{- include "renderTplValues" (dict "value" .Values.metrics.exporter.securityContext "indent" 12 "root" $ ) }}
           command:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.metrics.exporter.args }}
+            {{- include "renderTplValues" (dict "value" .Values.metrics.exporter.command "indent" 12 "root" $ ) }}
           args:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- include "renderTplValues" (dict "value" .Values.metrics.exporter.args "indent" 12 "root" $ ) }}
           ports:
             - name: metrics
               containerPort: {{ .Values.metrics.exporter.port }}
@@ -196,14 +178,10 @@ spec:
             httpGet:
               path: /
               port: metrics
-          {{- with .Values.metrics.exporter.resources }}
           resources:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.metrics.exporter.extraVolumeMounts }}
+            {{- include "renderTplValues" (dict "value" .Values.metrics.exporter.resources "indent" 12 "root" $ ) }}
           volumeMounts:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- include "renderTplValues" (dict "value" .Values.metrics.exporter.extraVolumeMounts "indent" 12 "root" $ ) }}
           env:
             - name: REDIS_ALIAS
               value: {{ include "valkey.fullname" . }}
@@ -267,23 +245,13 @@ spec:
             defaultMode: 0400
         {{- end }}
         {{- end }}
-        {{- with .Values.extraVolumes }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-      {{- with .Values.nodeSelector }}
+        {{- include "renderTplValues" (dict "value" .Values.extraVolumes "indent" 8 "root" $ ) }}
       nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
+        {{- include "renderTplValues" (dict "value" .Values.nodeSelector "indent" 8 "root" $ ) }}
       affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.topologySpreadConstraints }}
+        {{- include "renderTplValues" (dict "value" .Values.affinity "indent" 8 "root" $ ) }}
       topologySpreadConstraints:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
+        {{- include "renderTplValues" (dict "value" .Values.topologySpreadConstraints "indent" 8 "root" $ ) }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- include "renderTplValues" (dict "value" .Values.tolerations "indent" 8 "root" $ ) }}
 {{- end }}

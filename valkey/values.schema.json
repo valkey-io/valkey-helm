@@ -3,7 +3,7 @@
     "type": "object",
     "properties": {
         "affinity": {
-            "type": "object"
+            "type": ["string","object"]
         },
         "auth": {
             "type": "object",
@@ -26,7 +26,7 @@
             "type": "string"
         },
         "commonLabels": {
-            "type": "object"
+            "type": ["string","object"]
         },
         "dataStorage": {
             "type": "object",
@@ -77,16 +77,24 @@
             ]
         },
         "env": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "value": {
+                "type": "string"
+              }
+            }
         },
         "extraInitContainers": {
-            "type": "array"
+            "type": ["array", "string"]
         },
         "extraSecretValkeyConfigs": {
             "type": "boolean"
         },
         "extraVolumes": {
-            "type": "array"
+            "type": ["array", "string"]
         },
         "extraVolumeMounts": {
             "type": "array"
@@ -132,7 +140,7 @@
             "type": "array"
         },
         "initResources": {
-            "type": "object"
+            "type": ["object", "string"]
         },
         "metrics": {
             "type": "object",
@@ -144,10 +152,10 @@
                     "type": "object",
                     "properties": {
                         "args": {
-                            "type": "array"
+                            "type": ["array", "string"]
                         },
                         "command": {
-                            "type": "array"
+                            "type": ["array", "string"]
                         },
                         "extraEnvs": {
                             "type": "object"
@@ -156,7 +164,7 @@
                             "type": "array"
                         },
                         "extraVolumeMounts": {
-                            "type": "array"
+                            "type": ["array", "string"]
                         },
                         "image": {
                             "type": "object",
@@ -179,10 +187,10 @@
                             "type": "integer"
                         },
                         "resources": {
-                            "type": "object"
+                            "type": ["object", "string"]
                         },
                         "securityContext": {
-                            "type": "object"
+                            "type": ["object", "string"]
                         }
                     }
                 },
@@ -328,27 +336,26 @@
             "type": "object"
         },
         "nodeSelector": {
-            "type": "object"
+            "type": ["object", "string"]
         },
         "podAnnotations": {
-            "type": "object"
+            "type": ["string","object"]
         },
         "podLabels": {
-            "type": "object"
+            "type": ["string","object"]
         },
         "podSecurityContext": {
-            "type": "object",
-            "properties": {
-                "fsGroup": {
-                    "type": "integer"
-                },
-                "runAsGroup": {
-                    "type": "integer"
-                },
-                "runAsUser": {
-                    "type": "integer"
-                }
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "properties": {
+                "fsGroup": { "type": "integer" },
+                "runAsGroup": { "type": "integer" },
+                "runAsUser": { "type": "integer" }
+              }
             }
+          ]
         },
         "priorityClassName": {
             "type": "string"
@@ -436,32 +443,40 @@
             }
         },
         "resources": {
-            "type": "object"
+            "type": ["object", "string"]
         },
         "securityContext": {
-            "type": "object",
-            "properties": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
                 "capabilities": {
-                    "type": "object",
-                    "properties": {
-                        "drop": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
+                  "type": "object",
+                  "properties": {
+                    "drop": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
+                  }
                 },
                 "readOnlyRootFilesystem": {
-                    "type": "boolean"
+                  "type": "boolean"
                 },
                 "runAsNonRoot": {
-                    "type": "boolean"
+                  "type": "boolean"
                 },
                 "runAsUser": {
-                    "type": "integer"
+                  "type": "integer"
                 }
+              }
             }
+          ]
+        }
         },
         "service": {
             "type": "object",
@@ -533,10 +548,10 @@
             }
         },
         "tolerations": {
-            "type": "array"
+            "type": ["array", "string"]
         },
         "topologySpreadConstraints": {
-            "type": "array"
+            "type": ["array", "string"]
         },
         "valkeyConfig": {
             "type": "string"
@@ -544,5 +559,4 @@
         "valkeyLogLevel": {
             "type": "string"
         }
-    }
 }

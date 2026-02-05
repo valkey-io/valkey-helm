@@ -7,13 +7,9 @@ metadata:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/part-of: valkey
     app.kubernetes.io/component: podmonitor
-    {{- with .Values.metrics.podMonitor.extraLabels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-  {{- with .Values.metrics.podMonitor.annotations }}
+    {{- include "renderTplValues" (dict "value" .Values.metrics.podMonitor.extraLabels "indent" 4 "root" $ ) }}
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- include "renderTplValues" (dict "value" .Values.metrics.podMonitor.annotations "indent" 4 "root" $ ) }}
 spec:
   podMetricsEndpoints:
     - port: {{ .Values.metrics.podMonitor.port }}
@@ -26,18 +22,12 @@ spec:
       {{- with .Values.metrics.podMonitor.honorLabels }}
       honorLabels: {{ . }}
       {{- end }}
-      {{- with .Values.metrics.podMonitor.relabelings }}
       relabelings:
-        {{- toYaml . | nindent 6 }}
-      {{- end }}
-      {{- with .Values.metrics.podMonitor.metricRelabelings }}
+        {{- include "renderTplValues" (dict "value" .Values.metrics.podMonitor.relabelings "indent" 6 "root" $ ) }}
       metricRelabelings:
-        {{- toYaml . | nindent 6 }}
-      {{- end }}
-  {{- with .Values.metrics.podMonitor.podTargetLabels }}
+        {{- include "renderTplValues" (dict "value" .Values.metrics.podMonitor.metricRelabelings "indent" 6 "root" $ ) }}
   podTargetLabels:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- include "renderTplValues" (dict "value" .Values.metrics.podMonitor.podTargetLabels "indent" 4 "root" $ ) }}
   {{- with .Values.metrics.podMonitor.sampleLimit -}}
   sampleLimit: {{ . }}
   {{- end }}

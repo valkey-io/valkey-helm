@@ -7,13 +7,9 @@ metadata:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/component: metrics
     app.kubernetes.io/part-of: valkey
-    {{- with .Values.metrics.service.extraLabels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
+    {{- include "renderTplValues" (dict "value" .Values.metrics.service.extraLabels "indent" 4 "root" $ ) }}
   annotations:
-    {{- with .Values.metrics.service.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
+    {{- include "renderTplValues" (dict "value" .Values.metrics.service.annotations "indent" 4 "root" $ ) }}
 spec:
   type: {{ .Values.metrics.service.type }}
   ports:
