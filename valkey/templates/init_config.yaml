@@ -94,6 +94,19 @@ data:
       echo "dir /data"
     } >>"$VALKEY_CONFIG"
 
+    {{- if .Values.replica.enabled }}
+    # Announce configuration - required for Sentinel to discover and failover properly
+    # All pods (master and replicas) must announce their resolvable hostname
+    MY_HOSTNAME="{{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    log "Configuring announce-ip as $MY_HOSTNAME"
+    {
+      echo ""
+      echo "# Announce configuration for Sentinel discovery"
+      echo "replica-announce-ip $MY_HOSTNAME"
+      echo "replica-announce-port {{ .Values.service.port }}"
+    } >>"$VALKEY_CONFIG"
+    {{- end }}
+
     {{- if .Values.auth.enabled }}
     # Create secure directory for ACL file
     log "Creating /etc/valkey directory for ACL file"
@@ -170,13 +183,15 @@ data:
         echo ""
         echo "# Replica Configuration"
         echo "replicaof $MASTER_HOST $MASTER_PORT"
-        echo "replica-announce-ip {{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
         {{- if .Values.replica.disklessSync }}
         echo ""
         echo "# Diskless replication"
         echo "repl-diskless-sync yes"
         echo "repl-diskless-sync-delay 5"
         {{- end }}
+        echo ""
+        echo "# Replica priority for Sentinel failover (lower = higher priority, 0 = never promote)"
+        echo "replica-priority 100"
         {{- if .Values.auth.enabled }}
         echo ""
         echo "# Master authentication"

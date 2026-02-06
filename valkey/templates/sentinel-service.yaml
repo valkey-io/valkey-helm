@@ -1,0 +1,35 @@
+{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "valkey.fullname" . }}-sentinel
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sentinel
+  {{- with .Values.replica.sentinel.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.replica.sentinel.service.type }}
+  {{- if and (eq .Values.replica.sentinel.service.type "ClusterIP") .Values.replica.sentinel.service.clusterIP }}
+  clusterIP: {{ .Values.replica.sentinel.service.clusterIP }}
+  {{- end }}
+  {{- if and (eq .Values.replica.sentinel.service.type "LoadBalancer") .Values.replica.sentinel.service.loadBalancerClass }}
+  loadBalancerClass: {{ .Values.replica.sentinel.service.loadBalancerClass }}
+  {{- end }}
+  ports:
+    - name: sentinel
+      port: {{ .Values.replica.sentinel.service.port }}
+      targetPort: sentinel
+      protocol: TCP
+      {{- if and (eq .Values.replica.sentinel.service.type "NodePort") (gt (int .Values.replica.sentinel.service.nodePort) 0) }}
+      nodePort: {{ .Values.replica.sentinel.service.nodePort }}
+      {{- end }}
+      {{- if .Values.replica.sentinel.service.appProtocol }}
+      appProtocol: {{ .Values.replica.sentinel.service.appProtocol }}
+      {{- end }}
+  selector:
+    {{- include "valkey.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: sentinel
+{{- end }}

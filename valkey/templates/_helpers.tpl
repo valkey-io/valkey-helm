@@ -188,3 +188,34 @@ Validate replica authentication configuration
 {{- end }}
 {{- end -}}
 
+{{/*
+Validate sentinel configuration
+*/}}
+{{- define "valkey.validateSentinelConfig" -}}
+{{- if .Values.replica.sentinel.enabled }}
+  {{- if not .Values.replica.enabled }}
+    {{- fail "Sentinel mode requires replication to be enabled. Please set replica.enabled=true along with sentinel.enabled=true" }}
+  {{- end }}
+  {{- if lt (int .Values.replica.sentinel.replicas) 1 }}
+    {{- fail "Sentinel requires at least 1 replica. Recommend 3 or more for proper quorum." }}
+  {{- end }}
+  {{- if and .Values.auth.enabled (not (hasKey .Values.auth.aclUsers .Values.replica.replicationUser)) }}
+    {{- fail (printf "Sentinel with auth requires replication user '%s' to be defined in auth.aclUsers" .Values.replica.replicationUser) }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Sentinel fullname
+*/}}
+{{- define "valkey.sentinel.fullname" -}}
+{{ include "valkey.fullname" . }}-sentinel
+{{- end -}}
+
+{{/*
+Sentinel headless service name
+*/}}
+{{- define "valkey.sentinel.headlessServiceName" -}}
+{{ include "valkey.fullname" . }}-sentinel-headless
+{{- end -}}
+
