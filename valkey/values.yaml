@@ -250,6 +250,73 @@ replica:
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
   persistentVolumeClaimRetentionPolicy: {}
 
+  # Sentinel configuration for automatic failover (requires replica.enabled: true)
+  sentinel:
+    # Enable Sentinel for high availability and automatic failover
+    enabled: false
+
+    # Number of sentinel instances (minimum 3 recommended for proper quorum)
+    replicas: 3
+
+    # Port on which sentinel will listen
+    port: 26379
+
+    # Master set name used by sentinel to identify the monitored master
+    masterSet: "mymaster"
+
+    # Quorum - number of sentinels that must agree on master failure
+    # Default: 2 (works well with 3 sentinels - majority)
+    # Recommendation: floor(replicas/2) + 1 for a majority
+    quorum: 2
+
+    # Time in milliseconds before sentinel considers an instance down
+    downAfterMilliseconds: 30000
+
+    # Timeout for failover operation in milliseconds
+    failoverTimeout: 180000
+
+    # Number of replicas to reconfigure in parallel after failover
+    parallelSyncs: 1
+
+    # Resource limits/requests for sentinel container
+    resources: {}
+      # Example:
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+      # requests:
+      #   cpu: 50m
+      #   memory: 64Mi
+
+    # Service configuration for sentinel
+    service:
+      # Service type (ClusterIP, NodePort, LoadBalancer)
+      type: ClusterIP
+      # Port on which the sentinel service will be exposed
+      port: 26379
+      # Optional annotations for the sentinel service
+      annotations: {}
+      # NodePort value (if service.type is NodePort)
+      nodePort: 0
+      # ClusterIP value
+      clusterIP: ""
+      # Application protocol
+      appProtocol: ""
+      # Class of a load balancer implementation
+      loadBalancerClass: ""
+
+    # Persistence configuration for sentinel state
+    persistence:
+      # Enable persistence for sentinel (stores sentinel state across restarts)
+      enabled: false
+      # Size of the PVC for sentinel data
+      size: "100Mi"
+      # Storage class name (empty = use default storage class)
+      storageClass: ""
+      # Access modes for the PVC
+      accessModes:
+        - ReadWriteOnce
+
 tls:
   # Enable TLS
   enabled: false

@@ -432,6 +432,84 @@
                             "type": "string"
                         }
                     }
+                },
+                "sentinel": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "replicas": {
+                            "type": "integer"
+                        },
+                        "port": {
+                            "type": "integer"
+                        },
+                        "masterSet": {
+                            "type": "string"
+                        },
+                        "quorum": {
+                            "type": "integer"
+                        },
+                        "downAfterMilliseconds": {
+                            "type": "integer"
+                        },
+                        "failoverTimeout": {
+                            "type": "integer"
+                        },
+                        "parallelSyncs": {
+                            "type": "integer"
+                        },
+                        "resources": {
+                            "type": "object"
+                        },
+                        "service": {
+                            "type": "object",
+                            "properties": {
+                                "annotations": {
+                                    "type": "object"
+                                },
+                                "appProtocol": {
+                                    "type": "string"
+                                },
+                                "clusterIP": {
+                                    "type": "string"
+                                },
+                                "loadBalancerClass": {
+                                    "type": "string"
+                                },
+                                "nodePort": {
+                                    "type": "integer"
+                                },
+                                "port": {
+                                    "type": "integer"
+                                },
+                                "type": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "persistence": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {
+                                    "type": "boolean"
+                                },
+                                "size": {
+                                    "type": "string"
+                                },
+                                "storageClass": {
+                                    "type": "string"
+                                },
+                                "accessModes": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
