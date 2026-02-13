@@ -103,6 +103,41 @@ tests:
           path: data["init.sh"]
           pattern: "/valkey-auth-secret/aclConfig"
 
+  - it: should use passwordKey for replica authentication when configured
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "default"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          passwordKey: "valkey-password"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REPL_PASSWORD=\$\(get_user_password "default" "valkey-password"\)'
+
+  - it: should default to username for replica authentication when passwordKey not configured
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "default"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REPL_PASSWORD=\$\(get_user_password "default" "default"\)'
+
   - it: should have correct metadata
     asserts:
       - isKind:

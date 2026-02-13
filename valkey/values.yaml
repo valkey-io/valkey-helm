@@ -46,12 +46,15 @@ podSecurityContext:
   fsGroup: 1000
   runAsUser: 1000
   runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
 # Priority class name for pod scheduling (leave empty to use cluster's default)
 priorityClassName: ""
 
 # Security context for the Valkey containers
 securityContext:
+  allowPrivilegeEscalation: false
   capabilities:
     drop:
       - ALL
@@ -241,6 +244,11 @@ replica:
     # Access modes for the PVC
     accessModes:
       - ReadWriteOnce
+
+  # PersistentVolumeClaim retention policy for StatefulSet
+  # Controls when PVCs are deleted (requires Kubernetes 1.23+)
+  # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
+  persistentVolumeClaimRetentionPolicy: {}
 
 tls:
   # Enable TLS

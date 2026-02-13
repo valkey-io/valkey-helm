@@ -153,3 +153,104 @@ tests:
           value:
             - name: globalregistrykey
             - name: localregistrykey
+
+  - it: should render extraVolumes
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      extraVolumes:
+        - name: extra-config
+          configMap:
+            name: my-config
+        - name: extra-secret
+          secret:
+            secretName: my-secret
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-config
+            configMap:
+              name: my-config
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-secret
+            secret:
+              secretName: my-secret
+
+  - it: should render extraVolumeMounts for main container
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      extraVolumeMounts:
+        - name: extra-config
+          mountPath: /extra-config
+          readOnly: true
+        - name: extra-data
+          mountPath: /extra/data
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-config
+            mountPath: /extra-config
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-data
+            mountPath: /extra/data
+
+  - it: should render both extraVolumes and extraVolumeMounts together
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      extraVolumes:
+        - name: extra-config
+          configMap:
+            name: my-config
+      extraVolumeMounts:
+        - name: extra-config
+          mountPath: /extra-config
+          readOnly: true
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-config
+            configMap:
+              name: my-config
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-config
+            mountPath: /extra-config
+            readOnly: true
+
+  - it: should include persistentVolumeClaimRetentionPolicy when configured
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.persistentVolumeClaimRetentionPolicy:
+        whenDeleted: Retain
+        whenScaled: Delete
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Retain
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenScaled
+          value: Delete
