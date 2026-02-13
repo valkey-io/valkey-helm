@@ -227,7 +227,7 @@ data:
       cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
     fi
 
-    {{- if and (.Values.metrics.enabled .Values.auth.enabled) }}
+    {{- if and .Values.metrics.enabled .Values.auth.enabled }}
     # Remove or reset existing password map if present (it may be read-only from previous run)
     log "Preparing exporter password map file at /etc/valkey/exporter.map"
     if [ -f /etc/valkey/exporter.map ]; then
