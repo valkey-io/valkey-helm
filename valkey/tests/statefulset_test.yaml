@@ -24,6 +24,38 @@ tests:
           path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
           value: "5Gi"
 
+  - it: should fallback to emptyDir when replica persistence is disabled
+    set:
+      replica.enabled: true
+      replica.persistence.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            emptyDir: {}
+      - notExists:
+          path: spec.volumeClaimTemplates
+
+  - it: should succeed when replica persistence is disabled and emptyDir sizeLimit is defined
+    set:
+      replica.enabled: true
+      replica.persistence.enabled: false
+      replica.persistence.emptyDir.sizeLimit: "1Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            emptyDir:
+              sizeLimit: "1Gi"
+
   - it: should succeed when replica enabled with custom storageClass
     set:
       replica.enabled: true

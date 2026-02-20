@@ -19,6 +19,7 @@ spec:
   selector:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
+  {{- if .Values.replica.persistence.enabled }}
   volumeClaimTemplates:
   - metadata:
       name: valkey-data
@@ -30,6 +31,7 @@ spec:
       resources:
         requests:
           storage: {{ .Values.replica.persistence.size | quote }}
+  {{- end }}
   template:
     metadata:
       labels:
@@ -213,6 +215,10 @@ spec:
             {{- end }}
         {{- end }}
       volumes:
+        {{- if not .Values.replica.persistence.enabled }}
+        - name: valkey-data
+          emptyDir: {{- toYaml .Values.replica.persistence.emptyDir | nindent 12 }}
+        {{- end }}
         - name: scripts
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts
