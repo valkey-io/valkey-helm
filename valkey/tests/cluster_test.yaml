@@ -2,6 +2,7 @@ suite: cluster configuration
 templates:
   - templates/cluster-statefulset.yaml
   - templates/cluster-script.yaml
+  - templates/cluster-init-job.yaml
   - templates/service-headless.yaml
   - templates/service.yaml
   - templates/init_config.yaml
@@ -123,6 +124,44 @@ tests:
             containerPort: 16379
             protocol: TCP
 
+  # StatefulSet runs valkey-server directly (no background init script)
+  - it: should run valkey-server directly without background init script
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: [ "valkey-server" ]
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [ "/data/conf/valkey.conf" ]
+
+  - it: should not mount cluster-script volume in StatefulSet container
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cluster-script
+            mountPath: /cluster-script
+
+  - it: should not define cluster-script volume in StatefulSet
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: cluster-script
+          any: true
+
   # Init container tests
   - it: should have init container with cluster environment variables
     set:
@@ -189,7 +228,7 @@ tests:
             targetPort: tcp-bus
             protocol: TCP
 
-  # Cluster init script tests
+  # Cluster init script ConfigMap tests
   - it: should create cluster-script ConfigMap when cluster is enabled
     set:
       cluster.enabled: true
@@ -224,34 +263,76 @@ tests:
           path: data["init-cluster.sh"]
           pattern: "--cluster create"
 
-  - it: should run cluster init script as background process
+  # --- Cluster Init Job tests ---
+  - it: should create cluster-init Job when cluster is enabled
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
-    template: templates/cluster-statefulset.yaml
+    template: templates/cluster-init-job.yaml
     asserts:
-      - matchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: "/cluster-script/init-cluster.sh &"
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-init
 
-  - it: should mount cluster-script volume in container
+  - it: Job should have Helm hook annotations for post-install and post-upgrade
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
-    template: templates/cluster-statefulset.yaml
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: "post-install,post-upgrade"
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "0"
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: "before-hook-creation"
+
+  - it: Job should have backoffLimit of 6
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.backoffLimit
+          value: 6
+
+  - it: Job should use OnFailure restart policy
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: OnFailure
+
+  - it: Job should run init-cluster.sh from cluster-script ConfigMap
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: [ "/bin/sh", "/cluster-script/init-cluster.sh" ]
+
+  - it: Job should mount cluster-script volume
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: cluster-script
             mountPath: /cluster-script
-
-  - it: should define cluster-script volume
-    set:
-      cluster.enabled: true
-      cluster.persistence.size: "5Gi"
-    template: templates/cluster-statefulset.yaml
-    asserts:
       - contains:
           path: spec.template.spec.volumes
           content:
@@ -260,94 +341,237 @@ tests:
               name: RELEASE-NAME-valkey-cluster-script
               defaultMode: 365
 
-  # Authentication tests
-  - it: should fail when cluster auth enabled but replication user not in aclUsers
+  - it: Job should have CLUSTER_NODE_COUNT and CLUSTER_REPLICAS_PER_SHARD env vars
+    set:
+      cluster.enabled: true
+      cluster.shards: 4
+      cluster.replicasPerShard: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLUSTER_NODE_COUNT
+            value: "12"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLUSTER_REPLICAS_PER_SHARD
+            value: "2"
+
+  - it: Job should use same image as StatefulSet
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
-      auth.enabled: true
-      cluster.replicationUser: "clusteruser"
-      auth.aclUsers:
-        default:
-          password: "test"
-          permissions: "~* &* +@all"
-    template: templates/cluster-statefulset.yaml
+      image.registry: "myregistry.io"
+      image.repository: "valkey/valkey"
+      image.tag: "7.0.0"
+    template: templates/cluster-init-job.yaml
     asserts:
-      - failedTemplate:
-          errorPattern: "Cluster replication user 'clusteruser'.*must be defined in auth.aclUsers.*"
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "myregistry.io/valkey/valkey:7.0.0"
 
-  - it: should succeed when cluster auth is properly configured
+  - it: Job should use pod security context
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
-      auth.enabled: true
-      cluster.replicationUser: "default"
-      auth.aclUsers:
-        default:
-          password: "testpass"
-          permissions: "~* &* +@all"
-    template: templates/cluster-statefulset.yaml
+      podSecurityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+    template: templates/cluster-init-job.yaml
     asserts:
-      - isKind:
-          of: StatefulSet
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1000
 
-  # TLS tests
-  - it: should configure TLS volume mount in cluster mode
+  - it: Job should use container security context
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+
+  - it: Job should use initResources when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      initResources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 128Mi
+
+  - it: Job should use service account
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.create: true
+      serviceAccount.name: "my-sa"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "my-sa"
+
+  - it: Job should not automount service account token
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: Job should include common labels
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["helm.sh/chart"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+
+  - it: Job should include pod labels and annotations when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      podLabels:
+        custom-label: my-value
+      podAnnotations:
+        custom-annotation: my-annotation
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["custom-label"]
+          value: my-value
+      - equal:
+          path: spec.template.metadata.annotations["custom-annotation"]
+          value: my-annotation
+
+  - it: Job should include node selector when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      nodeSelector:
+        kubernetes.io/os: linux
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/os"]
+          value: linux
+
+  - it: Job should include tolerations when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "valkey"
+          effect: "NoSchedule"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "dedicated"
+            operator: "Equal"
+            value: "valkey"
+            effect: "NoSchedule"
+
+  - it: Job should include affinity when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-type
+                    operator: In
+                    values:
+                      - cache
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.affinity.nodeAffinity
+
+  - it: Job should include priority class name when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      priorityClassName: "high-priority"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: "high-priority"
+
+  # --- Job TLS tests ---
+  - it: Job should mount TLS volume when TLS is enabled
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
       tls.enabled: true
       tls.existingSecret: "valkey-tls-secret"
-    template: templates/cluster-statefulset.yaml
+    template: templates/cluster-init-job.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: RELEASE-NAME-valkey-tls
             mountPath: /tls
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: RELEASE-NAME-valkey-tls
+            secret:
+              secretName: valkey-tls-secret
+              defaultMode: 256
 
-  # Init config tests (cluster mode config generation)
-  - it: should generate cluster config in init script
+  - it: Job should not mount TLS volume when TLS is disabled
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
-      cluster.nodeTimeout: 20000
-    template: templates/init_config.yaml
+      tls.enabled: false
+    template: templates/cluster-init-job.yaml
     asserts:
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: "cluster-enabled yes"
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: "cluster-config-file /data/nodes.conf"
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: "cluster-node-timeout 20000"
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
 
-  - it: should configure cluster-require-full-coverage when disabled
-    set:
-      cluster.enabled: true
-      cluster.persistence.size: "5Gi"
-      cluster.requireFullCoverage: false
-    template: templates/init_config.yaml
-    asserts:
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: "cluster-require-full-coverage no"
-
-  - it: should configure cluster-allow-reads-when-down when enabled
-    set:
-      cluster.enabled: true
-      cluster.persistence.size: "5Gi"
-      cluster.allowReadsWhenDown: true
-    template: templates/init_config.yaml
-    asserts:
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: "cluster-allow-reads-when-down yes"
-
-  # Cluster auth secret mount tests (bug fix: ensure main container has access to plaintext password)
-  - it: should mount valkey-users-secret to main container when auth.usersExistingSecret is set
+  # --- Job Authentication tests ---
+  - it: Job should mount valkey-users-secret when usersExistingSecret is set
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
@@ -356,7 +580,7 @@ tests:
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
-    template: templates/cluster-statefulset.yaml
+    template: templates/cluster-init-job.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -364,8 +588,15 @@ tests:
             name: valkey-users-secret
             mountPath: /valkey-users-secret
             readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-users-secret
+            secret:
+              secretName: my-valkey-users
+              defaultMode: 256
 
-  - it: should mount valkey-auth-secret to main container when inline passwords are used
+  - it: Job should mount valkey-auth-secret when inline passwords are used
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
@@ -374,7 +605,7 @@ tests:
         default:
           password: "testpass"
           permissions: "~* &* +@all"
-    template: templates/cluster-statefulset.yaml
+    template: templates/cluster-init-job.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -382,8 +613,15 @@ tests:
             name: valkey-auth-secret
             mountPath: /valkey-auth-secret
             readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-auth-secret
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 256
 
-  - it: should mount both auth secrets to main container when both are configured
+  - it: Job should mount both auth secrets when both are configured
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
@@ -393,7 +631,7 @@ tests:
         default:
           permissions: "~* &* +@all"
           password: "fallback"
-    template: templates/cluster-statefulset.yaml
+    template: templates/cluster-init-job.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -408,7 +646,25 @@ tests:
             mountPath: /valkey-auth-secret
             readOnly: true
 
-  # Cluster init script password retrieval tests (bug fix: read from secret, not ACL hash)
+  - it: Job should not mount auth secrets when auth is disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: false
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+          any: true
+
+  # --- Cluster init script password retrieval tests ---
   - it: cluster-script should read password from valkey-users-secret when usersExistingSecret is set
     set:
       cluster.enabled: true
@@ -495,3 +751,151 @@ tests:
       - notMatchRegex:
           path: data["init-cluster.sh"]
           pattern: 'grep.*users\.acl'
+
+  # Authentication tests (StatefulSet)
+  - it: should fail when cluster auth enabled but replication user not in aclUsers
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      cluster.replicationUser: "clusteruser"
+      auth.aclUsers:
+        default:
+          password: "test"
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Cluster replication user 'clusteruser'.*must be defined in auth.aclUsers.*"
+
+  - it: should succeed when cluster auth is properly configured
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      cluster.replicationUser: "default"
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  # TLS tests (StatefulSet)
+  - it: should configure TLS volume mount in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls-secret"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
+
+  # Init config tests (cluster mode config generation)
+  - it: should generate cluster config in init script
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.nodeTimeout: 20000
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-enabled yes"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-config-file /data/nodes.conf"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-node-timeout 20000"
+
+  - it: should configure cluster-require-full-coverage when disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.requireFullCoverage: false
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-require-full-coverage no"
+
+  - it: should configure cluster-allow-reads-when-down when enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.allowReadsWhenDown: true
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-allow-reads-when-down yes"
+
+  # Cluster auth secret mount tests (StatefulSet - main container still needs ACL for Valkey server)
+  - it: should mount valkey-users-secret to main container when auth.usersExistingSecret is set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+            mountPath: /valkey-users-secret
+            readOnly: true
+
+  - it: should mount valkey-auth-secret to main container when inline passwords are used
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
+            readOnly: true
+
+  - it: should mount both auth secrets to main container when both are configured
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "fallback"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+            mountPath: /valkey-users-secret
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
+            readOnly: true
