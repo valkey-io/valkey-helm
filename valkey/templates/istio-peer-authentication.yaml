@@ -1,0 +1,21 @@
+{{- if .Values.istio.enabled }}
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: {{ include "valkey.fullname" . }}
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    {{- with .Values.istio.peerAuthentication.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.istio.peerAuthentication.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "valkey.selectorLabels" . | nindent 6 }}
+  mtls:
+    mode: {{ .Values.istio.peerAuthentication.mode }}
+{{- end }}

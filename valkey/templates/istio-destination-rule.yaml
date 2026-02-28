@@ -1,0 +1,41 @@
+{{- if .Values.istio.enabled }}
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: {{ include "valkey.fullname" . }}
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    {{- with .Values.istio.destinationRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.istio.destinationRule.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  host: {{ include "valkey.fullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+  trafficPolicy:
+    tls:
+      mode: {{ .Values.istio.destinationRule.mode }}
+{{- if or .Values.replica.enabled .Values.cluster.enabled }}
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: {{ include "valkey.headlessServiceName" . }}
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    {{- with .Values.istio.destinationRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.istio.destinationRule.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  host: {{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+  trafficPolicy:
+    tls:
+      mode: {{ .Values.istio.destinationRule.mode }}
+{{- end }}
+{{- end }}

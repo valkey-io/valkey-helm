@@ -330,6 +330,31 @@ tls:
   # Require that clients authenticate with a certificate
   requireClientCertificate: false
 
+istio:
+  # Enable Istio
+  enabled: false
+
+  # PeerAuthentication controls mTLS enforcement on inbound connections
+  peerAuthentication:
+    # mTLS mode for inbound traffic (STRICT, PERMISSIVE, DISABLE, UNSET)
+    # STRICT: Require mTLS on all ports
+    # PERMISSIVE: Accept both plaintext and mTLS
+    mode: STRICT
+    # Additional labels for the PeerAuthentication resource
+    labels: {}
+    # Additional annotations for the PeerAuthentication resource
+    annotations: {}
+
+  # DestinationRule configures mTLS for outbound connections to Valkey services
+  destinationRule:
+    # TLS mode for outbound traffic (DISABLE, SIMPLE, MUTUAL, ISTIO_MUTUAL)
+    # ISTIO_MUTUAL: Use Istio-managed certificates for mTLS
+    mode: ISTIO_MUTUAL
+    # Additional labels for the DestinationRule resource
+    labels: {}
+    # Additional annotations for the DestinationRule resource
+    annotations: {}
+
 # Node selector for pod assignment
 nodeSelector: {}
 

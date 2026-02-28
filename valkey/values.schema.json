@@ -180,6 +180,54 @@
         "initResources": {
             "type": "object"
         },
+        "istio": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "peerAuthentication": {
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": [
+                                "STRICT",
+                                "PERMISSIVE",
+                                "DISABLE",
+                                "UNSET"
+                            ]
+                        },
+                        "labels": {
+                            "type": "object"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        }
+                    }
+                },
+                "destinationRule": {
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": [
+                                "DISABLE",
+                                "SIMPLE",
+                                "MUTUAL",
+                                "ISTIO_MUTUAL"
+                            ]
+                        },
+                        "labels": {
+                            "type": "object"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
         "metrics": {
             "type": "object",
             "properties": {
