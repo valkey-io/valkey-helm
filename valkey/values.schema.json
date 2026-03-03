@@ -277,9 +277,6 @@
                                     "type": "integer"
                                 }
                             }
-                        },
-                        "type": {
-                            "type": "string"
                         }
                     }
                 },
@@ -434,9 +431,6 @@
                         },
                         "port": {
                             "type": "integer"
-                        },
-                        "type": {
-                            "type": "string"
                         }
                     }
                 }
