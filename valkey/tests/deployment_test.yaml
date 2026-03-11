@@ -246,6 +246,29 @@ tests:
             - name: globalregistrykey
             - name: localregistrykey
 
+  - it: should have readiness probe on main container
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command
+          value: ["sh", "-c", "valkey-cli ping"]
+
+  - it: should have TLS readiness probe when TLS enabled
+    set:
+      tls.enabled: true
+      tls.existingSecret: "my-tls-secret"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "--tls ping"
+
   - it: should render extraVolumes
     set:
       extraVolumes:
