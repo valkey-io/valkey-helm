@@ -110,7 +110,11 @@ data:
 
     # Query Sentinel: returns first line of get-master-addr-by-name (hostname or IP)
     get_master_from_sentinel() {
-      valkey-cli -h "${SENTINEL_SVC}" -p "${SENTINEL_PORT}" ${AUTH_ARG} \
+      valkey-cli -h "${SENTINEL_SVC}" \
+        {{- if .Values.tls.enabled }}
+        --tls --cacert /tls/{{ .Values.tls.caPublicKey }} \
+        {{- end }}
+         -p "${SENTINEL_PORT}" ${AUTH_ARG} \
         SENTINEL get-master-addr-by-name "${MASTER_SET}" 2>/dev/null | head -1 || true
     }
 
@@ -127,7 +131,11 @@ data:
 
     wait_for_sentinel() {
       log "Waiting for Sentinel at ${SENTINEL_SVC}:${SENTINEL_PORT}..."
-      until valkey-cli -h "${SENTINEL_SVC}" -p "${SENTINEL_PORT}" ${AUTH_ARG} PING 2>/dev/null | grep -q PONG; do
+      until valkey-cli -h "${SENTINEL_SVC}" \
+        {{- if .Values.tls.enabled }}
+        --tls --cacert /tls/{{ .Values.tls.caPublicKey }} \
+        {{- end }}
+        -p "${SENTINEL_PORT}" ${AUTH_ARG} PING 2>/dev/null | grep -q PONG; do
         sleep 2
       done
       log "Sentinel is ready."

@@ -77,6 +77,13 @@ spec:
               readOnly: true
             {{- end }}
             {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- with .Values.haproxy.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           resources:
             {{- toYaml .Values.haproxy.sentinelWatcher.resources | nindent 12 }}
           securityContext:
@@ -100,5 +107,14 @@ spec:
           secret:
             secretName: {{ include "valkey.fullname" . }}-auth
         {{- end }}
+        {{- end }}
+        {{- if .Values.tls.enabled }}
+        - name: {{ include "valkey.fullname" . }}-tls
+          secret:
+            secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            defaultMode: 0400
+        {{- end }}
+        {{- with .Values.haproxy.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
 {{- end }}
