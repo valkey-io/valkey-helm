@@ -375,3 +375,4 @@ tls:
 | topologySpreadConstraints | list | `[]` |  |
 | valkeyConfig | string | `""` |  |
 | valkeyLogLevel | string | `"notice"` |  |
+| workloadAnnotations | object | `{}` |  |
