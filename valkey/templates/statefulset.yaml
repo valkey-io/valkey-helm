@@ -30,6 +30,20 @@ spec:
       resources:
         requests:
           storage: {{ .Values.replica.persistence.size | quote }}
+  {{- if and .Values.replica.sentinel.enabled .Values.replica.sentinel.persistence.enabled }}
+  - metadata:
+      name: sentinel-data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      {{- if .Values.replica.sentinel.persistence.storageClass }}
+      storageClassName: {{ .Values.replica.sentinel.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.replica.sentinel.persistence.size | quote }}
+  {{- end }}
+
   template:
     metadata:
       labels:
