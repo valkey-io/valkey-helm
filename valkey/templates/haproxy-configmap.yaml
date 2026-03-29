@@ -47,7 +47,7 @@ data:
       tcp-check connect
       tcp-check comment PING
       tcp-check send "PING\r\n"
-      tcp-check expect string "+PONG"
+      tcp-check expect rstring "\\+PONG|-NOAUTH"
       timeout connect 2s
       timeout check 5s
       # Read backend uses health checks since any replica is acceptable.
@@ -120,7 +120,8 @@ data:
 
     # Extract server index from a hostname like "valkey-1.valkey-headless..."
     index_from_host() {
-      echo "$1" | grep -oE 'valkey-[0-9]+' | grep -oE '[0-9]+' | head -1
+      local host="${1%%.*}"
+      echo "${host##*-}"
     }
 
     wait_for_socket() {

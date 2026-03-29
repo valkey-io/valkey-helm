@@ -551,7 +551,9 @@ haproxy:
       client: 1m
       server: 1m
   securityContext: {}
-  
+  extraInitContainers: []
+  extraVolumeMounts: []
+  extraVolumes: []
   # Sentinel watcher sidecar: queries Sentinel for master changes and updates HAProxy
   # backend state via HAProxy's runtime socket, enabling near-instant failover.
   # Only deployed when replica.sentinel.enabled is true.

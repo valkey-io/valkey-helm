@@ -20,7 +20,13 @@ spec:
         {{- include "valkey.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: haproxy
     spec:
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
+      {{- with .Values.haproxy.extraInitContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: haproxy
           {{- if .Values.haproxy.image.registry }}
@@ -42,6 +48,13 @@ spec:
               subPath: haproxy.cfg
             - name: haproxy-socket
               mountPath: /var/run/haproxy
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- with .Values.haproxy.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           resources:
             {{- toYaml .Values.haproxy.resources | nindent 12 }}
           securityContext:
