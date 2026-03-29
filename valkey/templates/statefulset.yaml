@@ -34,8 +34,7 @@ spec:
   - metadata:
       name: sentinel-data
     spec:
-      accessModes:
-        - ReadWriteOnce
+      accessModes: {{ toYaml .Values.replica.sentinel.persistence.accessModes | nindent 8 }}
       {{- if .Values.replica.sentinel.persistence.storageClass }}
       storageClassName: {{ .Values.replica.sentinel.persistence.storageClass | quote }}
       {{- end }}
