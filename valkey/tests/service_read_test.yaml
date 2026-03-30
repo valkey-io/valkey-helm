@@ -78,6 +78,17 @@ tests:
           of: Service
       - notExists:
           path: spec.loadBalancerClass
+  - it: should be able to set loadBalancerSourceRanges
+    set:
+      replica.enabled: true
+      replica.service.loadBalancerSourceRanges: ["10.0.0.1"]
+    template: templates/service-read.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.loadBalancerSourceRanges
+          value: ["10.0.0.1"]
   - it: should have correct selector labels
     set:
       replica.enabled: true
