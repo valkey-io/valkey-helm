@@ -8,6 +8,10 @@ metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
+  {{- with .Values.workloadAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   serviceName: {{ include "valkey.fullname" . }}-headless
   replicas: {{ add (int .Values.replica.replicas) 1 }}
@@ -225,6 +229,9 @@ spec:
             - name: {{ $key }}
               value: "{{ $val }}"
             {{- end }}
+        {{- end }}
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       volumes:
         - name: scripts

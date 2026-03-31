@@ -154,6 +154,20 @@ tests:
             - name: globalregistrykey
             - name: localregistrykey
 
+  - it: should include extraContainers when provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      extraContainers:
+        - name: nginx
+          image: registry.hub.docker.com/nginx/nginx:stable-alpine
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: nginx
   - it: should render extraVolumes
     set:
       replica.enabled: true
@@ -254,6 +268,24 @@ tests:
       - equal:
           path: spec.persistentVolumeClaimRetentionPolicy.whenScaled
           value: Delete
+
+  - it: should include workload annotations when provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      workloadAnnotations:
+        example.com/annotation: "test-value"
+        custom.annotation: "custom-value"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.annotations["example.com/annotation"]
+          value: "test-value"
+      - equal:
+          path: metadata.annotations["custom.annotation"]
+          value: "custom-value"
 
   - it: should not have REDIS_PASSWORD env in metrics exporter when auth is disabled
     set:

@@ -18,6 +18,9 @@ spec:
   {{- if .Values.replica.service.loadBalancerClass }}
   loadBalancerClass: {{ .Values.replica.service.loadBalancerClass }}
   {{- end }}
+  {{- if .Values.replica.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{ .Values.replica.service.loadBalancerSourceRanges }}
+  {{- end }}
   ports:
     - name: tcp
       port: {{ .Values.replica.service.port }}
