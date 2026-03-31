@@ -207,6 +207,20 @@ spec:
           env:
             - name: REDIS_ALIAS
               value: {{ include "valkey.fullname" . }}
+            {{- if .Values.auth.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.auth.usersExistingSecret }}
+                  {{- $defaultUser := index .Values.auth.aclUsers "default" | default dict }}
+                  {{- $passwordKey := $defaultUser.passwordKey | default "default" }}
+                  name: {{ .Values.auth.usersExistingSecret }}
+                  key: {{ $passwordKey }}
+                  {{- else }}
+                  name: {{ include "valkey.fullname" . }}-auth
+                  key: default-password
+                  {{- end }}
+            {{- end }}
             {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
             - name: {{ $key }}
               value: "{{ $val }}"
