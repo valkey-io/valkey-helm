@@ -154,6 +154,20 @@ tests:
             - name: globalregistrykey
             - name: localregistrykey
 
+  - it: should include extraContainers when provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      extraContainers:
+        - name: nginx
+          image: registry.hub.docker.com/nginx/nginx:stable-alpine
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: nginx
   - it: should render extraVolumes
     set:
       replica.enabled: true
