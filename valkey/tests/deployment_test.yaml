@@ -245,6 +245,19 @@ tests:
           value:
             - name: globalregistrykey
             - name: localregistrykey
+          
+  - it: should include extra containers from overlay
+    set:
+      extraContainers:
+        - name: nginx-sidecar
+          image: registry.hub.docker.com/nginx/nginx:stable-alpine
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: nginx-sidecar
 
   - it: should render extraVolumes
     set:
