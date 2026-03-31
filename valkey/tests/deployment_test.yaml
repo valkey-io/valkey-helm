@@ -322,3 +322,80 @@ tests:
             name: extra-config
             mountPath: /extra-config
             readOnly: true
+
+  - it: should not have REDIS_PASSWORD env in metrics exporter when auth is disabled
+    set:
+      auth.enabled: false
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notContains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+
+  - it: should set REDIS_PASSWORD from generated secret in metrics exporter when auth is enabled
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-valkey-auth
+                key: default-password
+
+  - it: should set REDIS_PASSWORD from existing secret in metrics exporter when usersExistingSecret is set
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-custom-secret
+                key: default
+
+  - it: should set REDIS_PASSWORD using custom passwordKey in metrics exporter when usersExistingSecret is set
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          passwordKey: "my-password-key"
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-custom-secret
+                key: my-password-key
