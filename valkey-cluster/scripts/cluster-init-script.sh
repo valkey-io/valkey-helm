@@ -1,0 +1,134 @@
+#!/bin/sh
+set -e
+
+# --- Configuration & Initial Checks ---
+if [ "${REPLICAS}" -eq "1" ]; then
+    echo "Single node deployment. Skipping cluster initialization"
+    exit 0
+fi
+
+ORDINAL=$(echo "${HOSTNAME}" | rev | cut -d'-' -f1 | rev)
+PRIMARIES=$(( (REPLICAS + 1) / 2 ))
+REPLICA_COUNT=$(( (REPLICAS - PRIMARIES) / PRIMARIES ))
+AUTH_OPTION=""
+if [ -n "${VALKEYCLI_AUTH}" ]; then
+  AUTH_OPTION="-a ${VALKEYCLI_AUTH}"
+fi
+echo "Auth option: ${AUTH_OPTION}"
+echo "Initializing as ordinal ${ORDINAL}. Total primaries: ${PRIMARIES}, Replicas per primary: ${REPLICA_COUNT}"
+HEADLESS_SVC="{{ include "valkey-cluster.fullname" . }}-headless"
+NAMESPACE="{{ include "valkey-cluster.names.namespace" . }}"
+MY_IP=$(hostname -i)
+
+# Wait for the local Valkey server process to start
+until valkey-cli ${AUTH_OPTION} -h localhost -p 6379 ping 2>/dev/null | grep -q "PONG"; do
+  echo "Waiting for local Valkey to start..."
+  sleep 2
+done
+echo "Local Valkey is ready at ${MY_IP}"
+
+# --- Discover Existing Cluster ---
+HEALTHY_NODE=""
+for i in $(seq 0 $((REPLICAS - 1))); do
+  if [ "${i}" != "${ORDINAL}" ]; then
+    NODE_HOST="{{ include "valkey-cluster.fullname" . }}-${i}.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
+    if valkey-cli ${AUTH_OPTION} -h "${NODE_HOST}" -p 6379 cluster info | grep -q "cluster_state:ok"; then
+      HEALTHY_NODE="${NODE_HOST}"
+      echo "Found healthy cluster node: ${HEALTHY_NODE}"
+      break
+    fi
+  fi
+done
+
+# --- Logic for Joining an Existing Cluster ---
+if [ -n "${HEALTHY_NODE}" ]; then
+  echo "Healthy cluster found. Attempting to join..."
+  
+  # 1. Forget any old, failed instance of ourselves
+  FAILED_NODE_ID=$(valkey-cli ${AUTH_OPTION} -h "${HEALTHY_NODE}" -p 6379 cluster nodes 2>/dev/null | grep "${MY_IP}:6379" | grep "fail" | awk '{print $1}' || echo "")
+  if [ -n "${FAILED_NODE_ID}" ]; then
+    echo "Found my IP (${MY_IP}) marked as failed with ID ${FAILED_NODE_ID}. Forgetting it..."
+    valkey-cli ${AUTH_OPTION} --cluster call "${HEALTHY_NODE}:6379" cluster forget "${FAILED_NODE_ID}" > /dev/null 2>&1 || true
+    sleep 3
+  fi
+
+  # 2. Meet the cluster
+  HEALTHY_NODE_IP=$(getent hosts "${HEALTHY_NODE}" | awk '{print $1}')
+  echo "Sending CLUSTER MEET to ${HEALTHY_NODE} (${HEALTHY_NODE_IP})"
+  valkey-cli ${AUTH_OPTION} -h localhost -p 6379 cluster meet "${HEALTHY_NODE_IP}" 6379
+  sleep 5
+
+  # 3. Find an orphaned master and become its replica
+  echo "Searching for a master to replicate..."
+
+  MY_NODE_ID=$(valkey-cli ${AUTH_OPTION} -h localhost -p 6379 cluster myid)
+  echo "My Node ID is ${MY_NODE_ID}"
+
+  # This prevents race conditions from the order of 'cluster nodes' output
+  TARGET_MASTER_ID=$(valkey-cli ${AUTH_OPTION} -h "${HEALTHY_NODE}" -p 6379 cluster nodes | awk -v replicas_needed="${REPLICA_COUNT}" -v my_id="${MY_NODE_ID}" '
+    # Pass 1: Build maps of masters and replica counts
+    /master/ && !/fail/ { masters[$1] = 1 }
+    /slave/ && !/fail/ { master_replicas[$4]++ }
+    END {
+      # Pass 2: Iterate over the masters we found
+      for (master_id in masters) {
+        # Check if it needs a replica AND it is not ourself
+        if ( master_id != my_id && (master_replicas[master_id] < replicas_needed || master_replicas[master_id] == "") ) {
+          print master_id
+          exit # Found a suitable master
+        }
+      }
+    }
+  ')
+
+  if [ -n "${TARGET_MASTER_ID}" ]; then
+    echo "Found target master ${TARGET_MASTER_ID} that needs a replica."
+    echo "Sending CLUSTER REPLICATE command..."
+    
+    if valkey-cli ${AUTH_OPTION} -h localhost -p 6379 cluster replicate "${TARGET_MASTER_ID}"; then
+      echo "Successfully configured as a replica for ${TARGET_MASTER_ID}."
+    else
+      echo "ERROR: Failed to replicate master ${TARGET_MASTER_ID}. Manual intervention required."
+      exit 1
+    fi
+  else
+    echo "WARNING: Could not find a master that needs a replica. Staying as a master with no slots. Manual intervention may be required."
+    echo "Rebalance"
+    while ! /scripts/ping_readiness_local.sh > /dev/null 2>&1; do
+      echo "Propagation incomplete (Majority not reached). Retrying in 5s..."
+      sleep 5
+    done
+    echo "Success: Cluster consensus reached. Majority of masters see me."
+    valkey-cli ${AUTH_OPTION} --cluster rebalance "${HEALTHY_NODE}:6379" --cluster-use-empty-masters --cluster-yes
+  fi
+  exit 0
+fi
+
+echo "No healthy cluster found. Proceeding with initial creation logic."
+if [ "${ORDINAL}" = "0" ]; then
+  echo "This is the primary-0 node, creating a new cluster..."
+  NODES=""
+  for i in $(seq 0 $((REPLICAS - 1))); do
+    NODE_HOST="{{ include "valkey-cluster.fullname" . }}-${i}.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
+    until valkey-cli ${AUTH_OPTION} -h "${NODE_HOST}" -p 6379 ping 2>/dev/null | grep -q "PONG"; do
+      echo "Waiting for ${NODE_HOST} to be ready..."
+      sleep 2
+    done
+    NODES="${NODES} ${NODE_HOST}:6379"
+  done
+  sleep 10
+  
+  echo "Creating cluster with nodes: ${NODES}"
+  echo "yes" | valkey-cli ${AUTH_OPTION} --cluster create ${NODES} --cluster-replicas "${REPLICA_COUNT}"
+  echo "Cluster created successfully."
+else
+  echo "Waiting for pod-0 to initialize the cluster..."
+  PRIMARY_HOST="{{ include "valkey-cluster.fullname" . }}-0.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
+  until valkey-cli ${AUTH_OPTION} -h "${PRIMARY_HOST}" -p 6379 cluster info 2>/dev/null | grep -q "cluster_state:ok"; do
+    echo "Waiting for cluster to be initialized by pod-0..."
+    sleep 5
+  done
+  echo "Cluster is initialized. My role has been assigned by the creator."
+fi
+
+exit 0

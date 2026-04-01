@@ -1,0 +1,309 @@
+{{- $fullname := include "valkey-cluster.fullname" . }}
+{{- $storage := .Values.dataStorage }}
+{{- $useExistingPVC := and $storage.enabled (not (empty $storage.persistentVolumeClaimName)) }}
+{{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}{{- $useConfigMap := or (not (empty .Values.valkeyConfig | default "")) (gt (int .Values.replicaCount) 1) -}}
+{{- $configFile := "/data/conf/valkey.conf" -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "valkey-cluster.fullname" . }}
+  namespace: {{ include "valkey-cluster.names.namespace" . }}
+  labels:
+    {{- include "valkey-cluster.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "valkey-cluster.fullname" . }}-headless
+  replicas: {{ .Values.replicaCount }}
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  selector:
+    matchLabels:
+      {{- include "valkey-cluster.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "valkey-cluster.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+        checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      serviceAccountName: {{ include "valkey-cluster.serviceAccountName" . }}
+      securityContext:
+      {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      
+      initContainers:
+        - name: {{ .Chart.Name }}-init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command: [ "/scripts/init.sh" ]
+          volumeMounts:
+            - name: {{ .Values.dataStorage.volumeName }}
+              mountPath: /data
+            - name: scripts
+              mountPath: /scripts
+            {{- if $useConfigMap }}
+            - name: valkey-config
+              mountPath: /usr/local/etc/valkey/valkey.conf
+              subPath: valkey.conf
+            {{- end }}
+            {{- if .Values.extraSecretValkeyConfigs }}
+            - name: extravalkeyconfigs-volume
+              mountPath: /extravalkeyconfigs
+            {{- end }}
+          {{- with .Values.initResources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+      {{- with .Values.extraInitContainers }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      containers:
+        - name: {{ include "valkey-cluster.fullname" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              {{- if $useConfigMap }}
+              cp /usr/local/etc/valkey/valkey.conf {{ $configFile }}
+              {{- end }}
+
+              {{- if and .Values.existingSecret .Values.existingSecretPasswordKey }}
+              sed -i "s|{dynamically-substituted-dont-change-manually}|${VALKEY_PASSWORD}|g" {{ $configFile }}
+              {{- end }}
+
+              {{- if gt (int .Values.replicaCount) 5 }}
+              echo "\ncluster-announce-ip ${POD_IP}" >> {{ $configFile }}
+              {{- end }}
+
+              /cluster-script/init-cluster.sh &
+              valkey-server {{ $configFile }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: VALKEY_NODES
+              value: "{{ $count := .Values.replicaCount | int }}{{ range $i, $v := until $count }}{{ include "valkey-cluster.fullname" $ }}-{{ $i }}.{{ template "valkey-cluster.fullname" $ }}-headless {{ end }}"
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: REPLICAS
+              value: "{{ .Values.replicaCount }}"
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- range $key, $val := .Values.env }}
+            - name: {{ $key }}
+              value: "{{ $val }}"
+            {{- end }}
+            - name: VALKEY_LOGLEVEL
+              value: "{{ .Values.valkeyLogLevel }}"
+            {{- if and .Values.existingSecret .Values.existingSecretPasswordKey }}
+            - name: VALKEYCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret }}
+                  key: {{ .Values.existingSecretPasswordKey }}
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret }}
+                  key: {{ .Values.existingSecretPasswordKey }}
+            {{- end }}
+          ports:
+            - name: tcp
+              containerPort: {{ .Values.containerPorts.valkey }}
+              protocol: TCP
+            - name: tcp-redis-bus
+              containerPort: {{ .Values.containerPorts.bus }}
+              protocol: TCP
+          startupProbe:
+            exec:
+              command: [ "sh", "-c", "valkey-cli ping" ]
+          livenessProbe:
+            exec:
+              command: [ "sh", "-c", "valkey-cli ping" ]
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - /scripts/ping_readiness_local.sh
+            
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 6
+            failureThreshold: 10
+            successThreshold: 1
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.lifecycleHooks }}
+          lifecycle: {{- include "valkey-cluster.tplvalues.render" (dict "value" .Values.lifecycleHooks "context" $) | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: cluster-script
+              mountPath: /cluster-script
+            - name: readiness-script
+              mountPath: /scripts
+            - name: {{ .Values.dataStorage.volumeName }}
+              mountPath: /data
+            {{- if $useConfigMap }}
+            - name: valkey-config
+              mountPath: /usr/local/etc/valkey/valkey.conf
+              subPath: valkey.conf
+            {{- end }}
+            {{- range $secret := .Values.extraValkeySecrets }}
+            - name: {{ $secret.name }}-valkey
+              mountPath: {{ $secret.mountPath }}
+            {{- end }}
+            {{- range $config := .Values.extraValkeyConfigs }}
+            - name: {{ $config.name }}-valkey
+              mountPath: {{ $config.mountPath }}
+            {{- end }}
+        {{- if .Values.metrics.enabled }}
+        - name: metrics
+          image: {{ template "valkey-cluster.metrics.image" . }}
+          command:
+            - "/redis_exporter"
+          args:
+            {{- range $key, $value := .Values.metrics.extraArgs }}
+            - "--{{ $key }}={{ $value }}"
+            {{- end }}
+          env:
+            - name: REDIS_EXPORTER_IS_CLUSTER
+              value: "true"
+            - name: REDIS_ADDR
+              value: {{ printf "%s://127.0.0.1:%g" (ternary "rediss" "redis" .Values.tls.enabled) .Values.containerPorts.valkey | quote }}
+            {{- if and .Values.existingSecret .Values.existingSecretPasswordKey }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret }}
+                  key: {{ .Values.existingSecretPasswordKey }}
+            {{- end }}
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+          ports:
+            - name: debug
+              containerPort: 9122
+            - name: http-metrics
+              containerPort: {{ .Values.metrics.containerPorts.http }}
+          {{- if .Values.metrics.resources }}
+          resources: {{- toYaml .Values.metrics.resources | nindent 12 }}
+          {{- end }}
+        {{- end }}
+
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: scripts
+          configMap:
+            name: {{ include "valkey-cluster.fullname" . }}-init-scripts
+            defaultMode: 0555
+        - name: readiness-script
+          configMap:
+            name: {{ include "valkey-cluster.fullname" . }}-readiness-script
+            defaultMode: 0755
+        - name: cluster-script 
+          configMap:
+            name: {{ include "valkey-cluster.fullname" . }}-cluster-script
+            defaultMode: 0755
+        {{- if $useConfigMap }}
+        - name: valkey-config
+          configMap:
+            name: {{ include "valkey-cluster.fullname" . }}-config
+        {{- end }}
+        {{- range .Values.extraValkeySecrets }}
+        - name: {{ .name }}-valkey
+          secret:
+            secretName: {{ .name }}
+            defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- range .Values.extraValkeyConfigs }}
+        - name: {{ .name }}-valkey
+          configMap:
+            name: {{ .name }}
+            defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- if .Values.metrics.enabled }}
+        {{- range .Values.metrics.exporter.extraExporterSecrets }}
+        - name: {{ .name }}-exporter
+          secret:
+            secretName: {{ .name }}
+            defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- end }}
+        {{- if not $createPVC }}
+        - name: {{ $storage.volumeName }}
+          {{- if $useExistingPVC }}
+          persistentVolumeClaim:
+            claimName: {{ $storage.persistentVolumeClaimName }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+  {{- if $createPVC }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ .Values.dataStorage.volumeName }}
+        labels:
+          {{- include "valkey-cluster.labels" . | nindent 10 }}
+          {{- with .Values.dataStorage.labels }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+        {{- if .Values.dataStorage.annotations }}
+        annotations:
+          {{- with .Values.dataStorage.annotations }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.dataStorage.accessModes | nindent 10 }}
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: {{ .Values.dataStorage.requestedSize }}
+        {{- if .Values.dataStorage.className }}
+        storageClassName: {{ .Values.dataStorage.className }}
+        {{- end }}
+  {{- end }}
