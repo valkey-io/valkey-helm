@@ -1,0 +1,165 @@
+suite: pvc configuration
+templates:
+  - templates/pvc.yaml
+tests:
+  - it: should not create PVC when replica.enabled is true
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+      replica.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create PVC when cluster.enabled is true
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+      cluster.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create PVC when both replica.enabled and cluster.enabled are true
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+      replica.enabled: true
+      cluster.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create PVC when both replica.enabled and cluster.enabled are false and conditions are met
+    set:
+      replica.enabled: false
+      cluster.enabled: false
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+      dataStorage.persistentVolumeClaimName: ""
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PersistentVolumeClaim
+
+  - it: should not create PVC when dataStorage.enabled is false
+    set:
+      dataStorage.enabled: false
+      replica.enabled: false
+      cluster.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create PVC when dataStorage.requestedSize is empty
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: ""
+      replica.enabled: false
+      cluster.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create PVC when dataStorage.persistentVolumeClaimName is set
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+      dataStorage.persistentVolumeClaimName: "existing-pvc"
+      replica.enabled: false
+      cluster.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should have correct storage size
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "16Gi"
+      replica.enabled: false
+      cluster.enabled: false
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: "16Gi"
+
+  - it: should have keepPvc annotation when enabled
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+      dataStorage.keepPvc: true
+      replica.enabled: false
+      cluster.enabled: false
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+
+  - it: should have custom storage class when specified
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+      dataStorage.className: "fast-ssd"
+      replica.enabled: false
+      cluster.enabled: false
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: spec.storageClassName
+          value: fast-ssd
+
+  - it: should have custom labels when specified
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+      dataStorage.labels:
+        custom.label: "value"
+        another.label: "test"
+      replica.enabled: false
+      cluster.enabled: false
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.labels["custom.label"]
+          value: value
+      - equal:
+          path: metadata.labels["another.label"]
+          value: test
+
+  - it: should have custom annotations when specified
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+      dataStorage.annotations:
+        custom.annotation: "value"
+      replica.enabled: false
+      cluster.enabled: false
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.annotations["custom.annotation"]
+          value: value
+
+  - it: should have correct access modes
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+      dataStorage.accessModes:
+        - ReadWriteOnce
+      replica.enabled: false
+      cluster.enabled: false
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: spec.accessModes
+          value:
+            - ReadWriteOnce

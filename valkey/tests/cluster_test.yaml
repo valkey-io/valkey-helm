@@ -1,0 +1,497 @@
+suite: cluster configuration
+templates:
+  - templates/cluster-statefulset.yaml
+  - templates/cluster-script.yaml
+  - templates/service-headless.yaml
+  - templates/service.yaml
+  - templates/init_config.yaml
+tests:
+  # Validation tests
+  - it: should fail when cluster enabled but no persistence size provided
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: ""
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Cluster mode requires persistent storage.*"
+
+  - it: should fail when cluster enabled with less than 3 shards
+    set:
+      cluster.enabled: true
+      cluster.shards: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Cluster mode requires at least 3 shards.*"
+
+  - it: should fail when both cluster and replica are enabled
+    set:
+      cluster.enabled: true
+      replica.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.enabled and replica.enabled are mutually exclusive.*"
+
+  # StatefulSet tests
+  - it: should create StatefulSet when cluster is enabled
+    set:
+      cluster.enabled: true
+      cluster.shards: 3
+      cluster.replicasPerShard: 1
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 6  # 3 shards * (1 + 1 replica) = 6 nodes
+
+  - it: should create StatefulSet with 3 shards and 0 replicas (3 nodes total)
+    set:
+      cluster.enabled: true
+      cluster.shards: 3
+      cluster.replicasPerShard: 0
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should create StatefulSet with 5 shards and 2 replicas (15 nodes total)
+    set:
+      cluster.enabled: true
+      cluster.shards: 5
+      cluster.replicasPerShard: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 15  # 5 shards * (1 + 2 replicas) = 15 nodes
+
+  - it: should use Parallel pod management policy for cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: Parallel
+
+  - it: should configure PVC with correct storage settings
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "10Gi"
+      cluster.persistence.storageClass: "fast-ssd"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "10Gi"
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: "fast-ssd"
+
+  - it: should expose both tcp and tcp-bus ports in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.busPort: 16379
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: tcp
+            containerPort: 6379
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: tcp-bus
+            containerPort: 16379
+            protocol: TCP
+
+  # Init container tests
+  - it: should have init container with cluster environment variables
+    set:
+      cluster.enabled: true
+      cluster.shards: 4
+      cluster.replicasPerShard: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CLUSTER_SHARDS
+            value: "4"
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CLUSTER_REPLICAS_PER_SHARD
+            value: "2"
+
+  # Service headless tests
+  - it: should create headless service with bus port in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.busPort: 16379
+    template: templates/service-headless.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.clusterIP
+          value: None
+      - contains:
+          path: spec.ports
+          content:
+            name: tcp
+            port: 6379
+            targetPort: tcp
+            protocol: TCP
+      - contains:
+          path: spec.ports
+          content:
+            name: tcp-bus
+            port: 16379
+            targetPort: tcp-bus
+            protocol: TCP
+
+  # Main service tests
+  - it: should create service with bus port in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.busPort: 16379
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - contains:
+          path: spec.ports
+          content:
+            name: tcp-bus
+            port: 16379
+            targetPort: tcp-bus
+            protocol: TCP
+
+  # Cluster init script tests
+  - it: should create cluster-script ConfigMap when cluster is enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-script.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-script
+
+  - it: cluster-script ConfigMap should contain init-cluster.sh
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-script.yaml
+    asserts:
+      - isNotNull:
+          path: data["init-cluster.sh"]
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: "CLUSTER MEET"
+
+  - it: cluster-script should contain cluster create logic
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: "--cluster create"
+
+  - it: should run cluster init script as background process
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "/cluster-script/init-cluster.sh &"
+
+  - it: should mount cluster-script volume in container
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cluster-script
+            mountPath: /cluster-script
+
+  - it: should define cluster-script volume
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: cluster-script
+            configMap:
+              name: RELEASE-NAME-valkey-cluster-script
+              defaultMode: 365
+
+  # Authentication tests
+  - it: should fail when cluster auth enabled but replication user not in aclUsers
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      cluster.replicationUser: "clusteruser"
+      auth.aclUsers:
+        default:
+          password: "test"
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Cluster replication user 'clusteruser'.*must be defined in auth.aclUsers.*"
+
+  - it: should succeed when cluster auth is properly configured
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      cluster.replicationUser: "default"
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  # TLS tests
+  - it: should configure TLS volume mount in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls-secret"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
+
+  # Init config tests (cluster mode config generation)
+  - it: should generate cluster config in init script
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.nodeTimeout: 20000
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-enabled yes"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-config-file /data/nodes.conf"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-node-timeout 20000"
+
+  - it: should configure cluster-require-full-coverage when disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.requireFullCoverage: false
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-require-full-coverage no"
+
+  - it: should configure cluster-allow-reads-when-down when enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.allowReadsWhenDown: true
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-allow-reads-when-down yes"
+
+  # Cluster auth secret mount tests (bug fix: ensure main container has access to plaintext password)
+  - it: should mount valkey-users-secret to main container when auth.usersExistingSecret is set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+            mountPath: /valkey-users-secret
+            readOnly: true
+
+  - it: should mount valkey-auth-secret to main container when inline passwords are used
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
+            readOnly: true
+
+  - it: should mount both auth secrets to main container when both are configured
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "fallback"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+            mountPath: /valkey-users-secret
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
+            readOnly: true
+
+  # Cluster init script password retrieval tests (bug fix: read from secret, not ACL hash)
+  - it: cluster-script should read password from valkey-users-secret when usersExistingSecret is set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/valkey-users-secret/'
+      - notMatchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/etc/valkey/users.acl'
+
+  - it: cluster-script should read password from valkey-auth-secret when inline passwords are used
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/valkey-auth-secret/default-password'
+      - notMatchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/etc/valkey/users.acl'
+
+  - it: cluster-script should use custom passwordKey when configured
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          passwordKey: "default-pwd"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/valkey-users-secret/default-pwd'
+
+  - it: cluster-script should use custom replicationUser for auth
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicationUser: "clusteruser"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "defaultpass"
+          permissions: "~* &* +@all"
+        clusteruser:
+          password: "clusterpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/valkey-auth-secret/clusteruser-password'
+
+  - it: cluster-script should NOT parse password hash from ACL file
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-script.yaml
+    asserts:
+      # Ensure we don't try to extract the hash from the ACL file
+      - notMatchRegex:
+          path: data["init-cluster.sh"]
+          pattern: 'grep.*users\.acl'
