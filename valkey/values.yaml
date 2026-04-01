@@ -264,6 +264,70 @@ replica:
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
   persistentVolumeClaimRetentionPolicy: {}
 
+  # Sentinel configuration for automatic failover (requires replica.enabled: true)
+  sentinel:
+    # Enable Sentinel for high availability and automatic failover
+    enabled: false
+
+    # Port on which sentinel will listen
+    port: 26379
+
+    # Master set name used by sentinel to identify the monitored master
+    masterSet: "mymaster"
+
+    # Quorum - number of sentinels that must agree on master failure
+    # Default: 2 (works well with 3 sentinels - majority)
+    # Recommendation: floor(replicas/2) + 1 for a majority
+    quorum: 2
+
+    # Time in milliseconds before sentinel considers an instance down
+    downAfterMilliseconds: 5000
+
+    # Timeout for failover operation in milliseconds
+    failoverTimeout: 10000
+
+    # Number of replicas to reconfigure in parallel after failover
+    parallelSyncs: 1
+
+    # Resource limits/requests for sentinel container
+    resources: {}
+      # Example:
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+      # requests:
+      #   cpu: 50m
+      #   memory: 64Mi
+
+    # Service configuration for sentinel
+    service:
+      # Service type (ClusterIP, NodePort, LoadBalancer)
+      type: ClusterIP
+      # Port on which the sentinel service will be exposed
+      port: 26379
+      # Optional annotations for the sentinel service
+      annotations: {}
+      # NodePort value (if service.type is NodePort)
+      nodePort: 0
+      # ClusterIP value
+      clusterIP: ""
+      # Application protocol
+      appProtocol: ""
+      # Class of a load balancer implementation
+      loadBalancerClass: ""
+
+    # Persistence configuration for sentinel state
+    persistence:
+      # Enable persistence for sentinel (stores sentinel state across restarts)
+      enabled: false
+      # Size of the PVC for sentinel data
+      size: "100Mi"
+      # Storage class name (empty = use default storage class)
+      storageClass: ""
+      # Access modes for the PVC
+      accessModes:
+        - ReadWriteOnce
+
 tls:
   # Enable TLS
   enabled: false
@@ -479,3 +543,52 @@ metrics:
     #   for: 1s
     #   labels:
     #     severity: error
+
+haproxy:
+  enabled: false
+  image:
+    registry: docker.io
+    repository: haproxy
+    tag: 2.9
+    pullPolicy: IfNotPresent
+  replicas: 3
+  service:
+    type: ClusterIP
+    port: 6379
+    annotations: {}
+  resources: {}
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+  config:
+    checkInterval: 2s
+    timeout:
+      connect: 5s
+      client: 1m
+      server: 1m
+  securityContext: {}
+  extraInitContainers: []
+  extraVolumeMounts: []
+  extraVolumes: []
+  # Sentinel watcher sidecar: queries Sentinel for master changes and updates HAProxy
+  # backend state via HAProxy's runtime socket, enabling near-instant failover.
+  # Only deployed when replica.sentinel.enabled is true.
+  sentinelWatcher:
+    # Uses valkey/valkey alpine image which ships valkey-cli and busybox nc.
+    # Busybox nc supports -U (unix domain sockets) so no extra tools are needed.
+    image:
+      registry: docker.io
+      repository: valkey/valkey
+      tag: "{{ .Chart.AppVersion }}-alpine"
+      pullPolicy: IfNotPresent
+    resources: {}
+      # limits:
+      #   cpu: 50m
+      #   memory: 32Mi
+      # requests:
+      #   cpu: 10m
+      #   memory: 16Mi
+    securityContext: {}

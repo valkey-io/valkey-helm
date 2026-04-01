@@ -1,0 +1,202 @@
+{{- if .Values.haproxy.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-haproxy
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+data:
+  haproxy.cfg: |
+    global
+      log stdout format raw local0
+      maxconn 1024
+      stats socket /var/run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+
+    defaults
+      log global
+      timeout connect {{ .Values.haproxy.config.timeout.connect }}
+      timeout client {{ .Values.haproxy.config.timeout.client }}
+      timeout server {{ .Values.haproxy.config.timeout.server }}
+      retries 3
+
+    frontend valkey_frontend_write
+      bind *:6379
+      mode tcp
+      option tcplog
+      default_backend valkey_backend_master
+
+    frontend valkey_frontend_read
+      bind *:6380
+      mode tcp
+      option tcplog
+      default_backend valkey_backend_read
+
+    backend valkey_backend_master
+      mode tcp
+      # no-check: sentinel-watcher solely controls which server is active via
+      # the runtime socket (set server addr + enable/disable server).
+      # This prevents HAProxy's own DNS resolver from putting servers into
+      # DNS NX maintenance, which cannot be cleared by enable server.
+      {{ range $i := until (add (int .Values.replica.replicas) 1 | int) }}
+      server valkey-{{ $i }} 127.0.0.1:{{ $.Values.service.port }} no-check disabled
+      {{ end }}
+
+    backend valkey_backend_read
+      mode tcp
+      option tcp-check
+      tcp-check connect
+      tcp-check comment PING
+      tcp-check send "PING\r\n"
+      tcp-check expect rstring "\\+PONG|-NOAUTH"
+      timeout connect 2s
+      timeout check 5s
+      # Read backend uses health checks since any replica is acceptable.
+      # Servers start enabled; all will pass a simple PING check.
+      {{ range $i := until (add (int .Values.replica.replicas) 1 | int) }}
+      server valkey-{{ $i }} {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $.Values.service.port }} check inter 5s fall 3 rise 1 init-addr last,libc,none
+      {{ end }}
+
+  sentinel-watcher.sh: |
+    #!/bin/sh
+    # Sentinel watcher: polls Sentinel for master changes and updates HAProxy
+    # via the runtime socket.
+    #
+    # KEY DESIGN: All valkey_backend_master servers are configured as
+    # `no-check disabled` in haproxy.cfg. This watcher is the SOLE controller
+    # of which server is active. It resolves the master hostname to a Pod IP
+    # and uses `set server addr` so HAProxy connects directly to the IP,
+    # completely bypassing HAProxy's internal DNS resolver (which causes
+    # DNS NX maintenance that cannot be overridden by `enable server`).
+    set -eu
+
+    SENTINEL_SVC="{{ include "valkey.fullname" . }}-sentinel.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    SENTINEL_PORT="{{ .Values.replica.sentinel.port }}"
+    MASTER_SET="{{ .Values.replica.sentinel.masterSet }}"
+    VALKEY_PORT="{{ .Values.service.port }}"
+    HAPROXY_SOCKET="/var/run/haproxy/admin.sock"
+    BACKEND="valkey_backend_master"
+    POLL_INTERVAL=2
+    TOTAL_SERVERS="{{ add (int .Values.replica.replicas) 1 }}"
+
+    {{- if .Values.auth.enabled }}
+    {{- $replUsername := .Values.replica.replicationUser }}
+    {{- $replUser := index .Values.auth.aclUsers $replUsername }}
+    {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
+    AUTH_ARG="-a $(cat /valkey-auth-secret/{{ $replPasswordKey }}-password 2>/dev/null || cat /valkey-users-secret/{{ $replPasswordKey }} 2>/dev/null)"
+    {{- else }}
+    AUTH_ARG=""
+    {{- end }}
+
+    log() {
+      echo "[sentinel-watcher] $(date '+%Y-%m-%dT%H:%M:%S') $*"
+    }
+
+    haproxy_cmd() {
+      echo "$1" | socat stdio "${HAPROXY_SOCKET}"
+    }
+
+    # Resolve a hostname to an IPv4 address using getent (musl/Alpine libc resolver).
+    # Falls back to nslookup if getent fails.
+    resolve_ip() {
+      hostname="$1"
+      ip=$(getent hosts "${hostname}" 2>/dev/null | awk '{print $1}' | head -1)
+      if [ -z "${ip}" ]; then
+        ip=$(nslookup "${hostname}" 2>/dev/null \
+          | awk '/^Address:/{print $2}' \
+          | grep -v '#' | head -1)
+      fi
+      echo "${ip}"
+    }
+
+    # Query Sentinel: returns first line of get-master-addr-by-name (hostname or IP)
+    get_master_from_sentinel() {
+      valkey-cli -h "${SENTINEL_SVC}" \
+        {{- if .Values.tls.enabled }}
+        --tls --cacert /tls/{{ .Values.tls.caPublicKey }} \
+        {{- end }}
+         -p "${SENTINEL_PORT}" ${AUTH_ARG} \
+        SENTINEL get-master-addr-by-name "${MASTER_SET}" 2>/dev/null | head -1 || true
+    }
+
+    # Extract server index from a hostname like "valkey-1.valkey-headless..."
+    index_from_host() {
+      local host="${1%%.*}"
+      echo "${host##*-}"
+    }
+
+    wait_for_socket() {
+      log "Waiting for HAProxy socket..."
+      until [ -S "${HAPROXY_SOCKET}" ]; do sleep 1; done
+      log "HAProxy socket ready."
+    }
+
+    wait_for_sentinel() {
+      log "Waiting for Sentinel at ${SENTINEL_SVC}:${SENTINEL_PORT}..."
+      until valkey-cli -h "${SENTINEL_SVC}" \
+        {{- if .Values.tls.enabled }}
+        --tls --cacert /tls/{{ .Values.tls.caPublicKey }} \
+        {{- end }}
+        -p "${SENTINEL_PORT}" ${AUTH_ARG} PING 2>/dev/null | grep -q PONG; do
+        sleep 2
+      done
+      log "Sentinel is ready."
+    }
+
+    wait_for_socket
+    wait_for_sentinel
+
+    LAST_MASTER_IDX=""
+
+    while true; do
+      MASTER_HOST=$(get_master_from_sentinel)
+
+      if [ -z "${MASTER_HOST}" ]; then
+        log "WARN: Could not get master from Sentinel, retrying..."
+        sleep "${POLL_INTERVAL}"
+        continue
+      fi
+
+      MASTER_IDX=$(index_from_host "${MASTER_HOST}")
+
+      if [ -z "${MASTER_IDX}" ]; then
+        log "WARN: Could not parse master index from '${MASTER_HOST}', retrying..."
+        sleep "${POLL_INTERVAL}"
+        continue
+      fi
+
+      if [ "${MASTER_IDX}" = "${LAST_MASTER_IDX}" ]; then
+        sleep "${POLL_INTERVAL}"
+        continue
+      fi
+
+      log "Master changed: index ${LAST_MASTER_IDX:-none} -> ${MASTER_IDX} (host: ${MASTER_HOST})"
+
+      # Resolve hostname to IP so HAProxy connects directly (no DNS resolver involved)
+      MASTER_IP=$(resolve_ip "${MASTER_HOST}")
+      if [ -z "${MASTER_IP}" ]; then
+        log "WARN: Could not resolve IP for '${MASTER_HOST}', retrying..."
+        sleep "${POLL_INTERVAL}"
+        continue
+      fi
+      log "Resolved master IP: ${MASTER_IP}"
+
+      # Disable old master servers first (no traffic interruption gap)
+      i=0
+      while [ "${i}" -lt "${TOTAL_SERVERS}" ]; do
+        if [ "${i}" != "${MASTER_IDX}" ]; then
+          log "Disabling server valkey-${i} in ${BACKEND}"
+          haproxy_cmd "disable server ${BACKEND}/valkey-${i}" > /dev/null
+        fi
+        i=$((i + 1))
+      done
+
+      # Point the new master server to its actual Pod IP and enable it
+      log "Setting server valkey-${MASTER_IDX} addr ${MASTER_IP}:${VALKEY_PORT} and enabling"
+      haproxy_cmd "set server ${BACKEND}/valkey-${MASTER_IDX} addr ${MASTER_IP} port ${VALKEY_PORT}" > /dev/null
+      haproxy_cmd "enable server ${BACKEND}/valkey-${MASTER_IDX}" > /dev/null
+
+      LAST_MASTER_IDX="${MASTER_IDX}"
+      log "HAProxy updated: valkey-${MASTER_IDX} (${MASTER_IP}:${VALKEY_PORT}) is now active in ${BACKEND}"
+      sleep "${POLL_INTERVAL}"
+    done
+{{- end }}
