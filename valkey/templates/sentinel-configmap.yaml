@@ -25,8 +25,9 @@ data:
 
     SENTINEL_CONF="/data/sentinel.conf"
 
+    # Logging function (outputs to stderr to avoid polluting stdout command substitutions)
     log() {
-      echo "$(date) $1"
+      echo "$(date) $1" >&2
     }
 
     log "Initializing Sentinel configuration..."
@@ -90,7 +91,22 @@ data:
     EOF
 
     {{- if .Values.auth.enabled }}
-    # Configure authentication for sentinel to connect to master/replicas
+    # 1. Generate NATIVE ACLs for INBOUND connections to Sentinel
+    log "Generating ACL entries for Sentinel incoming connections"
+    
+    {{- if .Values.auth.sentinelAclUsers }}
+    {{- range $username, $user := .Values.auth.sentinelAclUsers }}
+    {{- $passwordKey := $user.passwordKey | default $username }}
+    
+    PASSWORD=$(get_user_password "{{ $username }}" "{{ $passwordKey }}") || exit 1
+    # Hash password to prevent plaintext leak in the config file
+    PASSHASH=$(echo -n "$PASSWORD" | sha256sum | cut -f 1 -d " ")
+    echo "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> "$SENTINEL_CONF"
+    {{- end }}
+    {{- end }}
+
+    # 2. Configure OUTBOUND connections from Sentinel to Valkey
+    # Fetch the replication user configured in the Valkey block (aclUsers)
     {{- $replUsername := .Values.replica.replicationUser }}
     {{- $replUser := index .Values.auth.aclUsers $replUsername }}
     {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
@@ -98,11 +114,12 @@ data:
 
     cat >> "$SENTINEL_CONF" << EOF
 
-    # Authentication configuration
+    # Master/Replica authentication configuration
+    sentinel auth-user ${MASTER_SET} {{ $replUsername }}
     sentinel auth-pass ${MASTER_SET} ${AUTH_PASSWORD}
     EOF
 
-    log "Configured authentication for sentinel"
+    log "Configured native ACLs and authentication for sentinel"
     {{- end }}
 
     {{- if .Values.tls.enabled }}
@@ -128,5 +145,5 @@ data:
     {{- end }}
 
     log "Sentinel configuration complete"
-    cat "$SENTINEL_CONF"
+    # IMPORTANT: Do not cat $SENTINEL_CONF here to avoid leaking secrets to stdout
 {{- end }}

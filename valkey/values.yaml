@@ -188,6 +188,15 @@ auth:
   # read-user:
   #   permissions: "~* -@all +@read +ping +info"
 
+  sentinelAclUsers:
+    default:
+      passwordKey: ""
+      permissions: ""
+
+    # haproxy_watcher:
+    #   passwordKey: ""
+    #   permissions: ""
+
   # Inline ACL configuration that will be appended after generated users.
   # NOTE: If using aclConfig, ensure the 'default' user is defined here.
   aclConfig: ""
@@ -530,7 +539,7 @@ haproxy:
   image:
     registry: docker.io
     repository: haproxy
-    tag: 2.9
+    tag: "2.9"
     pullPolicy: IfNotPresent
   replicas: 3
   service:

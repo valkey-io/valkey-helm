@@ -19,6 +19,9 @@
                 },
                 "usersExistingSecret": {
                     "type": "string"
+                },
+                "sentinelAclUsers": {
+                    "type": "object"
                 }
             }
         },
@@ -110,6 +113,7 @@
                     "type": "string"
                 }
             }
+        },
         "haproxy": {
           "type": "object",
           "properties": {
