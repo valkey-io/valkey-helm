@@ -192,7 +192,13 @@ auth:
     default:
       passwordKey: ""
       permissions: ""
-
+    # Example for isolated inter-sentinel gossip:
+    # sentinel.inter.node:
+    #   passwordKey: "inter-node-pwd"
+    #   permissions: "on resetchannels -@all +auth +hello +ping +sentinel +subscribe +publish &*"
+    # haproxy_watcher:
+    #   passwordKey: "watcher-pwd"
+    #   permissions: "on -@all +auth +hello +ping +sentinel|master +sentinel|masters +sentinel|sentinels"
     # haproxy_watcher:
     #   passwordKey: ""
     #   permissions: ""
@@ -271,6 +277,17 @@ replica:
   sentinel:
     # Enable Sentinel for high availability and automatic failover
     enabled: false
+
+    # Username for Sentinel to authenticate to the Valkey master/replicas.
+    # If not defined or left empty, the script will fallback to using replicationUser.
+    # WARNING: If the 'default' user is disabled in auth.aclUsers, this MUST be set to a
+    # valid user with Pub/Sub and monitoring permissions.
+    monitorUser: "default"
+
+    # Declare the specific user Sentinels will use to authenticate with EACH OTHER.
+    # WARNING: If the 'default' user is disabled in auth.sentinelAclUsers, this MUST be
+    # set to a valid user to prevent the 'empty array' discovery error.
+    interSentinelUser: "default"
 
     # Port on which sentinel will listen
     port: 26379
