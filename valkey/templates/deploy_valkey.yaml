@@ -86,6 +86,11 @@ spec:
               mountPath: /valkey-auth-secret
               readOnly: true
             {{- end }}
+            {{- if .Values.auth.injectSecret.enabled }}
+              {{ $dir := regexReplaceAll "/[^/]+$" .Values.auth.injectSecret.mountPath "/" }}
+            - name: inject-secret
+              mountPath: "{{ $dir }}"
+            {{- end }}
             {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
@@ -145,6 +150,11 @@ spec:
             {{- if .Values.auth.enabled }}
             - name: valkey-acl
               mountPath: /etc/valkey
+            {{- if and .Values.auth.injectSecret.enabled }}
+              {{ $dir := regexReplaceAll "/[^/]+$" .Values.auth.injectSecret.mountPath "/" }}
+            - name: inject-secret
+              mountPath: "{{ $dir }}"
+            {{- end }}
             {{- end }}
             {{- range $secret := .Values.extraValkeySecrets }}
             - name: {{ $secret.name }}-valkey
@@ -272,6 +282,10 @@ spec:
           secret:
             secretName: {{ include "valkey.fullname" . }}-auth
             defaultMode: 0400
+        {{- end }}
+        {{- if .Values.auth.injectSecret.enabled }}
+        - name: inject-secret
+          emptyDir: {}
         {{- end }}
         {{- end }}
         - name: {{ $storage.volumeName }}
