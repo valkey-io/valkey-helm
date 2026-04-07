@@ -199,9 +199,6 @@ auth:
     # haproxy_watcher:
     #   passwordKey: "watcher-pwd"
     #   permissions: "on -@all +auth +hello +ping +sentinel|master +sentinel|masters +sentinel|sentinels"
-    # haproxy_watcher:
-    #   passwordKey: ""
-    #   permissions: ""
 
   # Inline ACL configuration that will be appended after generated users.
   # NOTE: If using aclConfig, ensure the 'default' user is defined here.
@@ -561,7 +558,8 @@ haproxy:
   replicas: 3
   service:
     type: ClusterIP
-    port: 6379
+    port: 6379      # Port for write operations
+    readPort: 6380  # Port for read operations
     annotations: {}
   resources: {}
     # limits:
@@ -584,6 +582,9 @@ haproxy:
   # backend state via HAProxy's runtime socket, enabling near-instant failover.
   # Only deployed when replica.sentinel.enabled is true.
   sentinelWatcher:
+    # Dedicated sentinel ACL user for the watcher. 
+    # Must be defined in auth.sentinelAclUsers
+    user: "default"
     # Uses valkey/valkey alpine image which ships valkey-cli and busybox nc.
     # Busybox nc supports -U (unix domain sockets) so no extra tools are needed.
     image:
