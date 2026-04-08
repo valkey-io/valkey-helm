@@ -13,37 +13,8 @@ metadata:
 spec:
   type: {{ .Values.haproxy.service.type }}
   ports:
-    - port: {{ .Values.haproxy.service.port }}
-      targetPort: 6379
-      protocol: TCP
-      name: valkey-write
-    - port: 6380
-      targetPort: 6380
-      protocol: TCP
-      name: valkey-read
-  selector:
-    {{- include "valkey.selectorLabels" . | nindent 4 }}
-    app.kubernetes.io/component: haproxy
-{{- end }}
-
-
-{{- if .Values.haproxy.enabled }}
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "valkey.fullname" . }}-haproxy
-  labels:
-    {{- include "valkey.labels" . | nindent 4 }}
-    app.kubernetes.io/component: haproxy
-  annotations:
-    {{- with .Values.haproxy.service.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-spec:
-  type: {{ .Values.haproxy.service.type }}
-  ports:
-    - port: {{ .Values.haproxy.service.port }}
-      targetPort: 6379
+    - port: {{ .Values.haproxy.service.port | default 6379 }}
+      targetPort: {{ .Values.haproxy.service.port | default 6379 }}
       protocol: TCP
       name: valkey-write
     - port: {{ .Values.haproxy.service.readPort | default 6380 }}
