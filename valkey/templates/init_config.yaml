@@ -170,93 +170,83 @@ data:
     # Replica mode configuration
     log "Configuring replication mode"
 
-    # Use POD_INDEX from Kubernetes metadata
     POD_INDEX=${POD_INDEX:-0}
-    IS_MASTER=false
-    
+
+    # 1. Determine Initial Topology or Restored State
+    REPLICA_TARGET=""
     if [ "${SENTINEL_MODE:-false}" = "true" ]; then
       if [ -n "$SAVED_REPLICA_LINE" ]; then
-          {
-            echo ""
-            echo "# Restored Sentinel Configuration"
-            echo "$SAVED_REPLICA_LINE"
-          } >>"$VALKEY_CONFIG"
-          log "Restored replication state from previous run"
+        # CRITICAL: Restore topology written by Sentinel (CONFIG REWRITE)
+        log "Sentinel Mode: Restoring replication state from previous run: $SAVED_REPLICA_LINE"
+        REPLICA_TARGET="$SAVED_REPLICA_LINE"
+      elif [ "$POD_INDEX" != "0" ]; then
+        # Fresh boot: Initial cluster assembly. Nodes > 0 follow node 0.
+        MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        MASTER_PORT="{{ .Values.service.port }}"
+        REPLICA_TARGET="replicaof $MASTER_HOST $MASTER_PORT"
+        log "Sentinel Mode (Fresh): Node $POD_INDEX starting as replica of $MASTER_HOST"
       else
-          # First run or no previous state
-          if [ "$POD_INDEX" = "0" ]; then
-              IS_MASTER=true
-              log "Sentinel Mode (Bootstrap): Pod-0 defaults to MASTER"
-          else
-             # For bootstrap, others should replicate 0
-             IS_MASTER=false
-             log "Sentinel Mode (Bootstrap): Pod-$POD_INDEX defaults to REPLICA"
-          fi
+        log "Sentinel Mode (Fresh): Node 0 starting as initial MASTER"
       fi
     else
-        # Standard Replication Logic
-        # Check if this is pod-0 (master)
-        if [ "$POD_INDEX" = "0" ]; then
-          IS_MASTER=true
-          log "This pod (index $POD_INDEX) is configured as MASTER"
-        else
-          log "This pod (index $POD_INDEX) is configured as REPLICA"
-        fi
+      # Standard Mode (Non-Sentinel)
+      if [ "$POD_INDEX" != "0" ]; then
+        MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        MASTER_PORT="{{ .Values.service.port }}"
+        REPLICA_TARGET="replicaof $MASTER_HOST $MASTER_PORT"
+      fi
     fi
 
-    # Configure replica settings
-    if [ "$IS_MASTER" = "false" ]; then
-    
-      if [ "${SENTINEL_MODE:-false}" = "true" ] && [ -n "$SAVED_REPLICA_LINE" ]; then
-         log "Skipping default replica configuration as we restored state."
-      else
-          MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-          MASTER_PORT="{{ .Values.service.port }}"
+    # 2. Inject Replication Target
+    if [ -n "$REPLICA_TARGET" ]; then
+      echo "" >> "$VALKEY_CONFIG"
+      echo "# Replication Target" >> "$VALKEY_CONFIG"
+      echo "$REPLICA_TARGET" >> "$VALKEY_CONFIG"
+    fi
 
-          log "Configuring replica to follow master at $MASTER_HOST:$MASTER_PORT"
+    # 3. CRITICAL: Inject Replica Auth and TLS
+    # In Sentinel mode, ALL nodes (even Node 0) must have these configured, 
+    # as any node can be demoted to a replica dynamically.
+    if [ -n "$REPLICA_TARGET" ] || [ "${SENTINEL_MODE:-false}" = "true" ]; then
+      
+      # General replica settings
+      {
+        {{- if .Values.replica.disklessSync }}
+        echo ""
+        echo "# Diskless replication"
+        echo "repl-diskless-sync yes"
+        echo "repl-diskless-sync-delay 5"
+        {{- end }}
+        echo ""
+        echo "# Replica priority for Sentinel failover (lower = higher priority, 0 = never promote)"
+        echo "replica-priority 100"
+      } >>"$VALKEY_CONFIG"
 
-          {
-            echo ""
-            echo "# Replica Configuration"
-            echo "replicaof $MASTER_HOST $MASTER_PORT"
-            {{- if .Values.replica.disklessSync }}
-            echo ""
-            echo "# Diskless replication"
-            echo "repl-diskless-sync yes"
-            echo "repl-diskless-sync-delay 5"
-            {{- end }}
-            echo ""
-            echo "# Replica priority for Sentinel failover (lower = higher priority, 0 = never promote)"
-            echo "replica-priority 100"
-            {{- if .Values.auth.enabled }}
-            echo ""
-            echo "# Master authentication"
-            {{- end }}
-          } >>"$VALKEY_CONFIG"
+      {{- if .Values.auth.enabled }}
+      # Master authentication
+      {{- $replUsername := .Values.replica.replicationUser }}
+      {{- $replUser := index .Values.auth.aclUsers $replUsername }}
+      {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
+      REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
 
-          {{- if .Values.auth.enabled }}
-          # Get the password for the replication user
-          {{- $replUsername := .Values.replica.replicationUser }}
-          {{- $replUser := index .Values.auth.aclUsers $replUsername }}
-          {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
-          REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
+      {
+        echo ""
+        echo "# Master authentication"
+        echo "masterauth $REPL_PASSWORD"
+        echo "masteruser {{ $replUsername }}"
+      } >>"$VALKEY_CONFIG"
+      log "Configured masterauth with user {{ $replUsername }}"
+      {{- end }}
 
-          # Write masterauth configuration
-          echo "masterauth $REPL_PASSWORD" >>"$VALKEY_CONFIG"
-          echo "masteruser {{ $replUsername }}" >>"$VALKEY_CONFIG"
-          log "Configured masterauth with user {{ $replUsername }}"
-          {{- end }}
-
-          {{- if .Values.tls.enabled }}
-          # TLS for replication
-          {
-            echo ""
-            echo "# TLS for replication"
-            echo "tls-replication yes"
-          } >>"$VALKEY_CONFIG"
-          log "Enabled TLS for replication"
-          {{- end }}
-      fi
+      {{- if .Values.tls.enabled }}
+      # TLS for replication
+      {
+        echo ""
+        echo "# TLS for replication"
+        echo "tls-replication yes"
+      } >>"$VALKEY_CONFIG"
+      log "Enabled TLS for replication"
+      {{- end }}
     fi
 
     {{- if gt (int .Values.replica.minReplicasToWrite) 0 }}
@@ -270,7 +260,6 @@ data:
     log "Configured write safety: require {{ .Values.replica.minReplicasToWrite }} replicas with max {{ .Values.replica.minReplicasMaxLag }}s lag"
     {{- end }}
     {{- end }}
-
     # Append extra configs if present
     if [ -f /usr/local/etc/valkey/valkey.conf ]; then
       log "Appending /usr/local/etc/valkey/valkey.conf"

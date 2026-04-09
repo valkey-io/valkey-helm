@@ -13,12 +13,12 @@ metadata:
 spec:
   type: {{ .Values.haproxy.service.type }}
   ports:
-    - port: {{ .Values.haproxy.service.port }}
-      targetPort: 6379
+    - port: {{ .Values.haproxy.service.port | default 6379 }}
+      targetPort: {{ .Values.haproxy.service.port | default 6379 }}
       protocol: TCP
       name: valkey-write
-    - port: 6380
-      targetPort: 6380
+    - port: {{ .Values.haproxy.service.readPort | default 6380 }}
+      targetPort: {{ .Values.haproxy.service.readPort | default 6380 }}
       protocol: TCP
       name: valkey-read
   selector:
