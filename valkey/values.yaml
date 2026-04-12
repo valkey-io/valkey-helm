@@ -194,6 +194,18 @@ auth:
   # read-user:
   #   permissions: "~* -@all +@read +ping +info"
 
+  sentinelAclUsers:
+    default:
+      passwordKey: ""
+      permissions: ""
+    # Example for isolated inter-sentinel gossip:
+    # sentinel.inter.node:
+    #   passwordKey: "inter-node-pwd"
+    #   permissions: "on resetchannels -@all +auth +hello +ping +sentinel +subscribe +publish &*"
+    # haproxy_watcher:
+    #   passwordKey: "watcher-pwd"
+    #   permissions: "on -@all +auth +hello +ping +sentinel|master +sentinel|masters +sentinel|sentinels"
+
   # Inline ACL configuration that will be appended after generated users.
   # NOTE: If using aclConfig, ensure the 'default' user is defined here.
   aclConfig: ""
@@ -263,6 +275,81 @@ replica:
   # Controls when PVCs are deleted (requires Kubernetes 1.23+)
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
   persistentVolumeClaimRetentionPolicy: {}
+
+  # Sentinel configuration for automatic failover (requires replica.enabled: true)
+  sentinel:
+    # Enable Sentinel for high availability and automatic failover
+    enabled: false
+
+    # Username for Sentinel to authenticate to the Valkey master/replicas.
+    # If not defined or left empty, the script will fallback to using replicationUser.
+    # WARNING: If the 'default' user is disabled in auth.aclUsers, this MUST be set to a
+    # valid user with Pub/Sub and monitoring permissions.
+    monitorUser: "default"
+
+    # Declare the specific user Sentinels will use to authenticate with EACH OTHER.
+    # WARNING: If the 'default' user is disabled in auth.sentinelAclUsers, this MUST be
+    # set to a valid user to prevent the 'empty array' discovery error.
+    interSentinelUser: "default"
+
+    # Port on which sentinel will listen
+    port: 26379
+
+    # Master set name used by sentinel to identify the monitored master
+    masterSet: "mymaster"
+
+    # Quorum - number of sentinels that must agree on master failure
+    # Default: 2 (works well with 3 sentinels - majority)
+    # Recommendation: floor(replicas/2) + 1 for a majority
+    quorum: 2
+
+    # Time in milliseconds before sentinel considers an instance down
+    downAfterMilliseconds: 5000
+
+    # Timeout for failover operation in milliseconds
+    failoverTimeout: 10000
+
+    # Number of replicas to reconfigure in parallel after failover
+    parallelSyncs: 1
+
+    # Resource limits/requests for sentinel container
+    resources: {}
+      # Example:
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+      # requests:
+      #   cpu: 50m
+      #   memory: 64Mi
+
+    # Service configuration for sentinel
+    service:
+      # Service type (ClusterIP, NodePort, LoadBalancer)
+      type: ClusterIP
+      # Port on which the sentinel service will be exposed
+      port: 26379
+      # Optional annotations for the sentinel service
+      annotations: {}
+      # NodePort value (if service.type is NodePort)
+      nodePort: 0
+      # ClusterIP value
+      clusterIP: ""
+      # Application protocol
+      appProtocol: ""
+      # Class of a load balancer implementation
+      loadBalancerClass: ""
+
+    # Persistence configuration for sentinel state
+    persistence:
+      # Enable persistence for sentinel (stores sentinel state across restarts)
+      enabled: false
+      # Size of the PVC for sentinel data
+      size: "100Mi"
+      # Storage class name (empty = use default storage class)
+      storageClass: ""
+      # Access modes for the PVC
+      accessModes:
+        - ReadWriteOnce
 
 tls:
   # Enable TLS
@@ -479,3 +566,56 @@ metrics:
     #   for: 1s
     #   labels:
     #     severity: error
+
+haproxy:
+  enabled: false
+  image:
+    registry: docker.io
+    repository: haproxy
+    tag: "2.9"
+    pullPolicy: IfNotPresent
+  replicas: 3
+  service:
+    type: ClusterIP
+    port: 6379      # Port for write operations
+    readPort: 6380  # Port for read operations
+    annotations: {}
+  resources: {}
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+  config:
+    checkInterval: 2s
+    timeout:
+      connect: 5s
+      client: 1m
+      server: 1m
+  securityContext: {}
+  extraInitContainers: []
+  extraVolumeMounts: []
+  extraVolumes: []
+  # Sentinel watcher sidecar: queries Sentinel for master changes and updates HAProxy
+  # backend state via HAProxy's runtime socket, enabling near-instant failover.
+  # Only deployed when replica.sentinel.enabled is true.
+  sentinelWatcher:
+    # Dedicated sentinel ACL user for the watcher. 
+    # Must be defined in auth.sentinelAclUsers
+    user: "default"
+    # Uses valkey/valkey alpine image which ships valkey-cli and busybox nc.
+    # Busybox nc supports -U (unix domain sockets) so no extra tools are needed.
+    image:
+      registry: docker.io
+      repository: valkey/valkey
+      tag: "{{ .Chart.AppVersion }}-alpine"
+      pullPolicy: IfNotPresent
+    resources: {}
+      # limits:
+      #   cpu: 50m
+      #   memory: 32Mi
+      # requests:
+      #   cpu: 10m
+      #   memory: 16Mi
+    securityContext: {}
