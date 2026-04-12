@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-health
+  namespace: {{ include "valkey.namespace" . }}
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  ping-liveness.sh: |-
+    #!/bin/sh
+    {{- if .Values.auth.enabled }}
+    response=$(timeout -s 3 $1 valkey-cli -h 127.0.0.1 -p {{ .Values.service.port }} -a "{{ include "valkey.password" . }}" ping 2>/dev/null)
+    {{- else }}
+    response=$(timeout -s 3 $1 valkey-cli -h 127.0.0.1 -p {{ .Values.service.port }} ping 2>/dev/null)
+    {{- end }}
+    if [ "$response" != "PONG" ] && [ "${response%% *}" != "LOADING" ]; then
+      exit 1
+    fi
+    
+  ping-readiness.sh: |-
+    #!/bin/sh
+    {{- if .Values.auth.enabled }}
+    response=$(timeout -s 3 $1 valkey-cli -h 127.0.0.1 -p {{ .Values.service.port }} -a "{{ include "valkey.password" . }}" ping 2>/dev/null)
+    {{- else }}
+    response=$(timeout -s 3 $1 valkey-cli -h 127.0.0.1 -p {{ .Values.service.port }} ping 2>/dev/null)
+    {{- end }}
+    if [ "$response" != "PONG" ]; then
+      exit 1
+    fi
+    
+  ping-sentinel.sh: |-
+    #!/bin/sh
+    {{- if .Values.auth.enabled }}
+    response=$(timeout -s 3 $1 valkey-cli -h 127.0.0.1 -p {{ .Values.sentinel.port }} -a "{{ include "valkey.password" . }}" ping 2>/dev/null)
+    {{- else }}
+    response=$(timeout -s 3 $1 valkey-cli -h 127.0.0.1 -p {{ .Values.sentinel.port }} ping 2>/dev/null)
+    {{- end }}
+    if [ "$response" != "PONG" ] && [ "${response%% *}" != "LOADING" ]; then
+      exit 1
+    fi
