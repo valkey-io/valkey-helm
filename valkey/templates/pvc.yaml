@@ -5,17 +5,13 @@ metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
-    {{- with .Values.dataStorage.labels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
+    {{- include "renderTplValues" (dict "value" .Values.dataStorage.labels "indent" 4 "root" $ ) }}
   {{- if or .Values.dataStorage.keepPvc .Values.dataStorage.annotations }}
   annotations:
     {{- if .Values.dataStorage.keepPvc }}
     "helm.sh/resource-policy": keep
     {{- end }}
-    {{- with .Values.dataStorage.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
+    {{- include "renderTplValues" (dict "value" .Values.dataStorage.annotations "indent" 4 "root" $ ) }}
   {{- end }}
 spec:
   accessModes:
