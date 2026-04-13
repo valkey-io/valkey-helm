@@ -1,0 +1,20 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "valkey-cluster.fullname" . }}-metrics
+  namespace: {{ include "valkey-cluster.names.namespace" . }}
+  {{- $labels := include "valkey-cluster.tplvalues.merge" ( dict "values" ( list .Values.metrics.service.labels .Values.commonLabels ) "context" . ) }}
+  labels: {{- include "valkey-cluster.standardlabels" ( dict "customLabels" $labels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: "metrics"
+spec:
+  clusterIP: {{ .Values.metrics.service.clusterIP }}
+  type: {{ .Values.metrics.service.type }}
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.containerPorts.http }}
+      targetPort: http-metrics
+  {{- $podLabels := include "valkey-cluster.tplvalues.merge" ( dict "values" ( list .Values.podLabels .Values.commonLabels ) "context" . ) }}
+  selector: {{- include "valkey-cluster.matchLabels" ( dict "customLabels" $podLabels "context" $ ) | nindent 4 }}
+{{- end }}
+
