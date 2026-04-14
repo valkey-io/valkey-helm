@@ -18,6 +18,8 @@ tests:
           path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "valkey-users-secret")]
       - notExists:
           path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "valkey-auth-secret")]
+      - notExists:
+          path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "inject-secret")]
 
   - it: should have generated volume with inline passwords
     set:
@@ -113,6 +115,33 @@ tests:
             secret:
               secretName: RELEASE-NAME-valkey-auth
               defaultMode: 0400
+
+  - it: should have generated a volume with emptyDir and mount it
+    set:
+      auth.enabled: true
+      auth.injectSecret.enabled: true
+      auth.injectSecret.username: default
+      auth.injectSecret.permissions: "~* &* +@all"
+      auth.injectSecret.mountPath: "/test/path"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: inject-secret
+            mountPath: "/test/"
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: inject-secret
+            mountPath: "/test/"
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: inject-secret
+            emptyDir: { }
 
   - it: should use custom image
     set:

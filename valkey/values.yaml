@@ -182,6 +182,16 @@ auth:
   # Use an existing secret for user passwords. Key defaults to username.
   usersExistingSecret: ""
 
+  # Enable the secret injection by another container
+  injectSecret:
+    enabled: false
+    # IMPORTANT: A duplication of a user would overwrite the definition of aclUsers or aclConfig
+    username: ""
+    # Same permission syntax as aclUsers
+    permissions: ""
+    # Path to secret e.g "/path/secret"
+    mountPath: ""
+
   # Map of users to create with ACL permissions.
   # If usersExistingSecret is set, passwords from the secret take priority over inline passwords.
   # NOTE: If using aclUsers, the 'default' user must be included here.
@@ -212,6 +222,7 @@ replica:
   # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
   # The chart requires this to retrieve the password for replica authentication.
   # The user must have appropriate replication permissions: +psync +replconf +ping
+  # When auth.injectSecret.enabled is true, the replicationUser gets ignored and the auth.injectSecret.username gets set.
   replicationUser: "default"
 
   # Replication settings
