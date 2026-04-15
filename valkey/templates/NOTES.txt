@@ -19,6 +19,23 @@ Your Valkey deployment is running in REPLICATION mode:
 - 1 Master  ({{ include "valkey.fullname" . }}-0)
 - {{ .Values.replica.replicas }} Replica(s)
 
+{{- if .Values.sentinel.enabled }}
+
+🛡️ SENTINEL MODE (High Availability)
+
+  Sentinel instances: {{ .Values.sentinel.replicas }}
+  Sentinel service:   {{ include "valkey.sentinel.fullname" . }}:{{ .Values.sentinel.service.port }}
+  Master group name:  {{ .Values.sentinel.masterGroupName }}
+  Quorum:             {{ .Values.sentinel.quorum }}
+
+  Automatic failover is ENABLED. The master pod may change during failover.
+  The primary service ({{ include "valkey.fullname" . }}) automatically routes to the current master.
+
+  For Sentinel-aware clients:
+    sentinel_hosts = ["{{ include "valkey.sentinel.fullname" . }}:{{ .Values.sentinel.service.port }}"]
+    master_name = "{{ .Values.sentinel.masterGroupName }}"
+{{- end }}
+
 {{- if .Values.replica.service.enabled }}
 
 READ Operations (Load-balanced across all pods):

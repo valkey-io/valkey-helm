@@ -1,0 +1,96 @@
+{{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.roleLabeler.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-role-labeler
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+data:
+  role-checker.sh: |-
+    #!/bin/sh
+    set -eu
+
+    POLL_INTERVAL={{ .Values.sentinel.roleLabeler.pollIntervalSeconds }}
+    VALKEY_PORT="{{ .Values.service.port }}"
+    ROLE_FILE="/role/current-role"
+
+    {{- if .Values.auth.enabled }}
+    {{- $replUsername := .Values.replica.replicationUser }}
+    {{- $replUser := index .Values.auth.aclUsers $replUsername }}
+    {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
+    AUTH_PASSWORD=""
+    {{- if .Values.auth.usersExistingSecret }}
+    if [ -f "/valkey-users-secret/{{ $replPasswordKey }}" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-users-secret/{{ $replPasswordKey }}")
+    elif [ -f "/valkey-auth-secret/{{ $replUsername }}-password" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-auth-secret/{{ $replUsername }}-password")
+    fi
+    {{- else }}
+    if [ -f "/valkey-auth-secret/{{ $replUsername }}-password" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-auth-secret/{{ $replUsername }}-password")
+    fi
+    {{- end }}
+    CLI_AUTH="--user {{ $replUsername }} -a ${AUTH_PASSWORD} --no-auth-warning"
+    {{- else }}
+    CLI_AUTH=""
+    {{- end }}
+
+    {{- if .Values.tls.enabled }}
+    CLI_TLS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }}"
+    {{- else }}
+    CLI_TLS=""
+    {{- end }}
+
+    while true; do
+      ROLE_OUTPUT=$(valkey-cli -h 127.0.0.1 -p "$VALKEY_PORT" $CLI_TLS $CLI_AUTH ROLE 2>/dev/null || echo "")
+      ROLE=$(echo "$ROLE_OUTPUT" | head -1)
+
+      case "$ROLE" in
+        master) echo "master" > "$ROLE_FILE" ;;
+        slave)  echo "replica" > "$ROLE_FILE" ;;
+      esac
+
+      sleep "$POLL_INTERVAL"
+    done
+
+  role-labeler.sh: |-
+    #!/bin/sh
+    set -eu
+
+    POLL_INTERVAL={{ .Values.sentinel.roleLabeler.pollIntervalSeconds }}
+    KUBE_API="https://kubernetes.default.svc"
+    TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
+    CA_FILE="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    ROLE_FILE="/role/current-role"
+    CURRENT_LABEL=""
+
+    patch_label() {
+      ROLE="$1"
+      TOKEN=$(cat "$TOKEN_FILE")
+      PAYLOAD="{\"metadata\":{\"labels\":{\"valkey-role\":\"${ROLE}\"}}}"
+
+      curl -s -o /dev/null \
+        --cacert "$CA_FILE" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Content-Type: application/strategic-merge-patch+json" \
+        -X PATCH \
+        -d "$PAYLOAD" \
+        "${KUBE_API}/api/v1/namespaces/${POD_NAMESPACE}/pods/${POD_NAME}" 2>/dev/null || true
+    }
+
+    # Wait for the role file to appear
+    while [ ! -f "$ROLE_FILE" ]; do
+      sleep 1
+    done
+
+    while true; do
+      NEW_LABEL=$(cat "$ROLE_FILE" 2>/dev/null || echo "")
+
+      if [ -n "$NEW_LABEL" ] && [ "$NEW_LABEL" != "$CURRENT_LABEL" ]; then
+        patch_label "$NEW_LABEL"
+        CURRENT_LABEL="$NEW_LABEL"
+      fi
+
+      sleep "$POLL_INTERVAL"
+    done
+{{- end }}

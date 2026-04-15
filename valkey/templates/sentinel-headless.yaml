@@ -1,0 +1,19 @@
+{{- if and .Values.replica.enabled .Values.sentinel.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "valkey.sentinel.headlessServiceName" . }}
+  labels:
+    {{- include "valkey.sentinel.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-sentinel
+      port: {{ .Values.sentinel.port }}
+      targetPort: tcp-sentinel
+      protocol: TCP
+  selector:
+    {{- include "valkey.sentinel.selectorLabels" . | nindent 4 }}
+{{- end }}

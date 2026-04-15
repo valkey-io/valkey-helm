@@ -1,0 +1,110 @@
+suite: sentinel service configuration
+templates:
+  - templates/sentinel-service.yaml
+  - templates/sentinel-headless.yaml
+  - templates/init_config.yaml
+tests:
+  - it: should not render sentinel service when disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: false
+    template: templates/sentinel-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render sentinel headless service when disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: false
+    template: templates/sentinel-headless.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render sentinel service when enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel
+      - equal:
+          path: spec.ports[0].port
+          value: 26379
+      - equal:
+          path: spec.ports[0].name
+          value: tcp-sentinel
+
+  - it: should render sentinel headless service when enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-headless.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel-headless
+      - equal:
+          path: spec.clusterIP
+          value: None
+      - equal:
+          path: spec.publishNotReadyAddresses
+          value: true
+
+  - it: should have sentinel component label on services
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-service.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: sentinel
+
+  - it: should use custom sentinel service port
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.service.port: 36379
+    template: templates/sentinel-service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 36379
+
+  - it: should apply sentinel service annotations
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.service.annotations:
+        prometheus.io/scrape: "true"
+    template: templates/sentinel-service.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+
+  - it: should select sentinel pods
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-service.yaml
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: sentinel

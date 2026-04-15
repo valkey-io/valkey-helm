@@ -188,3 +188,57 @@ Validate replica authentication configuration
 {{- end }}
 {{- end -}}
 
+{{/*
+Sentinel full name
+*/}}
+{{- define "valkey.sentinel.fullname" -}}
+{{ include "valkey.fullname" . }}-sentinel
+{{- end -}}
+
+{{/*
+Sentinel headless service name
+*/}}
+{{- define "valkey.sentinel.headlessServiceName" -}}
+{{ include "valkey.fullname" . }}-sentinel-headless
+{{- end -}}
+
+{{/*
+Sentinel labels
+*/}}
+{{- define "valkey.sentinel.labels" -}}
+{{ include "valkey.labels" . }}
+app.kubernetes.io/component: sentinel
+{{- end -}}
+
+{{/*
+Sentinel selector labels
+*/}}
+{{- define "valkey.sentinel.selectorLabels" -}}
+{{ include "valkey.selectorLabels" . }}
+app.kubernetes.io/component: sentinel
+{{- end -}}
+
+{{/*
+Returns the role labeler container image
+*/}}
+{{- define "valkey.roleLabeler.image" -}}
+{{- include "common.image" (dict "image" (dict "registry" .Values.sentinel.roleLabeler.image.registry "repository" .Values.sentinel.roleLabeler.image.repository "tag" .Values.sentinel.roleLabeler.image.tag) "global" .Values.global) }}
+{{- end -}}
+
+{{/*
+Validate sentinel configuration
+*/}}
+{{- define "valkey.validateSentinelConfig" -}}
+{{- if .Values.sentinel.enabled }}
+  {{- if not .Values.replica.enabled }}
+    {{- fail "Sentinel mode requires replication to be enabled. Please set replica.enabled=true" }}
+  {{- end }}
+  {{- if lt (int .Values.sentinel.replicas) 3 }}
+    {{- fail "Sentinel requires at least 3 replicas for proper quorum. Please set sentinel.replicas >= 3" }}
+  {{- end }}
+  {{- if gt (int .Values.sentinel.quorum) (int .Values.sentinel.replicas) }}
+    {{- fail (printf "Sentinel quorum (%d) cannot be greater than the number of Sentinel replicas (%d)" (int .Values.sentinel.quorum) (int .Values.sentinel.replicas)) }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+

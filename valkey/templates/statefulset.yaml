@@ -54,7 +54,11 @@ spec:
         {{- end }}
     spec:
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
+      {{- if and .Values.sentinel.enabled .Values.sentinel.roleLabeler.enabled }}
+      automountServiceAccountToken: true
+      {{- else }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- end }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName | quote }}
@@ -233,11 +237,88 @@ spec:
         {{- with .Values.extraContainers }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- if and .Values.sentinel.enabled .Values.sentinel.roleLabeler.enabled }}
+        - name: role-checker
+          image: {{ include "valkey.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 1000
+          command: [ "/scripts/role-checker.sh" ]
+          volumeMounts:
+            - name: role-labeler-scripts
+              mountPath: /scripts
+            - name: role-shared
+              mountPath: /role
+            {{- if .Values.auth.enabled }}
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+          {{- with .Values.sentinel.roleLabeler.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        - name: role-labeler
+          image: {{ include "valkey.roleLabeler.image" . }}
+          imagePullPolicy: {{ .Values.sentinel.roleLabeler.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          command: [ "/scripts/role-labeler.sh" ]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: role-labeler-scripts
+              mountPath: /scripts
+            - name: role-shared
+              mountPath: /role
+          {{- with .Values.sentinel.roleLabeler.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
       volumes:
         - name: scripts
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts
             defaultMode: 0555
+        {{- if and .Values.sentinel.enabled .Values.sentinel.roleLabeler.enabled }}
+        - name: role-labeler-scripts
+          configMap:
+            name: {{ include "valkey.fullname" . }}-role-labeler
+            defaultMode: 0555
+        - name: role-shared
+          emptyDir:
+            medium: Memory
+        {{- end }}
         {{- if .Values.auth.enabled }}
         - name: valkey-acl
           emptyDir:
