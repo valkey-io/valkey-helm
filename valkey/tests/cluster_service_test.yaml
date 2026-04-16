@@ -1,0 +1,121 @@
+suite: cluster service configuration
+templates:
+  - templates/cluster-headless.yaml
+  - templates/cluster-service.yaml
+  - templates/cluster-configmap.yaml
+tests:
+  # Headless service
+  - it: should not render headless service when cluster disabled
+    set:
+      cluster.enabled: false
+    template: templates/cluster-headless.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render headless service with correct properties
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-headless.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.clusterIP
+          value: None
+      - equal:
+          path: spec.publishNotReadyAddresses
+          value: true
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-headless
+
+  - it: should have two ports on headless service
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-headless.yaml
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: tcp
+            port: 6379
+            targetPort: tcp
+            protocol: TCP
+      - contains:
+          path: spec.ports
+          content:
+            name: cluster-bus
+            port: 16379
+            targetPort: cluster-bus
+            protocol: TCP
+
+  # Client service
+  - it: should not render client service when cluster disabled
+    set:
+      cluster.enabled: false
+    template: templates/cluster-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render client service with single port
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster
+      - lengthEqual:
+          path: spec.ports
+          count: 1
+      - contains:
+          path: spec.ports
+          content:
+            name: tcp
+            port: 6379
+            targetPort: tcp
+            protocol: TCP
+
+  - it: should apply service annotations
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.service.annotations:
+        service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    template: templates/cluster-service.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["service.beta.kubernetes.io/aws-load-balancer-type"]
+          value: nlb
+
+  - it: should configure NodePort when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.service.type: NodePort
+      cluster.service.nodePort: 30379
+    template: templates/cluster-service.yaml
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30379
+
+  - it: should use cluster selector labels
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-service.yaml
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: cluster

@@ -1,0 +1,36 @@
+{{- if .Values.cluster.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "valkey.cluster.fullname" . }}
+  labels:
+    {{- include "valkey.cluster.labels" . | nindent 4 }}
+  {{- with .Values.cluster.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.cluster.service.type }}
+  {{- if .Values.cluster.service.clusterIP }}
+  clusterIP: {{ .Values.cluster.service.clusterIP }}
+  {{- end }}
+  {{- if .Values.cluster.service.loadBalancerClass }}
+  loadBalancerClass: {{ .Values.cluster.service.loadBalancerClass }}
+  {{- end }}
+  {{- if .Values.cluster.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{ .Values.cluster.service.loadBalancerSourceRanges }}
+  {{- end }}
+  ports:
+    - port: {{ .Values.cluster.service.port }}
+      targetPort: tcp
+      protocol: TCP
+      name: tcp
+      {{- if and (eq .Values.cluster.service.type "NodePort") .Values.cluster.service.nodePort }}
+      nodePort: {{ .Values.cluster.service.nodePort }}
+      {{- end }}
+      {{- if .Values.cluster.service.appProtocol }}
+      appProtocol: {{ .Values.cluster.service.appProtocol }}
+      {{- end }}
+  selector:
+    {{- include "valkey.cluster.selectorLabels" . | nindent 4 }}
+{{- end }}

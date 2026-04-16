@@ -1,0 +1,36 @@
+{{- if and .Values.replica.enabled .Values.sentinel.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "valkey.sentinel.fullname" . }}
+  labels:
+    {{- include "valkey.sentinel.labels" . | nindent 4 }}
+  {{- with .Values.sentinel.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.sentinel.service.type }}
+  {{- if .Values.sentinel.service.clusterIP }}
+  clusterIP: {{ .Values.sentinel.service.clusterIP }}
+  {{- end }}
+  {{- if .Values.sentinel.service.loadBalancerClass }}
+  loadBalancerClass: {{ .Values.sentinel.service.loadBalancerClass }}
+  {{- end }}
+  {{- if .Values.sentinel.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{ .Values.sentinel.service.loadBalancerSourceRanges }}
+  {{- end }}
+  ports:
+    - port: {{ .Values.sentinel.service.port }}
+      targetPort: tcp-sentinel
+      protocol: TCP
+      name: tcp-sentinel
+      {{- if and (eq .Values.sentinel.service.type "NodePort") .Values.sentinel.service.nodePort }}
+      nodePort: {{ .Values.sentinel.service.nodePort }}
+      {{- end }}
+      {{- if .Values.sentinel.service.appProtocol }}
+      appProtocol: {{ .Values.sentinel.service.appProtocol }}
+      {{- end }}
+  selector:
+    {{- include "valkey.sentinel.selectorLabels" . | nindent 4 }}
+{{- end }}

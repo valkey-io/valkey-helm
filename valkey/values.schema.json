@@ -22,6 +22,181 @@
                 }
             }
         },
+        "cluster": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "masters": {
+                    "type": "integer",
+                    "minimum": 3
+                },
+                "replicasPerMaster": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "nodeTimeout": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "persistence": {
+                    "type": "object",
+                    "properties": {
+                        "size": {
+                            "type": "string"
+                        },
+                        "storageClass": {
+                            "type": "string"
+                        },
+                        "accessModes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "persistentVolumeClaimRetentionPolicy": {
+                    "type": "object"
+                },
+                "service": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string"
+                        },
+                        "port": {
+                            "type": "integer"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        },
+                        "nodePort": {
+                            "type": "integer"
+                        },
+                        "clusterIP": {
+                            "type": "string"
+                        },
+                        "appProtocol": {
+                            "type": "string"
+                        },
+                        "loadBalancerClass": {
+                            "type": "string"
+                        },
+                        "loadBalancerSourceRanges": {
+                            "type": "array"
+                        }
+                    }
+                },
+                "podDisruptionBudget": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "minAvailable": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "string",
+                                    "pattern": "^[0-9]+%$"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "maxUnavailable": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "string",
+                                    "pattern": "^[0-9]+%$"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "resources": {
+                    "type": "object"
+                },
+                "securityContext": {
+                    "type": "object"
+                },
+                "podSecurityContext": {
+                    "type": "object"
+                },
+                "podAnnotations": {
+                    "type": "object"
+                },
+                "podLabels": {
+                    "type": "object"
+                },
+                "workloadAnnotations": {
+                    "type": "object"
+                },
+                "nodeSelector": {
+                    "type": "object"
+                },
+                "tolerations": {
+                    "type": "array"
+                },
+                "affinity": {
+                    "type": "object"
+                },
+                "topologySpreadConstraints": {
+                    "type": "array"
+                },
+                "priorityClassName": {
+                    "type": "string"
+                },
+                "extraConfig": {
+                    "type": "string"
+                },
+                "roleLabeler": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "pollIntervalSeconds": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "image": {
+                            "type": "object",
+                            "properties": {
+                                "registry": {
+                                    "type": "string"
+                                },
+                                "repository": {
+                                    "type": "string"
+                                },
+                                "tag": {
+                                    "type": "string"
+                                },
+                                "pullPolicy": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "resources": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
         "clusterDomain": {
             "type": "string"
         },
@@ -438,6 +613,192 @@
         },
         "resources": {
             "type": "object"
+        },
+        "sentinel": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "replicas": {
+                    "type": "integer",
+                    "minimum": 3
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "masterGroupName": {
+                    "type": "string"
+                },
+                "quorum": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "downAfterMilliseconds": {
+                    "type": "integer"
+                },
+                "failoverTimeout": {
+                    "type": "integer"
+                },
+                "parallelSyncs": {
+                    "type": "integer"
+                },
+                "resources": {
+                    "type": "object"
+                },
+                "securityContext": {
+                    "type": "object"
+                },
+                "podSecurityContext": {
+                    "type": "object"
+                },
+                "podAnnotations": {
+                    "type": "object"
+                },
+                "podLabels": {
+                    "type": "object"
+                },
+                "workloadAnnotations": {
+                    "type": "object"
+                },
+                "nodeSelector": {
+                    "type": "object"
+                },
+                "tolerations": {
+                    "type": "array"
+                },
+                "affinity": {
+                    "type": "object"
+                },
+                "topologySpreadConstraints": {
+                    "type": "array"
+                },
+                "priorityClassName": {
+                    "type": "string"
+                },
+                "service": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string"
+                        },
+                        "port": {
+                            "type": "integer"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        },
+                        "nodePort": {
+                            "type": "integer"
+                        },
+                        "clusterIP": {
+                            "type": "string"
+                        },
+                        "appProtocol": {
+                            "type": "string"
+                        },
+                        "loadBalancerClass": {
+                            "type": "string"
+                        },
+                        "loadBalancerSourceRanges": {
+                            "type": "array"
+                        }
+                    }
+                },
+                "podDisruptionBudget": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "minAvailable": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "string",
+                                    "pattern": "^[0-9]+%$"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "maxUnavailable": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "string",
+                                    "pattern": "^[0-9]+%$"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "persistence": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "size": {
+                            "type": "string"
+                        },
+                        "storageClass": {
+                            "type": "string"
+                        },
+                        "accessModes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "extraConfig": {
+                    "type": "string"
+                },
+                "roleLabeler": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "pollIntervalSeconds": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "image": {
+                            "type": "object",
+                            "properties": {
+                                "registry": {
+                                    "type": "string"
+                                },
+                                "repository": {
+                                    "type": "string"
+                                },
+                                "tag": {
+                                    "type": "string"
+                                },
+                                "pullPolicy": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "resources": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
         },
         "securityContext": {
             "type": "object",

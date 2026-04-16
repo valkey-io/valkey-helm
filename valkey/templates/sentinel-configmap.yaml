@@ -1,0 +1,142 @@
+{{- if and .Values.replica.enabled .Values.sentinel.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.sentinel.fullname" . }}-scripts
+  labels:
+    {{- include "valkey.sentinel.labels" . | nindent 4 }}
+data:
+  sentinel-init.sh: |-
+    #!/bin/sh
+    set -eu
+
+    SENTINEL_CONFIG="/data/conf/sentinel.conf"
+    DATA_DIR="/data/conf"
+    LOGFILE="/data/sentinel-init.log"
+
+    log() {
+      echo "$(date) $1" | tee -a "$LOGFILE" >&2
+    }
+
+    rm -f "$LOGFILE"
+    mkdir -p "$DATA_DIR"
+    rm -f "$SENTINEL_CONFIG"
+
+    MASTER_GROUP="{{ .Values.sentinel.masterGroupName }}"
+    HEADLESS_SVC="{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    DATA_PORT="{{ .Values.service.port }}"
+    SENTINEL_PORT="{{ .Values.sentinel.port }}"
+    TOTAL_DATA_PODS={{ add (int .Values.replica.replicas) 1 }}
+
+    {{- if .Values.auth.enabled }}
+    # Read the default user password for Sentinel to authenticate to data pods
+    {{- $replUsername := .Values.replica.replicationUser }}
+    {{- $replUser := index .Values.auth.aclUsers $replUsername }}
+    {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
+    AUTH_PASSWORD=""
+    {{- if .Values.auth.usersExistingSecret }}
+    if [ -f "/valkey-users-secret/{{ $replPasswordKey }}" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-users-secret/{{ $replPasswordKey }}")
+    elif [ -f "/valkey-auth-secret/{{ $replUsername }}-password" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-auth-secret/{{ $replUsername }}-password")
+    fi
+    {{- else }}
+    if [ -f "/valkey-auth-secret/{{ $replUsername }}-password" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-auth-secret/{{ $replUsername }}-password")
+    fi
+    {{- end }}
+
+    CLI_AUTH_FLAGS="--user {{ $replUsername }} -a $AUTH_PASSWORD --no-auth-warning"
+    {{- else }}
+    CLI_AUTH_FLAGS=""
+    {{- end }}
+
+    {{- if .Values.tls.enabled }}
+    CLI_TLS_FLAGS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }}"
+    {{- else }}
+    CLI_TLS_FLAGS=""
+    {{- end }}
+
+    # Discover current master by querying data pods
+    MASTER_HOST=""
+    MASTER_FOUND=false
+    log "Attempting to discover current master from data pods..."
+
+    i=0
+    while [ $i -lt $TOTAL_DATA_PODS ]; do
+      POD_HOST="{{ include "valkey.fullname" . }}-${i}.${HEADLESS_SVC}"
+      log "Probing ${POD_HOST}:${DATA_PORT}..."
+
+      {{- if .Values.tls.enabled }}
+      ROLE_OUTPUT=$(valkey-cli -h "$POD_HOST" -p "$DATA_PORT" $CLI_TLS_FLAGS $CLI_AUTH_FLAGS ROLE 2>/dev/null || echo "")
+      {{- else }}
+      ROLE_OUTPUT=$(valkey-cli -h "$POD_HOST" -p "$DATA_PORT" $CLI_AUTH_FLAGS ROLE 2>/dev/null || echo "")
+      {{- end }}
+
+      if echo "$ROLE_OUTPUT" | head -1 | grep -q "master"; then
+        MASTER_HOST="$POD_HOST"
+        MASTER_FOUND=true
+        log "Found master at ${MASTER_HOST}"
+        break
+      fi
+      i=$((i + 1))
+    done
+
+    if [ "$MASTER_FOUND" = "false" ]; then
+      # Bootstrap: no master found, default to pod-0
+      MASTER_HOST="{{ include "valkey.fullname" . }}-0.${HEADLESS_SVC}"
+      log "No master found, defaulting to ${MASTER_HOST} (bootstrap)"
+    fi
+
+    # Determine this Sentinel's announce address
+    SENTINEL_HEADLESS="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    MY_ANNOUNCE="${HOSTNAME}.${SENTINEL_HEADLESS}"
+
+    log "Generating sentinel.conf"
+    {
+    {{- if .Values.tls.enabled }}
+      echo "port 0"
+      echo "tls-port {{ .Values.sentinel.port }}"
+      echo "tls-cert-file /tls/{{ .Values.tls.serverPublicKey }}"
+      echo "tls-key-file /tls/{{ .Values.tls.serverKey }}"
+      echo "tls-ca-cert-file /tls/{{ .Values.tls.caPublicKey }}"
+      {{- if .Values.tls.dhParamKey }}
+      echo "tls-dh-params-file /tls/{{ .Values.tls.dhParamKey }}"
+      {{- end }}
+      echo "tls-replication yes"
+      {{- if not .Values.tls.requireClientCertificate }}
+      echo "tls-auth-clients no"
+      {{- end }}
+    {{- else }}
+      echo "port {{ .Values.sentinel.port }}"
+    {{- end }}
+
+      echo ""
+      echo "dir /data"
+      echo "sentinel resolve-hostnames yes"
+      echo "sentinel announce-hostnames yes"
+      echo "sentinel announce-ip ${MY_ANNOUNCE}"
+      echo "sentinel announce-port {{ .Values.sentinel.port }}"
+      echo ""
+      echo "sentinel monitor ${MASTER_GROUP} ${MASTER_HOST} ${DATA_PORT} {{ .Values.sentinel.quorum }}"
+      echo "sentinel down-after-milliseconds ${MASTER_GROUP} {{ .Values.sentinel.downAfterMilliseconds }}"
+      echo "sentinel failover-timeout ${MASTER_GROUP} {{ .Values.sentinel.failoverTimeout }}"
+      echo "sentinel parallel-syncs ${MASTER_GROUP} {{ .Values.sentinel.parallelSyncs }}"
+
+    {{- if .Values.auth.enabled }}
+      echo ""
+      echo "sentinel auth-user ${MASTER_GROUP} {{ .Values.replica.replicationUser }}"
+      echo "sentinel auth-pass ${MASTER_GROUP} ${AUTH_PASSWORD}"
+    {{- end }}
+    } > "$SENTINEL_CONFIG"
+
+    {{- if .Values.sentinel.extraConfig }}
+    # Append extra Sentinel configuration
+    cat >> "$SENTINEL_CONFIG" << 'EXTRACONF'
+
+    {{ .Values.sentinel.extraConfig }}
+    EXTRACONF
+    {{- end }}
+
+    log "Sentinel configuration generated successfully"
+{{- end }}

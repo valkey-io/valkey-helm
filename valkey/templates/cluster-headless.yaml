@@ -1,0 +1,23 @@
+{{- if .Values.cluster.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "valkey.cluster.headlessServiceName" . }}
+  labels:
+    {{- include "valkey.cluster.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - port: {{ .Values.cluster.service.port }}
+      targetPort: tcp
+      protocol: TCP
+      name: tcp
+    - port: {{ add (int .Values.cluster.service.port) 10000 }}
+      targetPort: cluster-bus
+      protocol: TCP
+      name: cluster-bus
+  selector:
+    {{- include "valkey.cluster.selectorLabels" . | nindent 4 }}
+{{- end }}

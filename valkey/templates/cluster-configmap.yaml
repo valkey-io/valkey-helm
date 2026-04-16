@@ -1,0 +1,260 @@
+{{- if .Values.cluster.enabled }}
+{{- include "valkey.validateClusterConfig" . }}
+{{- include "valkey.validateAuthConfig" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.cluster.fullname" . }}-scripts
+  labels:
+    {{- include "valkey.cluster.labels" . | nindent 4 }}
+data:
+  cluster-init.sh: |-
+    #!/bin/sh
+    set -eu
+
+    VALKEY_CONFIG="/data/conf/valkey.conf"
+    DATA_DIR="/data/conf"
+    LOGFILE="/data/init.log"
+
+    log() {
+      echo "$(date) $1" | tee -a "$LOGFILE" >&2
+    }
+
+    rm -f "$LOGFILE"
+    mkdir -p "$DATA_DIR"
+    rm -f "$VALKEY_CONFIG"
+
+    {{- if .Values.auth.enabled }}
+    # Function to get password for a user
+    get_user_password() {
+      username="$1"
+      password_key="${2:-$username}"
+      password=""
+
+      {{- if .Values.auth.usersExistingSecret }}
+      if [ -f "/valkey-users-secret/$password_key" ]; then
+        password=$(cat "/valkey-users-secret/$password_key")
+        log "Using password from existing secret for user $username"
+      elif [ -f "/valkey-auth-secret/${username}-password" ]; then
+        password=$(cat "/valkey-auth-secret/${username}-password")
+        log "Using inline password for user $username"
+      else
+        log "ERROR: No password found for user $username"
+        return 1
+      fi
+      {{- else }}
+      if [ -f "/valkey-auth-secret/${username}-password" ]; then
+        password=$(cat "/valkey-auth-secret/${username}-password")
+        log "Using inline password for user $username"
+      else
+        log "ERROR: No password found for user $username"
+        return 1
+      fi
+      {{- end }}
+
+      echo "$password"
+    }
+    {{- end }}
+
+    # Base valkey.conf
+    log "Generating base valkey.conf"
+    {
+{{- if .Values.tls.enabled }}
+      echo "tls-cert-file /tls/{{ .Values.tls.serverPublicKey }}"
+      echo "tls-key-file /tls/{{ .Values.tls.serverKey }}"
+      echo "tls-ca-cert-file /tls/{{ .Values.tls.caPublicKey }}"
+      {{- if .Values.tls.dhParamKey }}
+      echo "tls-dh-params-file /tls/{{ .Values.tls.dhParamKey }}"
+      {{- end }}
+      {{- if not .Values.tls.requireClientCertificate }}
+      echo "tls-auth-clients no"
+      {{- end }}
+      echo "port 0"
+      echo "tls-port {{ .Values.cluster.service.port }}"
+      echo "tls-replication yes"
+{{- else }}
+      echo "port {{ .Values.cluster.service.port }}"
+{{- end }}
+      echo "protected-mode no"
+      echo "bind * -::*"
+      echo "dir /data"
+      echo ""
+      echo "# Cluster configuration"
+      echo "cluster-enabled yes"
+      echo "cluster-config-file /data/nodes.conf"
+      echo "cluster-node-timeout {{ .Values.cluster.nodeTimeout }}"
+    } >>"$VALKEY_CONFIG"
+
+    # Announce this node's hostname for cluster communication
+    HEADLESS_SVC="{{ include "valkey.cluster.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    MY_FQDN="${HOSTNAME}.${HEADLESS_SVC}"
+    {
+      echo ""
+      echo "# Cluster announce"
+      echo "cluster-announce-hostname ${MY_FQDN}"
+      echo "cluster-preferred-endpoint-type hostname"
+    } >>"$VALKEY_CONFIG"
+
+    {{- if .Values.auth.enabled }}
+    # Create secure directory for ACL file
+    log "Creating /etc/valkey directory for ACL file"
+    mkdir -p /etc/valkey
+
+    echo "aclfile /etc/valkey/users.acl" >>"$VALKEY_CONFIG"
+
+    log "Preparing ACL file at /etc/valkey/users.acl"
+    if [ -f /etc/valkey/users.acl ]; then
+      chmod 0600 /etc/valkey/users.acl
+      rm -f /etc/valkey/users.acl
+    fi
+
+    touch /etc/valkey/users.acl
+    chmod 0600 /etc/valkey/users.acl
+
+    {{- if .Values.auth.aclUsers }}
+    log "Generating ACL entries for users"
+    {{- range $username, $user := .Values.auth.aclUsers }}
+    {{- $passwordKey := $user.passwordKey | default $username }}
+
+    PASSWORD=$(get_user_password "{{ $username }}" "{{ $passwordKey }}") || exit 1
+    PASSHASH=$(echo -n "$PASSWORD" | sha256sum | cut -f 1 -d " ")
+    echo "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> /etc/valkey/users.acl
+    {{- end }}
+    {{- end }}
+
+    {{- if .Values.auth.aclConfig }}
+    log "Appending custom ACL configuration"
+    if [ -f /valkey-auth-secret/aclConfig ]; then
+      cat /valkey-auth-secret/aclConfig >> /etc/valkey/users.acl
+    fi
+    {{- end }}
+
+    chmod 0400 /etc/valkey/users.acl
+    log "ACL file created with 0400 permissions"
+    {{- end }}
+
+    # Append extra configs if present
+    {{- if .Values.valkeyConfig }}
+    if [ -f /usr/local/etc/valkey/valkey.conf ]; then
+      log "Appending /usr/local/etc/valkey/valkey.conf"
+      cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONFIG"
+    fi
+    {{- end }}
+
+    {{- if .Values.cluster.extraConfig }}
+    # Append extra cluster configuration
+    cat >> "$VALKEY_CONFIG" << 'EXTRACONF'
+
+    {{ .Values.cluster.extraConfig }}
+    EXTRACONF
+    {{- end }}
+
+    log "Cluster node configuration generated successfully"
+
+  cluster-bootstrap.sh: |-
+    #!/bin/sh
+    set -eu
+
+    LOGFILE="/data/bootstrap.log"
+    DATA_PORT="{{ .Values.cluster.service.port }}"
+    HEADLESS_SVC="{{ include "valkey.cluster.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    TOTAL_NODES={{ mul (int .Values.cluster.masters) (add1 (int .Values.cluster.replicasPerMaster)) }}
+    REPLICAS_PER_MASTER={{ int .Values.cluster.replicasPerMaster }}
+
+    log() {
+      echo "$(date) $1" | tee -a "$LOGFILE" >&2
+    }
+
+    rm -f "$LOGFILE"
+
+    {{- if .Values.tls.enabled }}
+    CLI_TLS_FLAGS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }} --cert /tls/{{ .Values.tls.serverPublicKey }} --key /tls/{{ .Values.tls.serverKey }}"
+    {{- else }}
+    CLI_TLS_FLAGS=""
+    {{- end }}
+
+    {{- if .Values.auth.enabled }}
+    {{- $defaultUser := index .Values.auth.aclUsers "default" | default dict }}
+    {{- $defaultPasswordKey := $defaultUser.passwordKey | default "default" }}
+    AUTH_PASSWORD=""
+    {{- if .Values.auth.usersExistingSecret }}
+    if [ -f "/valkey-users-secret/{{ $defaultPasswordKey }}" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-users-secret/{{ $defaultPasswordKey }}")
+    elif [ -f "/valkey-auth-secret/default-password" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-auth-secret/default-password")
+    fi
+    {{- else }}
+    if [ -f "/valkey-auth-secret/default-password" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-auth-secret/default-password")
+    fi
+    {{- end }}
+    CLI_AUTH_FLAGS="-a $AUTH_PASSWORD --no-auth-warning"
+    {{- else }}
+    CLI_AUTH_FLAGS=""
+    {{- end }}
+
+    # Wait for local node to be ready
+    log "Waiting for local Valkey node to respond..."
+    until valkey-cli -p "$DATA_PORT" $CLI_TLS_FLAGS $CLI_AUTH_FLAGS PING 2>/dev/null | grep -q PONG; do
+      sleep 1
+    done
+    log "Local node is ready"
+
+    # Check if cluster is already formed
+    CLUSTER_STATE=$(valkey-cli -p "$DATA_PORT" $CLI_TLS_FLAGS $CLI_AUTH_FLAGS CLUSTER INFO 2>/dev/null | grep cluster_state | tr -d '\r' || echo "")
+    if echo "$CLUSTER_STATE" | grep -q "cluster_state:ok"; then
+      log "Cluster is already formed, sleeping"
+      exec sleep infinity
+    fi
+
+    # Only pod-0 orchestrates cluster creation
+    POD_INDEX=${POD_INDEX:-0}
+    if [ "$POD_INDEX" != "0" ]; then
+      log "Not pod-0 (index=$POD_INDEX), waiting for cluster to be formed..."
+      while true; do
+        CLUSTER_STATE=$(valkey-cli -p "$DATA_PORT" $CLI_TLS_FLAGS $CLI_AUTH_FLAGS CLUSTER INFO 2>/dev/null | grep cluster_state | tr -d '\r' || echo "")
+        if echo "$CLUSTER_STATE" | grep -q "cluster_state:ok"; then
+          log "Cluster is now formed, sleeping"
+          exec sleep infinity
+        fi
+        sleep 2
+      done
+    fi
+
+    # Pod-0: wait for all nodes to be reachable
+    log "Pod-0: Waiting for all $TOTAL_NODES nodes to be reachable..."
+    NODE_ADDRS=""
+    i=0
+    while [ $i -lt $TOTAL_NODES ]; do
+      NODE_HOST="{{ include "valkey.cluster.fullname" . }}-${i}.${HEADLESS_SVC}"
+      log "Waiting for node ${NODE_HOST}:${DATA_PORT}..."
+      until valkey-cli -h "$NODE_HOST" -p "$DATA_PORT" $CLI_TLS_FLAGS $CLI_AUTH_FLAGS PING 2>/dev/null | grep -q PONG; do
+        sleep 2
+      done
+      log "Node ${NODE_HOST} is ready"
+      NODE_ADDRS="${NODE_ADDRS} ${NODE_HOST}:${DATA_PORT}"
+      i=$((i + 1))
+    done
+
+    log "All nodes ready. Creating cluster..."
+    log "Nodes:${NODE_ADDRS}"
+    log "Replicas per master: ${REPLICAS_PER_MASTER}"
+
+    # Create the cluster
+    valkey-cli --cluster create ${NODE_ADDRS} \
+      --cluster-replicas ${REPLICAS_PER_MASTER} \
+      --cluster-yes \
+      $CLI_TLS_FLAGS $CLI_AUTH_FLAGS
+
+    log "Cluster creation complete"
+
+    # Verify cluster state
+    CLUSTER_STATE=$(valkey-cli -p "$DATA_PORT" $CLI_TLS_FLAGS $CLI_AUTH_FLAGS CLUSTER INFO 2>/dev/null | grep cluster_state | tr -d '\r' || echo "")
+    if echo "$CLUSTER_STATE" | grep -q "cluster_state:ok"; then
+      log "Cluster verified: state is OK, sleeping"
+      exec sleep infinity
+    else
+      log "WARNING: Cluster state is not OK after creation: $CLUSTER_STATE"
+      exit 1
+    fi
+{{- end }}

@@ -1,3 +1,5 @@
+{{- if not .Values.cluster.enabled }}
+{{- include "valkey.validateSentinelConfig" . }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -150,27 +152,78 @@ data:
     # Use POD_INDEX from Kubernetes metadata
     POD_INDEX=${POD_INDEX:-0}
     IS_MASTER=false
+    MASTER_HOST=""
+    MASTER_PORT="{{ .Values.service.port }}"
+    MY_FQDN="{{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
 
-    # Check if this is pod-0 (master)
+    {{- if .Values.sentinel.enabled }}
+    # Sentinel mode: query Sentinel for current master
+    SENTINEL_HOST="{{ include "valkey.sentinel.fullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    SENTINEL_PORT="{{ .Values.sentinel.port }}"
+    MASTER_GROUP="{{ .Values.sentinel.masterGroupName }}"
+
+    log "Querying Sentinel at ${SENTINEL_HOST}:${SENTINEL_PORT} for master of group ${MASTER_GROUP}..."
+
+    {{- if .Values.tls.enabled }}
+    MASTER_INFO=$(valkey-cli -h "$SENTINEL_HOST" -p "$SENTINEL_PORT" --tls --cacert /tls/{{ .Values.tls.caPublicKey }} \
+      SENTINEL get-master-addr-by-name "$MASTER_GROUP" 2>/dev/null || echo "")
+    {{- else }}
+    MASTER_INFO=$(valkey-cli -h "$SENTINEL_HOST" -p "$SENTINEL_PORT" \
+      SENTINEL get-master-addr-by-name "$MASTER_GROUP" 2>/dev/null || echo "")
+    {{- end }}
+
+    if [ -n "$MASTER_INFO" ]; then
+      SENTINEL_MASTER_HOST=$(echo "$MASTER_INFO" | head -1)
+      SENTINEL_MASTER_PORT=$(echo "$MASTER_INFO" | sed -n '2p')
+
+      log "Sentinel reports master at ${SENTINEL_MASTER_HOST}:${SENTINEL_MASTER_PORT}"
+
+      # Resolve my hostname IP for comparison
+      MY_IP=$(getent hosts "$MY_FQDN" 2>/dev/null | awk '{print $1}' | head -1 || echo "")
+      MASTER_IP=$(getent hosts "$SENTINEL_MASTER_HOST" 2>/dev/null | awk '{print $1}' | head -1 || echo "$SENTINEL_MASTER_HOST")
+
+      if [ "$MY_IP" = "$MASTER_IP" ] || [ "$MY_FQDN" = "$SENTINEL_MASTER_HOST" ]; then
+        IS_MASTER=true
+        log "This pod is the current master (confirmed by Sentinel)"
+      else
+        IS_MASTER=false
+        MASTER_HOST="$SENTINEL_MASTER_HOST"
+        MASTER_PORT="${SENTINEL_MASTER_PORT:-{{ .Values.service.port }}}"
+        log "This pod is a replica, master is at ${MASTER_HOST}:${MASTER_PORT}"
+      fi
+    else
+      # Bootstrap fallback: Sentinel not available yet
+      log "Sentinel not available, falling back to bootstrap mode"
+      if [ "$POD_INDEX" = "0" ]; then
+        IS_MASTER=true
+        log "This pod (index $POD_INDEX) is configured as MASTER (bootstrap)"
+      else
+        IS_MASTER=false
+        MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        log "This pod (index $POD_INDEX) is configured as REPLICA (bootstrap), master at $MASTER_HOST"
+      fi
+    fi
+    {{- else }}
+    # Static master assignment: pod-0 is always master
     if [ "$POD_INDEX" = "0" ]; then
       IS_MASTER=true
       log "This pod (index $POD_INDEX) is configured as MASTER"
     else
+      IS_MASTER=false
+      MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
       log "This pod (index $POD_INDEX) is configured as REPLICA"
     fi
+    {{- end }}
 
     # Configure replica settings
     if [ "$IS_MASTER" = "false" ]; then
-      MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-      MASTER_PORT="{{ .Values.service.port }}"
-
       log "Configuring replica to follow master at $MASTER_HOST:$MASTER_PORT"
 
       {
         echo ""
         echo "# Replica Configuration"
         echo "replicaof $MASTER_HOST $MASTER_PORT"
-        echo "replica-announce-ip {{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        echo "replica-announce-ip $MY_FQDN"
         {{- if .Values.replica.disklessSync }}
         echo ""
         echo "# Diskless replication"
@@ -228,4 +281,4 @@ data:
       log "Appending files in /extravalkeyconfigs/"
       cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
     fi
-
+{{- end }}
