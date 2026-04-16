@@ -1,3 +1,4 @@
+{{- if not .Values.cluster.enabled }}
 {{- include "valkey.validateSentinelConfig" . }}
 apiVersion: v1
 kind: ConfigMap
@@ -280,4 +281,4 @@ data:
       log "Appending files in /extravalkeyconfigs/"
       cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
     fi
-
+{{- end }}

@@ -1,0 +1,464 @@
+{{- if .Values.cluster.enabled }}
+{{- include "valkey.validateClusterConfig" . }}
+{{- include "valkey.validateAuthConfig" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "valkey.cluster.fullname" . }}
+  labels:
+    {{- include "valkey.cluster.labels" . | nindent 4 }}
+  {{- with .Values.cluster.workloadAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  serviceName: {{ include "valkey.cluster.headlessServiceName" . }}
+  replicas: {{ mul (int .Values.cluster.masters) (add1 (int .Values.cluster.replicasPerMaster)) }}
+  podManagementPolicy: Parallel
+  {{- if .Values.cluster.persistentVolumeClaimRetentionPolicy }}
+  persistentVolumeClaimRetentionPolicy:
+    {{- toYaml .Values.cluster.persistentVolumeClaimRetentionPolicy | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "valkey.cluster.selectorLabels" . | nindent 6 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: valkey-data
+    spec:
+      accessModes: {{ toYaml .Values.cluster.persistence.accessModes | nindent 8 }}
+      {{- if .Values.cluster.persistence.storageClass }}
+      storageClassName: {{ .Values.cluster.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.cluster.persistence.size | quote }}
+  template:
+    metadata:
+      labels:
+        {{- include "valkey.cluster.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.cluster.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+      {{- with .Values.cluster.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+        checksum/cluster-scripts: {{ include (print $.Template.BasePath "/cluster-configmap.yaml") . | sha256sum | trunc 32 | quote }}
+        {{- if .Values.valkeyConfig }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 | quote }}
+        {{- end }}
+    spec:
+      {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
+      {{- if .Values.cluster.roleLabeler.enabled }}
+      automountServiceAccountToken: true
+      {{- else }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- end }}
+      serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+      {{- if .Values.cluster.priorityClassName }}
+      priorityClassName: {{ .Values.cluster.priorityClassName | quote }}
+      {{- end }}
+      {{- if .Values.cluster.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.cluster.podSecurityContext | nindent 8 }}
+      {{- else }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: cluster-init
+          image: {{ include "valkey.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.cluster.securityContext }}
+          securityContext:
+            {{- toYaml .Values.cluster.securityContext | nindent 12 }}
+          {{- else }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- end }}
+          command: [ "/scripts/cluster-init.sh" ]
+          volumeMounts:
+            - name: valkey-data
+              mountPath: /data
+            - name: cluster-scripts
+              mountPath: /scripts
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- if .Values.valkeyConfig }}
+            - name: valkey-config
+              mountPath: /usr/local/etc/valkey/valkey.conf
+              subPath: valkey.conf
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            - name: valkey-acl
+              mountPath: /etc/valkey
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
+            {{- end }}
+          {{- with .Values.initResources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.extraInitContainers }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: valkey
+          image: {{ include "valkey.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [ "valkey-server" ]
+          args: [ "/data/conf/valkey.conf" ]
+          {{- if .Values.cluster.securityContext }}
+          securityContext:
+            {{- toYaml .Values.cluster.securityContext | nindent 12 }}
+          {{- else }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- end }}
+          env:
+            - name: POD_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+            {{- range $key, $val := .Values.env }}
+            - name: {{ $key }}
+              value: "{{ $val }}"
+            {{- end }}
+            - name: VALKEY_LOGLEVEL
+              value: "{{ .Values.valkeyLogLevel }}"
+          ports:
+            - name: tcp
+              containerPort: {{ .Values.cluster.service.port }}
+              protocol: TCP
+            - name: cluster-bus
+              containerPort: {{ add (int .Values.cluster.service.port) 10000 }}
+              protocol: TCP
+          {{- $cliFlags := printf "-p %s" (toString .Values.cluster.service.port) }}
+          {{- if .Values.tls.enabled }}
+          {{- $cliFlags = printf "%s --cacert /tls/%s --tls" $cliFlags .Values.tls.caPublicKey }}
+          {{- end }}
+          {{- $authCmd := "" }}
+          {{- if .Values.auth.enabled }}
+            {{- if .Values.auth.usersExistingSecret }}
+              {{- $defaultUser := index .Values.auth.aclUsers "default" | default dict }}
+              {{- $defaultPasswordKey := $defaultUser.passwordKey | default "default" }}
+              {{- $authCmd = printf "AUTH_PASS=$(cat /valkey-users-secret/%s 2>/dev/null || cat /valkey-auth-secret/default-password); " $defaultPasswordKey }}
+            {{- else }}
+              {{- $authCmd = "AUTH_PASS=$(cat /valkey-auth-secret/default-password); " }}
+            {{- end }}
+            {{- $cliFlags = printf "%s -a $AUTH_PASS --no-auth-warning" $cliFlags }}
+          {{- end }}
+          startupProbe:
+            exec:
+              command: [ "sh", "-c", "{{ $authCmd }}valkey-cli {{ $cliFlags }} ping" ]
+          livenessProbe:
+            exec:
+              command: [ "sh", "-c", "{{ $authCmd }}valkey-cli {{ $cliFlags }} ping" ]
+          readinessProbe:
+            exec:
+              command: [ "sh", "-c", "{{ $authCmd }}valkey-cli {{ $cliFlags }} cluster info | grep -q cluster_state:ok" ]
+          {{- with (.Values.cluster.resources | default .Values.resources) }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: valkey-data
+              mountPath: /data
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            - name: valkey-acl
+              mountPath: /etc/valkey
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- range $secret := .Values.extraValkeySecrets }}
+            - name: {{ $secret.name }}-valkey
+              mountPath: {{ $secret.mountPath }}
+            {{- end }}
+            {{- range $config := .Values.extraValkeyConfigs }}
+            - name: {{ $config.name }}-valkey
+              mountPath: {{ $config.mountPath }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        - name: cluster-bootstrap
+          image: {{ include "valkey.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.cluster.securityContext }}
+          securityContext:
+            {{- toYaml .Values.cluster.securityContext | nindent 12 }}
+          {{- else }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- end }}
+          command: [ "/scripts/cluster-bootstrap.sh" ]
+          env:
+            - name: POD_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+          volumeMounts:
+            - name: valkey-data
+              mountPath: /data
+            - name: cluster-scripts
+              mountPath: /scripts
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
+            {{- end }}
+          {{- with .Values.initResources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- if .Values.metrics.enabled }}
+        - name: metrics
+          image: {{ include "valkey.metrics.exporter.image" . }}
+          imagePullPolicy: {{ .Values.metrics.exporter.image.pullPolicy | quote }}
+          {{- with .Values.metrics.exporter.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.metrics.exporter.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.metrics.exporter.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.exporter.port }}
+          startupProbe:
+            tcpSocket:
+              port: metrics
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+          readinessProbe:
+            httpGet:
+              path: /
+              port: metrics
+          {{- with .Values.metrics.exporter.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.metrics.exporter.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: REDIS_ALIAS
+              value: {{ include "valkey.fullname" . }}
+            {{- if .Values.auth.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.auth.usersExistingSecret }}
+                  {{- $defaultUser := index .Values.auth.aclUsers "default" | default dict }}
+                  {{- $passwordKey := $defaultUser.passwordKey | default "default" }}
+                  name: {{ .Values.auth.usersExistingSecret }}
+                  key: {{ $passwordKey }}
+                  {{- else }}
+                  name: {{ include "valkey.fullname" . }}-auth
+                  key: default-password
+                  {{- end }}
+            {{- end }}
+            {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
+            - name: {{ $key }}
+              value: "{{ $val }}"
+            {{- end }}
+        {{- end }}
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.cluster.roleLabeler.enabled }}
+        - name: role-checker
+          image: {{ include "valkey.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 1000
+          command: [ "/scripts/role-checker.sh" ]
+          volumeMounts:
+            - name: role-labeler-scripts
+              mountPath: /scripts
+            - name: role-shared
+              mountPath: /role
+            {{- if .Values.auth.enabled }}
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+          {{- with .Values.cluster.roleLabeler.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        - name: role-labeler
+          image: {{ include "valkey.roleLabeler.image" . }}
+          imagePullPolicy: {{ .Values.cluster.roleLabeler.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          command: [ "/scripts/role-labeler.sh" ]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: role-labeler-scripts
+              mountPath: /scripts
+            - name: role-shared
+              mountPath: /role
+          {{- with .Values.cluster.roleLabeler.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+      volumes:
+        - name: cluster-scripts
+          configMap:
+            name: {{ include "valkey.cluster.fullname" . }}-scripts
+            defaultMode: 0555
+        {{- if .Values.cluster.roleLabeler.enabled }}
+        - name: role-labeler-scripts
+          configMap:
+            name: {{ include "valkey.fullname" . }}-role-labeler
+            defaultMode: 0555
+        - name: role-shared
+          emptyDir:
+            medium: Memory
+        {{- end }}
+        {{- if .Values.auth.enabled }}
+        - name: valkey-acl
+          emptyDir:
+            medium: Memory
+        {{- end }}
+        {{- if .Values.valkeyConfig }}
+        - name: valkey-config
+          configMap:
+            name: {{ include "valkey.fullname" . }}-config
+        {{- end }}
+        {{- range .Values.extraValkeySecrets }}
+        - name: {{ .name }}-valkey
+          secret:
+            secretName: {{ .name }}
+            defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- if .Values.tls.enabled }}
+        - name: {{ include "valkey.fullname" . }}-tls
+          secret:
+            secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            defaultMode: 0400
+        {{- end }}
+        {{- range .Values.extraValkeyConfigs }}
+        - name: {{ .name }}-valkey
+          configMap:
+            name: {{ .name }}
+            defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- if .Values.metrics.enabled }}
+        {{- range .Values.metrics.exporter.extraExporterSecrets }}
+        - name: {{ .name }}-exporter
+          secret:
+            secretName: {{ .name }}
+            defaultMode: {{ .defaultMode | default 0440 }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.auth.enabled }}
+        {{- if .Values.auth.usersExistingSecret }}
+        - name: valkey-users-secret
+          secret:
+            secretName: {{ .Values.auth.usersExistingSecret }}
+            defaultMode: 0400
+        {{- end }}
+        {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+        - name: valkey-auth-secret
+          secret:
+            secretName: {{ include "valkey.fullname" . }}-auth
+            defaultMode: 0400
+        {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with (.Values.cluster.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cluster.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cluster.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.cluster.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

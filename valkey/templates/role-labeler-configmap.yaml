@@ -1,4 +1,4 @@
-{{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.roleLabeler.enabled }}
+{{- if or (and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.roleLabeler.enabled) (and .Values.cluster.enabled .Values.cluster.roleLabeler.enabled) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,11 +10,33 @@ data:
     #!/bin/sh
     set -eu
 
+    {{- if .Values.cluster.enabled }}
+    POLL_INTERVAL={{ .Values.cluster.roleLabeler.pollIntervalSeconds }}
+    VALKEY_PORT="{{ .Values.cluster.service.port }}"
+    {{- else }}
     POLL_INTERVAL={{ .Values.sentinel.roleLabeler.pollIntervalSeconds }}
     VALKEY_PORT="{{ .Values.service.port }}"
+    {{- end }}
     ROLE_FILE="/role/current-role"
 
     {{- if .Values.auth.enabled }}
+    {{- if .Values.cluster.enabled }}
+    {{- $defaultUser := index .Values.auth.aclUsers "default" | default dict }}
+    {{- $defaultPasswordKey := $defaultUser.passwordKey | default "default" }}
+    AUTH_PASSWORD=""
+    {{- if .Values.auth.usersExistingSecret }}
+    if [ -f "/valkey-users-secret/{{ $defaultPasswordKey }}" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-users-secret/{{ $defaultPasswordKey }}")
+    elif [ -f "/valkey-auth-secret/default-password" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-auth-secret/default-password")
+    fi
+    {{- else }}
+    if [ -f "/valkey-auth-secret/default-password" ]; then
+      AUTH_PASSWORD=$(cat "/valkey-auth-secret/default-password")
+    fi
+    {{- end }}
+    CLI_AUTH="-a ${AUTH_PASSWORD} --no-auth-warning"
+    {{- else }}
     {{- $replUsername := .Values.replica.replicationUser }}
     {{- $replUser := index .Values.auth.aclUsers $replUsername }}
     {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
@@ -31,6 +53,7 @@ data:
     fi
     {{- end }}
     CLI_AUTH="--user {{ $replUsername }} -a ${AUTH_PASSWORD} --no-auth-warning"
+    {{- end }}
     {{- else }}
     CLI_AUTH=""
     {{- end }}
@@ -57,7 +80,11 @@ data:
     #!/bin/sh
     set -eu
 
+    {{- if .Values.cluster.enabled }}
+    POLL_INTERVAL={{ .Values.cluster.roleLabeler.pollIntervalSeconds }}
+    {{- else }}
     POLL_INTERVAL={{ .Values.sentinel.roleLabeler.pollIntervalSeconds }}
+    {{- end }}
     KUBE_API="https://kubernetes.default.svc"
     TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
     CA_FILE="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"

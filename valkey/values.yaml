@@ -365,6 +365,101 @@ sentinel:
     # Resource limits/requests for the role labeler sidecar
     resources: {}
 
+# Cluster mode configuration for sharding with optional per-shard replication
+# Mutually exclusive with replica.enabled — cannot use both at the same time
+cluster:
+  # Enable Valkey Cluster (sharding + optional HA)
+  enabled: false
+
+  # Number of master (shard) nodes (minimum 3 for cluster quorum)
+  masters: 3
+
+  # Number of replica nodes per master (0 = sharding only, no HA)
+  replicasPerMaster: 1
+
+  # Cluster node timeout in milliseconds (how long before a node is considered failing)
+  nodeTimeout: 5000
+
+  # Persistence configuration (required for cluster mode)
+  persistence:
+    # Size of the PVC for each node (required when cluster.enabled is true)
+    size: ""
+    # Storage class name (empty = use default storage class)
+    storageClass: ""
+    # Access modes for the PVC
+    accessModes:
+      - ReadWriteOnce
+
+  # PersistentVolumeClaim retention policy for StatefulSet
+  persistentVolumeClaimRetentionPolicy: {}
+
+  # Service configuration for cluster client access
+  service:
+    type: ClusterIP
+    port: 6379
+    annotations: {}
+    nodePort: 0
+    clusterIP: ""
+    appProtocol: ""
+    loadBalancerClass: ""
+    loadBalancerSourceRanges: []
+
+  # PodDisruptionBudget for cluster nodes
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: null
+    maxUnavailable: 1
+
+  # Resource limits/requests for cluster node containers
+  resources: {}
+
+  # Security context for cluster node containers
+  securityContext: {}
+
+  # Pod-level security context for cluster pods
+  podSecurityContext: {}
+
+  # Annotations and labels for cluster pods
+  podAnnotations: {}
+  podLabels: {}
+
+  # Annotations for the cluster StatefulSet resource
+  workloadAnnotations: {}
+
+  # Node selector for cluster pod assignment
+  nodeSelector: {}
+
+  # Tolerations for cluster pod assignment
+  tolerations: []
+
+  # Affinity rules for cluster pod scheduling
+  affinity: {}
+
+  # Topology spread constraints for cluster pods
+  topologySpreadConstraints: []
+
+  # Priority class name for cluster pods
+  priorityClassName: ""
+
+  # Extra Valkey configuration directives appended to valkey.conf
+  extraConfig: ""
+
+  # Role labeler sidecar configuration
+  # Labels each pod with valkey-role: master or valkey-role: replica
+  # Useful for observability, monitoring dashboards, and PDB awareness
+  roleLabeler:
+    enabled: true
+    # How often to check the role (seconds)
+    pollIntervalSeconds: 5
+    # Image for the role labeler sidecar (needs curl for K8s API calls)
+    image:
+      registry: "docker.io"
+      repository: curlimages/curl
+      tag: "8.13.0"
+      pullPolicy: IfNotPresent
+    # Resource limits/requests for the role labeler sidecar
+    resources: {}
+
 tls:
   # Enable TLS
   enabled: false

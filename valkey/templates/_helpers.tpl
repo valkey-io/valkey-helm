@@ -226,6 +226,53 @@ Returns the role labeler container image
 {{- end -}}
 
 {{/*
+Cluster full name
+*/}}
+{{- define "valkey.cluster.fullname" -}}
+{{ include "valkey.fullname" . }}-cluster
+{{- end -}}
+
+{{/*
+Cluster headless service name
+*/}}
+{{- define "valkey.cluster.headlessServiceName" -}}
+{{ include "valkey.fullname" . }}-cluster-headless
+{{- end -}}
+
+{{/*
+Cluster labels
+*/}}
+{{- define "valkey.cluster.labels" -}}
+{{ include "valkey.labels" . }}
+app.kubernetes.io/component: cluster
+{{- end -}}
+
+{{/*
+Cluster selector labels
+*/}}
+{{- define "valkey.cluster.selectorLabels" -}}
+{{ include "valkey.selectorLabels" . }}
+app.kubernetes.io/component: cluster
+{{- end -}}
+
+{{/*
+Validate cluster configuration
+*/}}
+{{- define "valkey.validateClusterConfig" -}}
+{{- if .Values.cluster.enabled }}
+  {{- if .Values.replica.enabled }}
+    {{- fail "cluster.enabled and replica.enabled are mutually exclusive. Please enable only one deployment mode." }}
+  {{- end }}
+  {{- if lt (int .Values.cluster.masters) 3 }}
+    {{- fail "Cluster mode requires at least 3 master nodes. Please set cluster.masters >= 3" }}
+  {{- end }}
+  {{- if not .Values.cluster.persistence.size }}
+    {{- fail "Cluster mode requires persistent storage. Please set cluster.persistence.size (e.g., '5Gi')" }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Validate sentinel configuration
 */}}
 {{- define "valkey.validateSentinelConfig" -}}

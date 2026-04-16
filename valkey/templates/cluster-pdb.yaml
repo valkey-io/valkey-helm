@@ -1,0 +1,17 @@
+{{- if and .Values.cluster.enabled .Values.cluster.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "valkey.cluster.fullname" . }}
+  labels:
+    {{- include "valkey.cluster.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.cluster.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.cluster.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.cluster.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.cluster.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "valkey.cluster.selectorLabels" . | nindent 6 }}
+{{- end }}

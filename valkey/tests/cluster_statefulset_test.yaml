@@ -1,0 +1,323 @@
+suite: cluster statefulset configuration
+templates:
+  - templates/cluster-statefulset.yaml
+  - templates/cluster-configmap.yaml
+tests:
+  # Validation tests
+  - it: should not render when cluster is disabled
+    set:
+      cluster.enabled: false
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail when cluster and replica are both enabled
+    set:
+      cluster.enabled: true
+      replica.enabled: true
+      cluster.persistence.size: "5Gi"
+      replica.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "mutually exclusive"
+
+  - it: should fail when cluster has less than 3 masters
+    set:
+      cluster.enabled: true
+      cluster.masters: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "minimum"
+
+  - it: should fail when cluster has no persistence size
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: ""
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "persistent storage"
+
+  # Basic rendering
+  - it: should render cluster statefulset with defaults
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 6
+      - equal:
+          path: spec.podManagementPolicy
+          value: Parallel
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster
+
+  - it: should calculate correct pod count for 3 masters 0 replicas
+    set:
+      cluster.enabled: true
+      cluster.masters: 3
+      cluster.replicasPerMaster: 0
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should calculate correct pod count for 6 masters 2 replicas
+    set:
+      cluster.enabled: true
+      cluster.masters: 6
+      cluster.replicasPerMaster: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 18
+
+  # Ports
+  - it: should expose both tcp and cluster-bus ports
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: tcp
+            containerPort: 6379
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: cluster-bus
+            containerPort: 16379
+            protocol: TCP
+
+  # Bootstrap sidecar
+  - it: should have cluster-bootstrap sidecar
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers
+          content:
+            name: cluster-bootstrap
+          any: true
+
+  # Readiness probe checks cluster state
+  - it: should have readiness probe checking cluster state
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command
+          content: "sh"
+          any: true
+
+  # TLS
+  - it: should mount TLS volume when TLS enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: "my-tls-secret"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: RELEASE-NAME-valkey-tls
+            secret:
+              secretName: my-tls-secret
+              defaultMode: 256
+
+  - it: should use TLS in probes when TLS enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: "my-tls-secret"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command
+          value: ["sh", "-c", "valkey-cli -p 6379 --cacert /tls/ca.crt --tls ping"]
+
+  # Auth
+  - it: should mount auth secrets when auth enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "testpass"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-acl
+            emptyDir:
+              medium: Memory
+
+  # Storage
+  - it: should configure volumeClaimTemplates
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "10Gi"
+      cluster.persistence.storageClass: "fast-ssd"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "10Gi"
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: "fast-ssd"
+
+  # ServiceName
+  - it: should reference headless service
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-valkey-cluster-headless
+
+  # Image pull policy
+  - it: should use configured pull policy
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      image.pullPolicy: Always
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  # Workload annotations
+  - it: should apply workload annotations
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.workloadAnnotations:
+        custom/annotation: "value"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["custom/annotation"]
+          value: "value"
+
+  # Pod labels
+  - it: should apply pod labels
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.podLabels:
+        custom-label: "value"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.custom-label
+          value: "value"
+
+  # Metrics sidecar
+  - it: should include metrics sidecar when enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      metrics.enabled: true
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers
+          content:
+            name: metrics
+          any: true
+
+  # Role labeler sidecars
+  - it: should have role-checker and role-labeler sidecars by default
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers
+          content:
+            name: role-checker
+          any: true
+      - contains:
+          path: spec.template.spec.containers
+          content:
+            name: role-labeler
+          any: true
+
+  - it: should not have role labeler sidecars when disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.roleLabeler.enabled: false
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers
+          content:
+            name: role-checker
+          any: true
+      - notContains:
+          path: spec.template.spec.containers
+          content:
+            name: role-labeler
+          any: true
+
+  - it: should enable automountServiceAccountToken when role labeler is enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+
+  # PVC retention policy
+  - it: should set persistentVolumeClaimRetentionPolicy when configured
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.persistentVolumeClaimRetentionPolicy:
+        whenDeleted: Delete
+        whenScaled: Retain
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Delete
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenScaled
+          value: Retain

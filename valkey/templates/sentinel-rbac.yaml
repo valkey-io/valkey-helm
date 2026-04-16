@@ -1,4 +1,4 @@
-{{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.roleLabeler.enabled }}
+{{- if or (and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.roleLabeler.enabled) (and .Values.cluster.enabled .Values.cluster.roleLabeler.enabled) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
