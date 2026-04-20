@@ -111,6 +111,9 @@ initResources: {}
 # Additional init containers
 extraInitContainers: []
 
+# Additional containers
+extraContainers: []
+
 # Persistent storage configuration (standalone deployment only)
 dataStorage:
   # Enable persistent volume claim creation
