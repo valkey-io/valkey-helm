@@ -1,0 +1,9 @@
+The valkey-operator has been installed.
+
+To verify the operator is running:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+To create a ValkeyCluster:
+
+  kubectl apply -f https://raw.githubusercontent.com/valkey-io/valkey-operator/main/config/samples/valkey_v1alpha1_valkeycluster.yaml
