@@ -147,8 +147,8 @@ data:
     # Replica mode configuration
     log "Configuring replication mode"
 
-    # Use POD_INDEX from Kubernetes metadata
-    POD_INDEX=${POD_INDEX:-0}
+    # Use POD_INDEX from Kubernetes metadata; fall back to $HOSTNAME on K8s < 1.28
+    POD_INDEX=${POD_INDEX:-${HOSTNAME##*-}}
     IS_MASTER=false
 
     # Check if this is pod-0 (master)
@@ -228,4 +228,3 @@ data:
       log "Appending files in /extravalkeyconfigs/"
       cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
     fi
-
