@@ -6,9 +6,9 @@ global:
 
 image:
   # Image registry
-  registry: "docker.io"
+  registry: "ghcr.io"
   # Operator container image repository
-  repository: valkey/valkey-operator
+  repository: valkey-io/valkey-operator
   # Image tag (leave empty to use .Chart.AppVersion)
   tag: ""
   # Image pull policy (Always, IfNotPresent, Never)
