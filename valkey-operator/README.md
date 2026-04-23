@@ -16,10 +16,11 @@ A Helm chart for deploying the [Valkey Operator](https://github.com/valkey-io/va
 ## Installation
 
 ```bash
-helm install valkey-operator valkey/valkey-operator
+helm install valkey-operator valkey/valkey-operator \
+  -n valkey-operator-system --create-namespace
 ```
 
-This will deploy the operator with default settings. The operator will watch for `ValkeyCluster` custom resources across all namespaces.
+This will deploy the operator into the `valkey-operator-system` namespace. The operator will watch for `ValkeyCluster` custom resources across all namespaces.
 
 ## Creating a ValkeyCluster
 
@@ -43,7 +44,7 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 
 | Parameter | Description | Default |
 |---|---|---|
-| `image.repository` | Operator image repository | `valkey/valkey-operator` |
+| `image.repository` | Operator image repository | `valkey-io/valkey-operator` |
 | `image.tag` | Operator image tag | `""` (uses `.Chart.AppVersion`) |
 | `replicaCount` | Number of operator replicas | `1` |
 | `serviceAccount.create` | Create a ServiceAccount | `true` |
