@@ -119,16 +119,16 @@ spec:
           startupProbe:
             exec:
               {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              command: [ "valkey-cli", "--cacert", "/tls/{{ .Values.tls.caPublicKey }}", "--tls", "ping" ]
               {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
+              command: [ "valkey-cli", "ping" ]
               {{- end }}
           livenessProbe:
             exec:
               {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              command: [ "valkey-cli", "--cacert", "/tls/{{ .Values.tls.caPublicKey }}", "--tls", "ping" ]
               {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
+              command: [ "valkey-cli", "ping" ]
               {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
