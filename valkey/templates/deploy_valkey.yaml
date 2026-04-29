@@ -213,7 +213,12 @@ spec:
             {{- end }}
             {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
             - name: {{ $key }}
+              {{- if kindIs "string" $val }}
               value: "{{ $val }}"
+              {{- else }}
+              valueFrom:
+                {{- toYaml $val | nindent 16 }}
+              {{- end }}
             {{- end }}
         {{- end }}
       {{- with .Values.extraContainers }}
