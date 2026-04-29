@@ -60,14 +60,14 @@ spec:
       priorityClassName: {{ .Values.priorityClassName | quote }}
       {{- end }}
       securityContext:
-      {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
       initContainers:
         - name: {{ include "valkey.fullname" . }}-init
           image: {{ include "valkey.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.securityContext }}
           securityContext:
-            {{- toYaml . | nindent 12 }}
+            {{- omit . "enabled" | toYaml | nindent 12 }}
           {{- end }}
           command: [ "/scripts/init.sh" ]
           env:
@@ -117,7 +117,7 @@ spec:
           command: [ "valkey-server" ]
           args: [ "/data/conf/valkey.conf" ]
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
+            {{- omit .Values.securityContext "enabled" | toYaml | nindent 12 }}
           env:
             - name: POD_INDEX
               valueFrom:
@@ -177,7 +177,7 @@ spec:
           imagePullPolicy: {{ .Values.metrics.exporter.image.pullPolicy | quote }}
           {{- with .Values.metrics.exporter.securityContext }}
           securityContext:
-            {{- toYaml . | nindent 12 }}
+            {{- omit . "enabled" | toYaml | nindent 12 }}
           {{- end }}
           {{- with .Values.metrics.exporter.command }}
           command:
