@@ -19,9 +19,13 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   restartPolicy: Never
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
   containers:
     - name: test-auth
       image: {{ include "valkey.image" . | quote }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
       command:
         - sh
         - -c
@@ -95,9 +99,13 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   restartPolicy: Never
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
   containers:
     - name: test-auth
       image: {{ include "valkey.image" . | quote }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
       command:
         - sh
         - -c

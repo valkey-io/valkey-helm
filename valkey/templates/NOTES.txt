@@ -25,7 +25,10 @@ Hash slots (16384 total) are distributed across the {{ .Values.cluster.shards }}
 Service:      {{ include "valkey.fullname" . }}
 Type:         {{ .Values.service.type }}
 Port:         {{ .Values.service.port }}
-Bus Port:     {{ .Values.cluster.busPort }} (for inter-node communication)
+
+Bus port {{ .Values.cluster.busPort }} is reachable only through the headless
+service — it carries cluster gossip + failover traffic between nodes, so it
+must bypass the round-robin frontend service.
 
 1) In-cluster access
    From another Pod:

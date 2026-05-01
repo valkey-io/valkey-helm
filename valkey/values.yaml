@@ -161,9 +161,6 @@ extraValkeySecrets: []
 # Mount additional configMaps into the Valkey container
 extraValkeyConfigs: []
 
-# Mount extra secrets as volume to init container (deprecated, use extraValkeySecrets)
-extraSecretValkeyConfigs: false
-
 # Mount additional emptyDir or hostPath volumes (advanced use)
 extraVolumes: []
 #  - name: hostpath-volume
@@ -314,6 +311,11 @@ cluster:
   # This port is used for node-to-node communication in the cluster
   busPort: 16379
 
+  # PersistentVolumeClaim retention policy for StatefulSet
+  # Controls when PVCs are deleted (requires Kubernetes 1.23+)
+  # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
+  persistentVolumeClaimRetentionPolicy: {}
+
 tls:
   # Enable TLS
   enabled: false
@@ -348,7 +350,13 @@ istio:
   # DestinationRule configures mTLS for outbound connections to Valkey services
   destinationRule:
     # TLS mode for outbound traffic (DISABLE, SIMPLE, MUTUAL, ISTIO_MUTUAL)
-    # ISTIO_MUTUAL: Use Istio-managed certificates for mTLS
+    # ISTIO_MUTUAL: Use Istio-managed certificates for mTLS.
+    # NOTE: When tls.enabled is true the Valkey pods already terminate TLS
+    # themselves. Keeping mode=ISTIO_MUTUAL wraps app-level TLS in Envoy mTLS
+    # (double encryption) and still works, but doubles crypto overhead. If you
+    # only want mesh-level mTLS, set tls.enabled=false here and rely on Istio.
+    # If you prefer app-level TLS only, set mode=DISABLE so Envoy passes the
+    # TLS bytes through untouched.
     mode: ISTIO_MUTUAL
     # Additional labels for the DestinationRule resource
     labels: {}

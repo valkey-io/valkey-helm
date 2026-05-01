@@ -18,7 +18,16 @@ TLS_SECRET=valkey-tls
 # Istio isn't installed at all), one does (istio=on scenarios).
 TESTBENCH_POD=valkey-testbench
 TESTBENCH_POD_INJECTED=valkey-testbench-injected
-AUTH_PASSWORD=password
+# Deliberately hostile: spaces, shell metacharacters ($, `, &, !), a backslash,
+# and a double-quote. Every auth=on scenario then exercises both layers of
+# quoting on the chart side:
+#   - the init container's ACL hash pipe (printf %s | sha256sum)
+#   - the masterauth line in valkey.conf (must be quoted+escaped)
+#   - the cluster-init Job's REDISCLI_AUTH path
+#   - the helm-test pod's `cat /valkey-auth/...-password | xargs valkey-cli -a`
+# Keeping these in one place means every future auth=on scenario inherits the
+# coverage for free.
+AUTH_PASSWORD='p@ss w/ spaces & $chars `backticks` "quoted" \backslash'
 
 ISTIO_NAMESPACE=istio-system
 

@@ -1,4 +1,5 @@
 {{- if .Values.cluster.enabled }}
+{{- include "valkey.validateAuthConfig" . }}
 {{- include "valkey.validateClusterConfig" . }}
 {{- include "valkey.validateClusterAuth" . }}
 apiVersion: batch/v1

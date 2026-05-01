@@ -145,3 +145,44 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
           value: valkey
+
+  # Regression: `echo "$password"` in dash interprets \b, \t, \n, \\, etc.
+  # before writing them out. A password containing a backslash then gets a
+  # DIFFERENT sha256 than the bytes that were stored in the Secret — client
+  # auth with the real password fails WRONGPASS, since the stored ACL hash
+  # is of the mangled bytes. Must be `printf '%s'` (byte-safe).
+  - it: get_user_password must be byte-safe (no echo)
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+          password: "admin-password"
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'echo "\$password"'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "printf '%s' \"\\$password\""
+
+  # Regression: masterauth line in valkey.conf used to be unquoted, so a
+  # password with whitespace or `#` (valkey.conf comment char) would break
+  # the config parser. Must be double-quoted with backslash-escapes.
+  - it: masterauth must be written as a quoted+escaped string
+    set:
+      auth.enabled: true
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "whatever"
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "printf 'masterauth \"%s\"\\\\n' \"\\$REPL_PASSWORD_ESC\""
+      - matchRegex:
+          path: data["init.sh"]
+          # The escape pass: s/\\/\\\\/g; s/"/\\"/g
+          pattern: "REPL_PASSWORD_ESC=\\$\\(printf '%s' \"\\$REPL_PASSWORD\""

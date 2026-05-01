@@ -115,24 +115,12 @@ tests:
           of: Service
       - notExists:
           path: spec.selector["statefulset.kubernetes.io/pod-name"]
-  - it: should have cluster bus port when cluster.enabled is true
+  - it: should never expose the cluster bus port on the frontend service
+    # The bus port carries gossip + failover traffic between nodes; it's
+    # reached via the headless service, not the round-robin frontend.
     set:
       cluster.enabled: true
       cluster.busPort: 16379
-    template: templates/service.yaml
-    asserts:
-      - isKind:
-          of: Service
-      - contains:
-          path: spec.ports
-          content:
-            port: 16379
-            targetPort: tcp-bus
-            protocol: TCP
-            name: tcp-bus
-  - it: should not have cluster bus port when cluster.enabled is false
-    set:
-      cluster.enabled: false
     template: templates/service.yaml
     asserts:
       - isKind:
@@ -141,3 +129,24 @@ tests:
           path: spec.ports
           content:
             name: tcp-bus
+      - notContains:
+          path: spec.ports
+          content:
+            port: 16379
+
+  # Regression: loadBalancerSourceRanges used to render via Go's default
+  # slice-to-string pipeline ([a b]), which the API server rejects as invalid
+  # CIDR. The fix is to emit a proper YAML list.
+  - it: should render loadBalancerSourceRanges as a YAML list
+    set:
+      service.type: LoadBalancer
+      service.loadBalancerSourceRanges:
+        - "1.2.3.4/32"
+        - "5.6.7.8/32"
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: spec.loadBalancerSourceRanges
+          value:
+            - "1.2.3.4/32"
+            - "5.6.7.8/32"

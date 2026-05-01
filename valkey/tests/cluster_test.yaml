@@ -211,7 +211,8 @@ tests:
             protocol: TCP
 
   # Main service tests
-  - it: should create service with bus port in cluster mode
+  - it: should not expose the bus port on the frontend service in cluster mode
+    # Bus port is pod-to-pod only; clients reach nodes via the headless service.
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
@@ -220,13 +221,14 @@ tests:
     asserts:
       - isKind:
           of: Service
-      - contains:
+      - notContains:
           path: spec.ports
           content:
             name: tcp-bus
+      - notContains:
+          path: spec.ports
+          content:
             port: 16379
-            targetPort: tcp-bus
-            protocol: TCP
 
   # Cluster init script ConfigMap tests
   - it: should create cluster-script ConfigMap when cluster is enabled
@@ -899,3 +901,81 @@ tests:
             name: valkey-auth-secret
             mountPath: /valkey-auth-secret
             readOnly: true
+
+  # Regression: probes must accept NOAUTH as proof of liveness.
+  - it: should use a PONG|NOAUTH-tolerant probe on the valkey container
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "p"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+      - matchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+      - matchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+
+  - it: should define a readiness probe
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  # Regression: extraContainers and extraVolumes were unwired in cluster mode.
+  - it: should wire extraContainers and extraVolumes through in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      extraContainers:
+        - name: sidecar
+          image: busybox:1.36
+      extraVolumes:
+        - name: extra
+          emptyDir: {}
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers
+          content:
+            name: sidecar
+            image: busybox:1.36
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra
+            emptyDir: {}
+
+  # Regression: REDIS_PASSWORD should be wired through in cluster mode too.
+  - it: should wire REDIS_PASSWORD to the metrics exporter from the generated auth secret
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      metrics.enabled: true
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "p"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-valkey-auth
+                key: default-password
+

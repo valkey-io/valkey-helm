@@ -525,3 +525,50 @@ tests:
       - equal:
           path: spec.template.spec.runtimeClassName
           value: "gvisor"
+
+  # Regression: previously the exporter pointed REDIS_PASSWORD at a key
+  # (`default-password`) that is never created in aclConfig-only mode, so the
+  # container crash-looped on CreateContainerConfigError.
+  - it: should omit REDIS_PASSWORD when only auth.aclConfig is set
+    set:
+      auth.enabled: true
+      auth.aclConfig: "user default on >p ~* &* +@all"
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notContains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+          any: true
+
+  # Regression: probes must accept NOAUTH as proof of liveness, otherwise every
+  # auth-enabled deployment's liveness probe silently passes on exit code 0
+  # while not actually checking anything meaningful.
+  - it: should use a PONG|NOAUTH-tolerant probe on the valkey container
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "p"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+      - matchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+      - matchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+
+  # Regression: there should be a readiness probe at all — previously missing.
+  - it: should define a readiness probe
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe
