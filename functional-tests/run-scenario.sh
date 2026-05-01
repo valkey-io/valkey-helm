@@ -3,17 +3,17 @@
 # already-created kind cluster.
 #
 # Usage:
-#   ./run-scenario.sh <tls> <auth> <shard> <rep>
+#   ./run-scenario.sh <tls> <auth> <shard> <rep> <istio>
 # Each arg is "on" or "off". Example:
-#   ./run-scenario.sh off off on on
-# drives the "TLS off, auth off, shard on, rep on" scenario.
+#   ./run-scenario.sh off off on on on
+# drives the "TLS off, auth off, shard on, rep on, Istio on" scenario.
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib.sh
 . "${HERE}/lib.sh"
 
-if (( $# != 4 )); then
-    echo "usage: $0 <tls> <auth> <shard> <rep>   (each on|off)" >&2
+if (( $# != 5 )); then
+    echo "usage: $0 <tls> <auth> <shard> <rep> <istio>   (each on|off)" >&2
     exit 2
 fi
 
@@ -25,18 +25,31 @@ on_or_off() {
 }
 for v in "$@"; do on_or_off "${v}"; done
 
-TLS=$1; AUTH=$2; SHARD=$3; REP=$4
-SCENARIO="tls=${TLS} auth=${AUTH} shard=${SHARD} rep=${REP}"
+TLS=$1; AUTH=$2; SHARD=$3; REP=$4; ISTIO=$5
+SCENARIO="tls=${TLS} auth=${AUTH} shard=${SHARD} rep=${REP} istio=${ISTIO}"
 
-flag() { [[ $1 == on ]] && echo true || echo false; }
 is_on() { [[ $1 == on ]]; }
+
+if is_on "${ISTIO}"; then
+    TESTBENCH=${TESTBENCH_POD_INJECTED}
+else
+    TESTBENCH=${TESTBENCH_POD}
+fi
+testbench_exec() { testbench_exec_in "${TESTBENCH}" "$@"; }
 
 # ---------------------------------------------------------------------------
 # Build helm flags for this scenario.
 # ---------------------------------------------------------------------------
-helm_flags=(
-    --set-string='podLabels.sidecar\.istio\.io/inject=false'
-)
+helm_flags=()
+
+if is_on "${ISTIO}"; then
+    # Let Envoy get injected into every chart pod; turn on the chart's Istio templates.
+    helm_flags+=(--set=istio.enabled=true)
+else
+    # Opt out of injection when Istio isn't the target — the sidecar would break
+    # the probe and the cluster-init Job would never finish.
+    helm_flags+=(--set-string='podLabels.sidecar\.istio\.io/inject=false')
+fi
 
 if is_on "${AUTH}"; then
     helm_flags+=(
@@ -128,6 +141,39 @@ assert_eq() {
         fail "${what}: expected '${expected}', got '${actual}'"
     fi
 }
+
+# Istio resources: PeerAuthentication + DestinationRule (headless DR only exists
+# in replica / cluster mode) should be present iff istio=on.
+if is_on "${ISTIO}"; then
+    log "Istio check: chart-owned resources must exist"
+    kctl get peerauthentication "${RELEASE}" >/dev/null \
+        || fail "PeerAuthentication/${RELEASE} missing"
+    kctl get destinationrule "${RELEASE}" >/dev/null \
+        || fail "DestinationRule/${RELEASE} missing"
+    if is_on "${SHARD}" || is_on "${REP}"; then
+        kctl get destinationrule "${RELEASE}-headless" >/dev/null \
+            || fail "DestinationRule/${RELEASE}-headless missing"
+    fi
+
+    # Chart pods must actually have the Envoy sidecar. Istio >=1.29 injects it
+    # as a native sidecar (initContainer with restartPolicy=Always), so check
+    # both containers and initContainers.
+    pod=$(kctl get pod -l "app.kubernetes.io/instance=${RELEASE}" \
+        -o jsonpath='{.items[0].metadata.name}')
+    if ! kctl get pod "${pod}" \
+         -o jsonpath='{.spec.containers[*].name} {.spec.initContainers[*].name}' \
+         | tr ' ' '\n' | grep -Fxq istio-proxy; then
+        fail "pod ${pod} has no istio-proxy container"
+    fi
+else
+    log "Istio check: chart-owned resources must be absent"
+    if kctl get peerauthentication "${RELEASE}" >/dev/null 2>&1; then
+        fail "PeerAuthentication/${RELEASE} should not exist when istio=off"
+    fi
+    if kctl get destinationrule "${RELEASE}" >/dev/null 2>&1; then
+        fail "DestinationRule/${RELEASE} should not exist when istio=off"
+    fi
+fi
 
 # Positive: the fully-correct invocation should succeed.
 log "Positive check"

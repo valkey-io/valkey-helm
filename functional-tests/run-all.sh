@@ -6,30 +6,23 @@ HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib.sh
 . "${HERE}/lib.sh"
 
-SCENARIOS=(
-    # tls auth shard rep
-    "off off off off"
-    "off off off on"
-    "off off on  off"
-    "off off on  on"
-    "off on  off off"
-    "off on  off on"
-    "off on  on  off"
-    "off on  on  on"
-    "on  off off off"
-    "on  off off on"
-    "on  off on  off"
-    "on  off on  on"
-    "on  on  off off"
-    "on  on  off on"
-    "on  on  on  off"
-    "on  on  on  on"
-)
+# 32 scenarios: every combination of tls/auth/shard/rep/istio.
+SCENARIOS=()
+for istio in off on; do
+    for tls in off on; do
+        for auth in off on; do
+            for shard in off on; do
+                for rep in off on; do
+                    SCENARIOS+=("${tls} ${auth} ${shard} ${rep} ${istio}")
+                done
+            done
+        done
+    done
+done
 
-# Optional filter: skip scenarios matching the first arg, e.g. `./run-all.sh tls=on`.
-# Kept intentionally simple — pass one or more "key=on" / "key=off" selectors.
+# Optional filter: `FILTER='tls=on istio=on'` runs only matching scenarios.
 matches() {
-    local spec=$1 tls=$2 auth=$3 shard=$4 rep=$5
+    local tls=$1 auth=$2 shard=$3 rep=$4 istio=$5
     for sel in ${FILTER:-}; do
         local k=${sel%=*} v=${sel#*=}
         local have
@@ -38,6 +31,7 @@ matches() {
             auth)  have=${auth} ;;
             shard) have=${shard} ;;
             rep)   have=${rep} ;;
+            istio) have=${istio} ;;
             *) echo "bad filter key: ${k}" >&2; exit 2 ;;
         esac
         [[ ${have} == "${v}" ]] || return 1
@@ -51,17 +45,17 @@ failures=()
 
 for s in "${SCENARIOS[@]}"; do
     # shellcheck disable=SC2086
-    read -r tls auth shard rep <<<"${s}"
-    if ! matches "${s}" "${tls}" "${auth}" "${shard}" "${rep}"; then
+    read -r tls auth shard rep istio <<<"${s}"
+    if ! matches "${tls}" "${auth}" "${shard}" "${rep}" "${istio}"; then
         continue
     fi
 
-    log "SCENARIO: tls=${tls} auth=${auth} shard=${shard} rep=${rep}"
-    if "${HERE}/run-scenario.sh" "${tls}" "${auth}" "${shard}" "${rep}"; then
+    log "SCENARIO: tls=${tls} auth=${auth} shard=${shard} rep=${rep} istio=${istio}"
+    if "${HERE}/run-scenario.sh" "${tls}" "${auth}" "${shard}" "${rep}" "${istio}"; then
         passed=$(( passed + 1 ))
     else
         failed=$(( failed + 1 ))
-        failures+=("tls=${tls} auth=${auth} shard=${shard} rep=${rep}")
+        failures+=("tls=${tls} auth=${auth} shard=${shard} rep=${rep} istio=${istio}")
     fi
 done
 

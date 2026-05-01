@@ -37,11 +37,11 @@ functional-teardown *ARGS:
     ./functional-tests/teardown.sh {{ARGS}}
 
 # Run one scenario against the already-set-up kind cluster, e.g.
-#   just functional-scenario off off on on
-functional-scenario tls auth shard rep:
-    ./functional-tests/run-scenario.sh {{tls}} {{auth}} {{shard}} {{rep}}
+#   just functional-scenario off off on on off
+functional-scenario tls auth shard rep istio:
+    ./functional-tests/run-scenario.sh {{tls}} {{auth}} {{shard}} {{rep}} {{istio}}
 
-# Run the full 16-scenario matrix (set FILTER='tls=on auth=on' to narrow)
+# Run the full 32-scenario matrix (set FILTER='tls=on istio=on' to narrow)
 functional-run:
     ./functional-tests/run-all.sh
 
