@@ -371,3 +371,34 @@ tests:
               secretKeyRef:
                 name: my-custom-secret
                 key: my-password-key
+
+  # Regression: probes must accept NOAUTH as proof of liveness.
+  - it: should use a PONG|NOAUTH-tolerant probe on the valkey container
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "p"
+    template: templates/statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+      - matchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+      - matchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+
+  - it: should define a readiness probe
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe

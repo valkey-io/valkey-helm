@@ -82,19 +82,17 @@ Returns the Valkey exporter container image
 The common image function that renders the container image
 */}}
 {{- define "common.image" -}}
-{{- $registryName := .image.registry }}
-{{- $repositoryName := .image.repository }}
-{{- $tag := .image.tag }}
-{{- if .global }}
-  {{- if .global.imageRegistry }}
-    {{- $registryName = .global.imageRegistry }}
-  {{- end }}
-{{- end }}
-{{- if $registryName }}
-{{- printf "%s/%s:%s" $registryName $repositoryName $tag }}
-{{- else }}
-{{- printf "%s:%s" $repositoryName $tag }}
-{{ end }}
+{{- $registryName := .image.registry -}}
+{{- $repositoryName := .image.repository -}}
+{{- $tag := .image.tag -}}
+{{- if and .global .global.imageRegistry -}}
+{{- $registryName = .global.imageRegistry -}}
+{{- end -}}
+{{- if $registryName -}}
+{{- printf "%s/%s:%s" $registryName $repositoryName $tag -}}
+{{- else -}}
+{{- printf "%s:%s" $repositoryName $tag -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -225,19 +223,4 @@ Calculate total number of nodes in the cluster
 {{- mul $shards (add 1 $replicasPerShard) -}}
 {{- end -}}
 
-{{/*
-Generate list of cluster nodes for VALKEY_NODES environment variable
-*/}}
-{{- define "valkey.clusterNodes" -}}
-{{- $fullname := include "valkey.fullname" . -}}
-{{- $headlessSvc := include "valkey.headlessServiceName" . -}}
-{{- $namespace := .Release.Namespace -}}
-{{- $clusterDomain := .Values.clusterDomain -}}
-{{- $nodeCount := include "valkey.clusterNodeCount" . | int -}}
-{{- $nodes := list -}}
-{{- range $i := until $nodeCount -}}
-{{- $nodes = append $nodes (printf "%s-%d.%s.%s.svc.%s" $fullname $i $headlessSvc $namespace $clusterDomain) -}}
-{{- end -}}
-{{- join " " $nodes -}}
-{{- end -}}
 

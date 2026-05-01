@@ -69,10 +69,6 @@ spec:
               mountPath: /usr/local/etc/valkey/valkey.conf
               subPath: valkey.conf
             {{- end }}
-            {{- if .Values.extraSecretValkeyConfigs }}
-            - name: extravalkeyconfigs-volume
-              mountPath: /extravalkeyconfigs
-            {{- end }}
             {{- if .Values.auth.enabled }}
             - name: valkey-acl
               mountPath: /etc/valkey
@@ -116,20 +112,30 @@ spec:
             - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          {{- $pingCmd := "valkey-cli ping" }}
+          {{- if .Values.tls.enabled }}
+          {{- $pingCmd = printf "valkey-cli --tls --cacert /tls/%s ping" .Values.tls.caPublicKey }}
+          {{- end }}
+          {{- /* When auth is enforced the server returns 'NOAUTH Authentication required.' — accept it as proof of liveness. */}}
+          {{- $probeCmd := printf "%s 2>&1 | grep -qE 'PONG|NOAUTH'" $pingCmd }}
           startupProbe:
             exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
-              {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
-              {{- end }}
+              command: [ "sh", "-c", {{ $probeCmd | quote }} ]
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
           livenessProbe:
             exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
-              {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
-              {{- end }}
+              command: [ "sh", "-c", {{ $probeCmd | quote }} ]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command: [ "sh", "-c", {{ $probeCmd | quote }} ]
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
@@ -198,18 +204,21 @@ spec:
             - name: REDIS_ALIAS
               value: {{ include "valkey.fullname" . }}
             {{- if .Values.auth.enabled }}
+            {{- $defaultUser := get (.Values.auth.aclUsers | default dict) "default" | default dict }}
+            {{- $hasInlineDefaultPassword := hasKey $defaultUser "password" }}
+            {{- if .Values.auth.usersExistingSecret }}
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  {{- if .Values.auth.usersExistingSecret }}
-                  {{- $defaultUser := index .Values.auth.aclUsers "default" | default dict }}
-                  {{- $passwordKey := $defaultUser.passwordKey | default "default" }}
                   name: {{ .Values.auth.usersExistingSecret }}
-                  key: {{ $passwordKey }}
-                  {{- else }}
+                  key: {{ $defaultUser.passwordKey | default "default" }}
+            {{- else if $hasInlineDefaultPassword }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
                   name: {{ include "valkey.fullname" . }}-auth
                   key: default-password
-                  {{- end }}
+            {{- end }}
             {{- end }}
             {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
             - name: {{ $key }}

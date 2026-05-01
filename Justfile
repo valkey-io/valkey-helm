@@ -45,9 +45,12 @@ functional-scenario tls auth shard rep istio:
 functional-run:
     ./functional-tests/run-all.sh
 
+# Run the extra (non-matrix) regression scenarios on their own
+functional-extras:
+    ./functional-tests/run-extra-scenarios.sh
+
 # Full functional suite: setup + matrix + teardown including cluster
 functional-test:
     ./functional-tests/setup.sh
     ./functional-tests/run-all.sh
     ./functional-tests/teardown.sh --cluster
-

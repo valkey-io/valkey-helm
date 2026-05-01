@@ -11,13 +11,30 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should not create PDB when replica is disabled
+  - it: should not create PDB when neither replica nor cluster is enabled
     set:
       replica.enabled: false
+      cluster.enabled: false
       podDisruptionBudget.enabled: true
     asserts:
       - hasDocuments:
           count: 0
+
+  # Regression: PDB used to be gated on replica mode only; cluster mode was
+  # silently unprotected.
+  - it: should create PDB when enabled with cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
 
   - it: should create PDB when enabled with replica
     set:

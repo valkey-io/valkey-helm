@@ -53,7 +53,10 @@ data:
       fi
       {{- end }}
 
-      echo "$password"
+      # printf is byte-safe; dash's `echo` quietly interprets backslash
+      # escapes (\b, \t, \\, etc.), corrupting any password that contains a
+      # backslash before it's hashed into the ACL.
+      printf '%s' "$password"
     }
     {{- end }}
 
@@ -123,8 +126,9 @@ data:
     # User: {{ $username }}
     PASSWORD=$(get_user_password "{{ $username }}" "{{ $passwordKey }}") || exit 1
 
-    # Hash the password and write ACL entry
-    PASSHASH=$(echo -n "$PASSWORD" | sha256sum | cut -f 1 -d " ")
+    # Hash the password and write ACL entry. printf (not echo -n) is POSIX —
+    # echo -n is implementation-defined and quietly emits `-n\n` under some shells.
+    PASSHASH=$(printf '%s' "$PASSWORD" | sha256sum | cut -f 1 -d " ")
     echo "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> /etc/valkey/users.acl
 
     {{- end }}
@@ -190,8 +194,10 @@ data:
       {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
       REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
 
-      # Write masterauth configuration
-      echo "masterauth $REPL_PASSWORD" >>"$VALKEY_CONFIG"
+      # Write masterauth configuration. Quote + backslash-escape so passwords
+      # containing quotes/backslashes survive valkey.conf parsing.
+      REPL_PASSWORD_ESC=$(printf '%s' "$REPL_PASSWORD" | sed 's/\\/\\\\/g; s/"/\\"/g')
+      printf 'masterauth "%s"\n' "$REPL_PASSWORD_ESC" >>"$VALKEY_CONFIG"
       echo "masteruser {{ $replUsername }}" >>"$VALKEY_CONFIG"
       log "Configured masterauth with user {{ $replUsername }}"
       {{- end }}
@@ -252,12 +258,15 @@ data:
     {{- if .Values.auth.enabled }}
     # Configure cluster authentication
     {{- $replUsername := .Values.cluster.replicationUser }}
-    REPL_PASSWORD=$(get_user_password "{{ $replUsername }}") || exit 1
+    {{- $replUser := index .Values.auth.aclUsers $replUsername }}
+    {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
+    REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
+    REPL_PASSWORD_ESC=$(printf '%s' "$REPL_PASSWORD" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
     {
       echo ""
       echo "# Cluster authentication"
-      echo "masterauth $REPL_PASSWORD"
+      printf 'masterauth "%s"\n' "$REPL_PASSWORD_ESC"
       echo "masteruser {{ $replUsername }}"
     } >>"$VALKEY_CONFIG"
     log "Configured cluster authentication with user {{ $replUsername }}"
@@ -279,9 +288,5 @@ data:
     if [ -f /usr/local/etc/valkey/valkey.conf ]; then
       log "Appending /usr/local/etc/valkey/valkey.conf"
       cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONFIG"
-    fi
-    if [ -d /extravalkeyconfigs ]; then
-      log "Appending files in /extravalkeyconfigs/"
-      cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
     fi
 

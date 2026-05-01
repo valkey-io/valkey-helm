@@ -8,10 +8,18 @@ metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
+  {{- with .Values.workloadAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   serviceName: {{ include "valkey.fullname" . }}-headless
   replicas: {{ include "valkey.clusterNodeCount" . }}
   podManagementPolicy: Parallel
+  {{- if .Values.cluster.persistentVolumeClaimRetentionPolicy }}
+  persistentVolumeClaimRetentionPolicy:
+    {{- toYaml .Values.cluster.persistentVolumeClaimRetentionPolicy | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
@@ -85,10 +93,6 @@ spec:
               mountPath: /usr/local/etc/valkey/valkey.conf
               subPath: valkey.conf
             {{- end }}
-            {{- if .Values.extraSecretValkeyConfigs }}
-            - name: extravalkeyconfigs-volume
-              mountPath: /extravalkeyconfigs
-            {{- end }}
             {{- if .Values.auth.enabled }}
             - name: valkey-acl
               mountPath: /etc/valkey
@@ -132,24 +136,31 @@ spec:
             - name: tcp-bus
               containerPort: {{ .Values.cluster.busPort }}
               protocol: TCP
+          {{- $pingCmd := "valkey-cli ping" }}
+          {{- if .Values.tls.enabled }}
+          {{- $pingCmd = printf "valkey-cli --tls --cacert /tls/%s ping" .Values.tls.caPublicKey }}
+          {{- end }}
+          {{- /* When auth is enforced the server returns 'NOAUTH Authentication required.' — accept it as proof of liveness. */}}
+          {{- $probeCmd := printf "%s 2>&1 | grep -qE 'PONG|NOAUTH'" $pingCmd }}
           startupProbe:
             exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
-              {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
-              {{- end }}
+              command: [ "sh", "-c", {{ $probeCmd | quote }} ]
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 30
           livenessProbe:
             exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
-              {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
-              {{- end }}
+              command: [ "sh", "-c", {{ $probeCmd | quote }} ]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command: [ "sh", "-c", {{ $probeCmd | quote }} ]
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
@@ -180,6 +191,9 @@ spec:
             {{- range $config := .Values.extraValkeyConfigs }}
             - name: {{ $config.name }}-valkey
               mountPath: {{ $config.mountPath }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
         {{- if .Values.metrics.enabled }}
         - name: metrics
@@ -221,10 +235,30 @@ spec:
           env:
             - name: REDIS_ALIAS
               value: {{ include "valkey.fullname" . }}
+            {{- if .Values.auth.enabled }}
+            {{- $defaultUser := get (.Values.auth.aclUsers | default dict) "default" | default dict }}
+            {{- $hasInlineDefaultPassword := hasKey $defaultUser "password" }}
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.usersExistingSecret }}
+                  key: {{ $defaultUser.passwordKey | default "default" }}
+            {{- else if $hasInlineDefaultPassword }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "valkey.fullname" . }}-auth
+                  key: default-password
+            {{- end }}
+            {{- end }}
             {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
             - name: {{ $key }}
               value: "{{ $val }}"
             {{- end }}
+        {{- end }}
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       volumes:
         - name: scripts
@@ -280,6 +314,9 @@ spec:
             secretName: {{ include "valkey.fullname" . }}-auth
             defaultMode: 0400
         {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

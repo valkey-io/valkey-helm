@@ -65,6 +65,9 @@
                 },
                 "busPort": {
                     "type": "integer"
+                },
+                "persistentVolumeClaimRetentionPolicy": {
+                    "type": "object"
                 }
             }
         },
@@ -127,9 +130,6 @@
         },
         "extraInitContainers": {
             "type": "array"
-        },
-        "extraSecretValkeyConfigs": {
-            "type": "boolean"
         },
         "extraValkeyConfigs": {
             "type": "array"

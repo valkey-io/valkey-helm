@@ -60,8 +60,15 @@ for s in "${SCENARIOS[@]}"; do
 done
 
 echo
-log "Summary: ${passed} passed, ${failed} failed"
+log "Matrix summary: ${passed} passed, ${failed} failed"
 if (( failed > 0 )); then
     printf '  failed: %s\n' "${failures[@]}"
     exit 1
+fi
+
+# Extra, non-matrix regressions (aclConfig+metrics, default-deny netpol, etc).
+# Skipped when FILTER is set — filters are matrix-scoped, so the extras
+# wouldn't match anyway and running them would be surprising.
+if [[ -z ${FILTER:-} ]]; then
+    "${HERE}/run-extra-scenarios.sh"
 fi
