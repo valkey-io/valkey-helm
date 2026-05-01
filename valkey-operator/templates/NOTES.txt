@@ -6,4 +6,4 @@ To verify the operator is running:
 
 To create a ValkeyCluster:
 
-  kubectl apply -f https://raw.githubusercontent.com/valkey-io/valkey-operator/main/config/samples/valkey_v1alpha1_valkeycluster.yaml
+  kubectl apply -f https://raw.githubusercontent.com/valkey-io/valkey-operator/main/config/samples/v1alpha1_valkeycluster.yaml
