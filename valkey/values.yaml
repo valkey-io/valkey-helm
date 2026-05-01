@@ -305,6 +305,25 @@ cluster:
   # This port is used for node-to-node communication in the cluster
   busPort: 16379
 
+  # Isolate this Valkey cluster's gossip bus from any other release in the
+  # Kubernetes cluster. Valkey's CLUSTER MEET has no authentication, so
+  # without this, any pod that can open a TCP connection to a node's bus
+  # port can merge its owner's cluster into this one — regardless of
+  # namespace, since pod-to-pod traffic crosses namespaces freely by
+  # default.
+  #
+  # The generated NetworkPolicy restricts the bus port to same-release pods
+  # only; client and metrics ports remain open.
+  #
+  # Requires a NetworkPolicy-enforcing CNI (Calico, Cilium, kindnet ≥ 0.20,
+  # Antrea, etc.). On a non-enforcing CNI (plain Flannel, in-tree kubenet)
+  # the rendered policy is a no-op and the chart cannot provide isolation
+  # on its own — an Istio AuthorizationPolicy or a separate Kubernetes
+  # cluster per Valkey cluster is the only remaining option. Namespaces
+  # alone do NOT provide isolation.
+  isolation:
+    enabled: true
+
   # PersistentVolumeClaim retention policy for StatefulSet
   # Controls when PVCs are deleted (requires Kubernetes 1.23+)
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention

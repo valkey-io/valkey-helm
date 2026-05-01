@@ -66,6 +66,14 @@
                 "busPort": {
                     "type": "integer"
                 },
+                "isolation": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        }
+                    }
+                },
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"
                 }

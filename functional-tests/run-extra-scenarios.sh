@@ -220,12 +220,154 @@ scenario_readiness_probe_exists() {
     pass "${name}"
 }
 
-trap 'cleanup_release' EXIT
+# ---------------------------------------------------------------------------
+# Scenario: two independent Valkey clusters in the same namespace must stay
+# independent. Valkey's CLUSTER MEET has no auth, so a MEET issued by (or
+# forwarded through) a node in cluster A can merge cluster B into it. The
+# chart's cluster-isolation NetworkPolicy pins the bus port to same-release
+# pods; without it, a stray MEET wins.
+#
+# This test:
+#   1) installs `valkey-a` and `valkey-b` in the same namespace, cluster mode;
+#   2) issues CLUSTER MEET from a node in A targeting a node in B;
+#   3) waits for gossip to propagate;
+#   4) asserts A still has its original 3 nodes (not 6).
+#
+# Also runs a negative twin with `cluster.isolation.enabled=false` to prove
+# the assertion has teeth — if isolation is the thing keeping them apart,
+# disabling it must let the merge happen.
+# ---------------------------------------------------------------------------
 
-scenario_aclconfig_metrics       || true
-scenario_default_deny_netpol     || true
-scenario_bus_port_hidden         || true
-scenario_readiness_probe_exists  || true
+# Install one cluster-mode release with a given name and isolation flag.
+# Globals it expects: NAMESPACE, CHART_DIR, KUBE_CONTEXT.
+install_cluster() {
+    local release=$1 isolation=$2
+    hctl install "${release}" "${CHART_DIR}" \
+        --set=cluster.enabled=true \
+        --set=cluster.persistence.size=100Mi \
+        --set=cluster.shards=3 \
+        --set=cluster.replicasPerShard=0 \
+        --set="cluster.isolation.enabled=${isolation}" \
+        --set-string='podLabels.sidecar\.istio\.io/inject=false' \
+        --wait --timeout=300s >/dev/null
+}
+
+# Count unique nodes reported by `cluster nodes` on pod-0 of the given release.
+# Returns 0 if the query itself fails (counts as "indeterminate").
+count_cluster_nodes() {
+    local release=$1
+    # Filter blanks + the "myself" marker to get the real node count.
+    kctl exec "${release}-0" -c "${release}" -- sh -c \
+        "valkey-cli cluster nodes 2>/dev/null | awk 'NF {print \$1}' | sort -u | wc -l" \
+        2>/dev/null | tr -d '[:space:]' || echo 0
+}
+
+# Fire CLUSTER MEET from src_release pod-0 targeting dst_release pod-0.
+poison_meet() {
+    local src_release=$1 dst_release=$2
+    local dst_ip
+    dst_ip=$(kctl get pod "${dst_release}-0" -o jsonpath='{.status.podIP}')
+    [[ -n ${dst_ip} ]] || return 1
+    kctl exec "${src_release}-0" -c "${src_release}" -- \
+        valkey-cli cluster meet "${dst_ip}" 6379 >/dev/null 2>&1 || true
+}
+
+cleanup_pair() {
+    hctl uninstall valkey-iso-a 2>/dev/null || true
+    hctl uninstall valkey-iso-b 2>/dev/null || true
+    kctl delete pvc --selector='app.kubernetes.io/instance=valkey-iso-a' --ignore-not-found >/dev/null
+    kctl delete pvc --selector='app.kubernetes.io/instance=valkey-iso-b' --ignore-not-found >/dev/null
+}
+
+scenario_two_clusters_isolated() {
+    local name="two cluster-mode releases in one namespace stay isolated"
+    log "SCENARIO: ${name}"
+    cleanup_pair
+
+    if ! install_cluster valkey-iso-a true; then
+        fail "${name}" "install of valkey-iso-a failed"; cleanup_pair; return
+    fi
+    if ! install_cluster valkey-iso-b true; then
+        fail "${name}" "install of valkey-iso-b failed"; cleanup_pair; return
+    fi
+
+    # Baseline — each cluster should see exactly 3 nodes (3 shards, 0 replicas).
+    local a_before b_before
+    a_before=$(count_cluster_nodes valkey-iso-a)
+    b_before=$(count_cluster_nodes valkey-iso-b)
+    if [[ ${a_before} != 3 || ${b_before} != 3 ]]; then
+        fail "${name}" "baseline wrong (a=${a_before}, b=${b_before}; want 3+3)"
+        cleanup_pair; return
+    fi
+
+    # Try to merge B into A.
+    poison_meet valkey-iso-a valkey-iso-b
+
+    # After a MEET, Valkey adds the peer to `cluster nodes` immediately as a
+    # handshake placeholder — so a count of 4 for a few seconds is EXPECTED
+    # whether or not the merge ultimately succeeds. The real signal is what
+    # happens *after* the handshake timeout: if bus connectivity exists, the
+    # node stays (count stays at 4+); if isolation blocks the bus, the
+    # handshake fails and the placeholder is evicted (count returns to 3).
+    #
+    # Cluster node-timeout defaults to 15s; give the failure detector
+    # multiple intervals to fire, then sample.
+    sleep 45
+
+    # After settling, the merge must NOT have stuck.
+    local a_after b_after
+    a_after=$(count_cluster_nodes valkey-iso-a)
+    b_after=$(count_cluster_nodes valkey-iso-b)
+
+    if [[ ${a_after} != 3 || ${b_after} != 3 ]]; then
+        fail "${name}" "clusters merged (a=${a_after}, b=${b_after}; want 3+3 after settle)"
+        cleanup_pair; return
+    fi
+
+    cleanup_pair
+    pass "${name}"
+}
+
+# Negative twin: without isolation, the SAME MEET must succeed — otherwise
+# the positive test isn't proving what we think it's proving.
+scenario_isolation_off_lets_merge_happen() {
+    local name="disabling isolation lets CLUSTER MEET actually merge (teeth check)"
+    log "SCENARIO: ${name}"
+    cleanup_pair
+
+    if ! install_cluster valkey-iso-a false; then
+        fail "${name}" "install of valkey-iso-a failed"; cleanup_pair; return
+    fi
+    if ! install_cluster valkey-iso-b false; then
+        fail "${name}" "install of valkey-iso-b failed"; cleanup_pair; return
+    fi
+
+    poison_meet valkey-iso-a valkey-iso-b
+
+    # Mirror the positive test's 45-second settle window: we're asking the
+    # SAME question (has the handshake completed?) and need the same amount
+    # of time for the node-timeout to fire.
+    sleep 45
+
+    local a_after
+    a_after=$(count_cluster_nodes valkey-iso-a)
+    if [[ ${a_after} -le 3 ]]; then
+        fail "${name}" "MEET did not merge even without isolation (a=${a_after}); positive test cannot prove isolation works"
+        cleanup_pair; return
+    fi
+
+    cleanup_pair
+    pass "${name}"
+}
+
+trap 'cleanup_release; cleanup_pair' EXIT
+
+scenario_aclconfig_metrics              || true
+scenario_default_deny_netpol            || true
+scenario_bus_port_hidden                || true
+scenario_readiness_probe_exists         || true
+scenario_two_clusters_isolated          || true
+scenario_isolation_off_lets_merge_happen|| true
 
 echo
 log "Extra scenario summary"
