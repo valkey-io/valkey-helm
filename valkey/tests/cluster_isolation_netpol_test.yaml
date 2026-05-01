@@ -1,0 +1,127 @@
+suite: cluster isolation network policy
+templates:
+  - templates/cluster-isolation-netpol.yaml
+tests:
+  - it: should not render when cluster mode is disabled
+    set:
+      cluster.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render in replica mode
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when isolation is explicitly disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.isolation.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render by default in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-isolation
+
+  - it: should select only pods of this release
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  # Egress is intentionally NOT restricted here — locking it down breaks
+  # Istio sidecar bootstrap (xDS to istiod) and any DNS-heavy flow. Users
+  # who want egress isolation should add their own NetworkPolicy on top.
+  - it: should restrict ingress only
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+      - notExists:
+          path: spec.egress
+
+  # The core guarantee: the bus port inbound is scoped to same-instance pods.
+  - it: bus port ingress must be scoped to same-release pods
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.busPort: 16379
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            from:
+              - podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: valkey
+                    app.kubernetes.io/instance: RELEASE-NAME
+            ports:
+              - protocol: TCP
+                port: 16379
+
+  # The client port must NOT be scoped — arbitrary clients need to reach it.
+  # If a future change accidentally restricts it to same-release pods, every
+  # client outside the chart will lose access.
+  - it: client port ingress must not require the same-release selector
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 6379
+
+  - it: should include metrics port ingress only when metrics enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      metrics.enabled: true
+      metrics.exporter.port: 9121
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 9121
+
+  - it: should not include metrics port ingress when metrics disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      metrics.enabled: false
+    asserts:
+      - notContains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 9121
+

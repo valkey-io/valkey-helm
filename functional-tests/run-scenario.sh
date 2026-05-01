@@ -92,10 +92,12 @@ fi
 # ---------------------------------------------------------------------------
 # Install.
 # ---------------------------------------------------------------------------
-log "Installing scenario: ${SCENARIO}"
-hctl install "${RELEASE}" "${CHART_DIR}" "${helm_flags[@]}"
 
-# Clean up on exit regardless of pass/fail — the next scenario needs a clean slate.
+# Register cleanup BEFORE `helm install`. If the install itself fails
+# (timeout, post-install hook never ready, etc.) Helm leaves a "failed"
+# release in the cluster that blocks every subsequent scenario with a
+# `cannot reuse a name that is still in use` error. Trap-before-install
+# ensures we always clean up, even on install failure.
 cleanup() {
     local rc=$?
     log "Cleaning up scenario: ${SCENARIO}"
@@ -104,6 +106,13 @@ cleanup() {
     exit "${rc}"
 }
 trap cleanup EXIT
+
+# Also scrub anything left behind by a prior scenario that crashed hard
+# (SIGKILL, harness panic) without running its trap.
+hctl uninstall "${RELEASE}" 2>/dev/null || true
+
+log "Installing scenario: ${SCENARIO}"
+hctl install "${RELEASE}" "${CHART_DIR}" "${helm_flags[@]}"
 
 # ---------------------------------------------------------------------------
 # Wait for pods to become ready.

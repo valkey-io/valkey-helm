@@ -1,0 +1,72 @@
+{{- /*
+Cluster-bus isolation NetworkPolicy.
+
+Valkey's gossip/cluster-bus protocol has no authentication of its own: a pod
+that can open a TCP connection to a node's bus port (default 16379) can send
+CLUSTER MEET and merge into the cluster. When two independent Valkey clusters
+share a Kubernetes cluster (or even a namespace), nothing in Valkey itself
+stops an accidental or malicious MEET from fusing them.
+
+This policy pins the bus port INBOUND to same-release traffic only, by
+matching on `app.kubernetes.io/instance`. Blocking the receiving side of
+the MEET handshake is sufficient: the handshake is bidirectional, so with
+the receiver refusing connections, the placeholder node is evicted by the
+cluster-node-timeout and the two clusters stay separate.
+
+Client (6379) and metrics (9121) ports stay open — they're application-level
+and have their own auth (ACL/TLS).
+
+We deliberately do NOT set an Egress policyType. Adding Egress here would
+require enumerating every destination a Valkey pod legitimately needs to
+reach (kube-dns, Istio's xDS on istiod:15012, Envoy's health port, JWKS
+endpoints for Istio AuthorizationPolicy, and so on); getting that wrong
+breaks Istio sidecar bootstrap. Users who want egress isolation on top of
+this should add an Istio AuthorizationPolicy (when they have Istio) or a
+separate NetworkPolicy targeting `valkey.selectorLabels` — Kubernetes
+combines those additively with this one.
+
+Kubernetes policies are additive: adding this one alongside the user-defined
+`networkPolicy` value still allows the user's ingress/egress rules to match.
+
+Running on a CNI that doesn't enforce NetworkPolicy (plain Flannel, the
+in-tree kubenet, etc.) makes this rendered policy a no-op. There is no
+namespace-based fallback — pod-to-pod traffic crosses namespaces freely
+unless something actually enforces policy at the data plane. On such a
+cluster there is no way to prevent a cross-release CLUSTER MEET from the
+chart alone; either switch to a policy-enforcing CNI, add an Istio
+AuthorizationPolicy at layer 7, or run each Valkey cluster in its own
+Kubernetes cluster.
+*/}}
+{{- if and .Values.cluster.enabled .Values.cluster.isolation.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "valkey.fullname" . }}-cluster-isolation
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "valkey.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Bus port: only other pods of THIS release.
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "valkey.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.cluster.busPort }}
+    # Client port: anyone. ACL + TLS guard it above the network layer.
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+    {{- if .Values.metrics.enabled }}
+    # Metrics sidecar: anyone (typically Prometheus).
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.metrics.exporter.port }}
+    {{- end }}
+{{- end }}
