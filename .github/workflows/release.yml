@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'valkey/Chart.yaml'
+      - '‎valkey-operator/Chart.yaml'
 
 jobs:
   check-version-change:
