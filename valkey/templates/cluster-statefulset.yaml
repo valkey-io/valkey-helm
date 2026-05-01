@@ -44,6 +44,10 @@ spec:
         {{- if .Values.valkeyConfig }}
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 | quote }}
         {{- end }}
+        {{- if .Values.istio.enabled }}
+        traffic.sidecar.istio.io/excludeInboundPorts: {{ .Values.cluster.busPort | quote }}
+        traffic.sidecar.istio.io/excludeOutboundPorts: {{ .Values.cluster.busPort | quote }}
+        {{- end }}
     spec:
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
