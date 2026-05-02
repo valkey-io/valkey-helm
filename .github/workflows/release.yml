@@ -82,7 +82,13 @@ jobs:
             if [ -z "${pkg:-}" ]; then
               break
             fi
-            echo "Pushing package - ${pkg} to ghcr.io repository - ${repo}"
+            chart_name=$(helm show chart "${pkg}" | grep '^name:' | awk '{print $2}')
+            chart_version=$(helm show chart "${pkg}" | grep '^version:' | awk '{print $2}')
+            if helm show chart "oci://ghcr.io/${repo}/${chart_name}" --version "${chart_version}" &>/dev/null; then
+              echo "Skipping ${chart_name}:${chart_version} — already exists in GHCR"
+              continue
+            fi
+            echo "Pushing ${chart_name}:${chart_version} to ghcr.io/${repo}"
             helm push "${pkg}" "oci://ghcr.io/${repo}"
           done
         env:
