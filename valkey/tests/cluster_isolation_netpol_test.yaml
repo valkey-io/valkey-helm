@@ -125,3 +125,43 @@ tests:
               - protocol: TCP
                 port: 9121
 
+  # --- Istio ambient mesh interaction ---
+  # In ambient mode, ztunnel wraps all pod-to-pod hops in HBONE (port 15008)
+  # then re-delivers to the pod-local port. A NetworkPolicy that only lists
+  # 6379/16379/9121 drops the inbound HBONE and every connection breaks with
+  # "Connection reset by peer". The chart-owned AuthorizationPolicy gives
+  # equivalent (and cryptographically stronger) isolation at the ztunnel
+  # layer, so we render NO NetworkPolicy when ambient is on. Bus-port
+  # protection still exists — just at a different layer.
+  - it: should not render in ambient mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: ambient
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should still render in sidecar mode (Envoy's iptables capture is
+      per-pod and leaves the chart's pod-selector-based netpol correct)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: sidecar
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NetworkPolicy
+
+  - it: should still render when istio is disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+

@@ -572,3 +572,55 @@ tests:
     asserts:
       - exists:
           path: spec.template.spec.containers[0].readinessProbe
+
+  # --- Istio ambient mode ---
+  - it: should add ambient dataplane-mode label when istio.mode=ambient
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: ambient
+
+  - it: should NOT add ambient dataplane-mode label when istio.mode=sidecar
+    set:
+      istio.enabled: true
+      istio.mode: sidecar
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+
+  # Namespaces labelled `istio-injection=enabled` would otherwise inject an
+  # Envoy sidecar AND the ambient capture label would direct traffic to
+  # ztunnel — the pod then gets double-redirected and every connection
+  # fails with "Connection reset by peer". Opting the pod out of injection
+  # explicitly is the only reliable way to make ambient work in that setup.
+  - it: should set sidecar.istio.io/inject=false in ambient mode
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "false"
+
+  - it: should NOT force sidecar.istio.io/inject=false in sidecar mode
+    set:
+      istio.enabled: true
+      istio.mode: sidecar
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+
+  - it: should NOT add ambient dataplane-mode label when istio is disabled
+    set:
+      istio.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]

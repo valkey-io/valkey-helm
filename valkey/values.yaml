@@ -355,7 +355,31 @@ istio:
   # Enable Istio
   enabled: false
 
-  # PeerAuthentication controls mTLS enforcement on inbound connections
+  # Data-plane mode. Two very different shapes:
+  #
+  #   sidecar  — Classic Istio. An Envoy sidecar is injected into every pod.
+  #              Requires the namespace/pod to be labelled for injection
+  #              (`istio-injection=enabled` or `sidecar.istio.io/inject=true`).
+  #              The chart adds `traffic.sidecar.istio.io/exclude*Ports` so
+  #              the cluster-bus port bypasses Envoy (gossip needs raw TCP).
+  #
+  #   ambient  — Istio Ambient Mesh. No sidecar; a node-local ztunnel wraps
+  #              pod traffic in HBONE mTLS transparently. The chart adds
+  #              `istio.io/dataplane-mode: ambient` to every workload pod so
+  #              ztunnel captures their traffic (also works when the whole
+  #              namespace is labelled; the pod label is additive and lets
+  #              operators opt in per-release). The DestinationRule that
+  #              wraps outbound connections in ISTIO_MUTUAL is skipped —
+  #              ztunnel already handles mTLS, and a DR would layer a second
+  #              Envoy mTLS on top, doubling crypto overhead.
+  #
+  # Both modes still render the PeerAuthentication (enforced by ztunnel in
+  # ambient, by Envoy in sidecar) and the chart's AuthorizationPolicy that
+  # pins the cluster-bus port to same-release principals.
+  mode: sidecar  # @schema enum:[sidecar,ambient]
+
+  # PeerAuthentication controls mTLS enforcement on inbound connections.
+  # Applies to both sidecar and ambient modes.
   peerAuthentication:
     # mTLS mode for inbound traffic (STRICT, PERMISSIVE, DISABLE, UNSET)
     # STRICT: Require mTLS on all ports
@@ -366,7 +390,9 @@ istio:
     # Additional annotations for the PeerAuthentication resource
     annotations: {}
 
-  # DestinationRule configures mTLS for outbound connections to Valkey services
+  # DestinationRule configures mTLS for outbound connections to Valkey services.
+  # Rendered only when istio.mode is "sidecar" — in ambient mode, ztunnel
+  # handles mTLS transparently and a DR would double-encrypt.
   destinationRule:
     # TLS mode for outbound traffic (DISABLE, SIMPLE, MUTUAL, ISTIO_MUTUAL)
     # ISTIO_MUTUAL: Use Istio-managed certificates for mTLS.
@@ -380,6 +406,25 @@ istio:
     # Additional labels for the DestinationRule resource
     labels: {}
     # Additional annotations for the DestinationRule resource
+    annotations: {}
+
+  # AuthorizationPolicy restricts the cluster-bus port to same-release
+  # principals. In sidecar mode, Envoy enforces; in ambient mode, ztunnel
+  # enforces. Unlike the NetworkPolicy (IP-based, requires a policy-enforcing
+  # CNI), this is cryptographic — it requires the caller to hold a SPIFFE
+  # identity matching the Valkey pods' ServiceAccount, so a pod in a different
+  # release cannot forge the check even if it can open a TCP connection.
+  #
+  # Only active in cluster mode (no bus port otherwise).
+  authorizationPolicy:
+    # Enable the chart-owned AuthorizationPolicy.
+    # Defaults to true when istio.enabled is true — the whole point of wiring
+    # Istio in is to get mesh-level enforcement, and this is the piece that
+    # prevents cross-release CLUSTER MEET attacks at L4.
+    enabled: true
+    # Additional labels for the AuthorizationPolicy resource
+    labels: {}
+    # Additional annotations for the AuthorizationPolicy resource
     annotations: {}
 
 # Node selector for pod assignment

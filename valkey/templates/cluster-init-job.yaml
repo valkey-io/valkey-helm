@@ -24,6 +24,16 @@ spec:
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- /*
+        In ambient mode, the Job pod needs the dataplane-mode label so
+        ztunnel captures its outbound connections to the Valkey pods. Without
+        this, the Job speaks plaintext to pods whose PeerAuthentication
+        requires STRICT mTLS and the Job hangs until backoffLimit, which is
+        what surfaces as "Job in progress / context deadline exceeded" on
+        helm install.
+        The same label is benign in sidecar mode (ambient gated inside).
+        */}}
+        {{- include "valkey.istioPodLabels" . | nindent 8 }}
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}

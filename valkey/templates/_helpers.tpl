@@ -223,4 +223,52 @@ Calculate total number of nodes in the cluster
 {{- mul $shards (add 1 $replicasPerShard) -}}
 {{- end -}}
 
+{{/*
+Istio pod labels. Emits the label that tells Istio how to capture this pod's
+traffic. Ambient requires `istio.io/dataplane-mode: ambient` on the pod (or
+namespace); omitting it leaves the pod outside the mesh even when ambient is
+installed cluster-wide. Sidecar mode uses the webhook-injection label unless
+the namespace is already labelled `istio-injection=enabled`.
+
+In ambient mode we also emit `sidecar.istio.io/inject: "false"` so the pod
+opts out of Envoy sidecar injection even when the namespace is labelled
+`istio-injection=enabled` (a common setup when a cluster runs both data
+planes side-by-side, e.g. during a sidecar→ambient migration). Without this,
+injecting both a sidecar AND labelling the pod ambient produces a pod whose
+traffic is redirected twice and mTLS negotiation breaks silently — the
+pod's client port returns "Connection reset by peer" on every request.
+
+When istio.enabled is false this helper emits nothing so the user can still
+set their own `sidecar.istio.io/inject=false` via podLabels (see the
+functional-tests istio=off path).
+*/}}
+{{- define "valkey.istioPodLabels" -}}
+{{- if .Values.istio.enabled -}}
+{{- if eq .Values.istio.mode "ambient" }}
+istio.io/dataplane-mode: ambient
+sidecar.istio.io/inject: "false"
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The valkey ServiceAccount name as an Istio SPIFFE principal.
+Used by the AuthorizationPolicy to pin the cluster-bus port to same-release
+pods cryptographically rather than by pod-selector IP.
+*/}}
+{{- define "valkey.istioPrincipal" -}}
+{{- printf "cluster.local/ns/%s/sa/%s" .Release.Namespace (include "valkey.serviceAccountName" .) -}}
+{{- end -}}
+
+{{/*
+Validate istio configuration
+*/}}
+{{- define "valkey.validateIstioConfig" -}}
+{{- if .Values.istio.enabled }}
+  {{- if not (or (eq .Values.istio.mode "sidecar") (eq .Values.istio.mode "ambient")) }}
+    {{- fail (printf "istio.mode must be 'sidecar' or 'ambient', got: %s" .Values.istio.mode) }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
 

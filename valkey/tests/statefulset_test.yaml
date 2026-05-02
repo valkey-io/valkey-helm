@@ -471,3 +471,27 @@ tests:
     asserts:
       - exists:
           path: spec.template.spec.containers[0].readinessProbe
+
+  # --- Istio ambient mode ---
+  - it: should add ambient dataplane-mode label when istio.mode=ambient
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: ambient
+
+  - it: should NOT add ambient dataplane-mode label when istio.mode=sidecar
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: sidecar
+    template: templates/statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
