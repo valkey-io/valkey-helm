@@ -1034,3 +1034,35 @@ tests:
       - notExists:
           path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeInboundPorts"]
 
+  - it: should emit sidecar-mode mesh labels on the cluster statefulset
+    # Sidecar mode is self-sufficient now: we pin dataplane-mode=none AND
+    # sidecar.istio.io/inject=true on the pod, so injection works whether
+    # or not the namespace is labelled, and ztunnel stays out of the way
+    # on dual-mode clusters. Regression: we used to emit neither, leaning
+    # on namespace labels exclusively.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: sidecar
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: none
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "true"
+
+  - it: should emit no mesh labels when istio is disabled (cluster)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: false
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+      - notExists:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+

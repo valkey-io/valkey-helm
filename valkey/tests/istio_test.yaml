@@ -447,14 +447,19 @@ tests:
           value: my-valkey-headless.NAMESPACE.svc.cluster.local
 
   # --- Mode validation ---
-  - it: should fail with a helpful error when istio.mode is invalid
+  # The schema catches typos in istio.mode at install time (before any
+  # template renders). This keeps errors fast and mode-neutral, unlike the
+  # old regime where only templates that happened to render in the chosen
+  # mode would fail — a bogus mode with istio.enabled=false would silently
+  # sail through.
+  - it: should reject invalid istio.mode at the schema layer
     set:
       istio.enabled: true
       istio.mode: waypoint   # typo — not a real mode
     template: templates/istio-peer-authentication.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "istio.mode must be 'sidecar' or 'ambient'.*"
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nvalkey:\n- at '/istio/mode': value must be one of 'sidecar', 'ambient'\n"
 
   - it: should accept istio.mode=sidecar
     set:
@@ -541,3 +546,95 @@ tests:
       - equal:
           path: spec.mtls.mode
           value: PERMISSIVE
+
+  # --- Cross-release isolation guards ---
+  # These assert the chart refuses to silently ship an unprotected cluster
+  # bus. The validator is called from the PeerAuthentication template so it
+  # fires regardless of whether the AuthorizationPolicy itself renders.
+
+  - it: should refuse ambient+cluster when AuthorizationPolicy is off
+    # Ambient mode skips the bus-port NetworkPolicy (it would drop HBONE);
+    # disabling the AP on top leaves the port completely unprotected across
+    # releases. The chart must fail closed.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.authorizationPolicy.enabled: false
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "istio.authorizationPolicy.enabled=false in ambient mode.*cluster-bus port unprotected.*"
+
+  - it: should refuse ambient+cluster when serviceAccount collapses to default
+    # serviceAccount.create=false AND serviceAccount.name="" produces the
+    # shared `default` SA. Two such releases in the same namespace generate
+    # identical AP principals; cross-release MEET succeeds. Repro'd live.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.create: false
+      serviceAccount.name: ""
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "serviceAccount.create=false AND serviceAccount.name empty.*"
+
+  - it: should accept ambient+cluster with serviceAccount.create=true (default)
+    # Per-release SA (default): distinct SPIFFE principal per release,
+    # AP correctly isolates.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.create: true
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: should accept ambient+cluster with explicit serviceAccount.name override
+    # User takes responsibility for distinct naming.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.create: false
+      serviceAccount.name: "my-valkey-sa"
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # --- Custom trust domain ---
+  - it: PeerAuthentication unaffected by custom trustDomain
+    # PA doesn't reference principals, so trustDomain is a no-op here. Just
+    # prove nothing breaks when the value is set.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      istio.trustDomain: "my.mesh.example.com"
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.mtls.mode
+          value: STRICT
+
+  # --- Typo defence ---
+  # Schema check fires even when istio.enabled=false so typos surface at
+  # GitOps-commit time, not after someone flips the toggle in production.
+  - it: should reject typo'd istio.mode even with istio.enabled=false
+    set:
+      istio.enabled: false
+      istio.mode: ambiet
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nvalkey:\n- at '/istio/mode': value must be one of 'sidecar', 'ambient'\n"

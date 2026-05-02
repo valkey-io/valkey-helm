@@ -584,14 +584,18 @@ tests:
           path: spec.template.metadata.labels["istio.io/dataplane-mode"]
           value: ambient
 
-  - it: should NOT add ambient dataplane-mode label when istio.mode=sidecar
+  # In sidecar mode istio.io/dataplane-mode is set to "none" (not absent) so
+  # a dual-mode cluster running ambient too doesn't accidentally capture
+  # this pod via ztunnel on top of its Envoy sidecar.
+  - it: should set istio.io/dataplane-mode=none in sidecar mode
     set:
       istio.enabled: true
       istio.mode: sidecar
     template: templates/deploy_valkey.yaml
     asserts:
-      - notExists:
+      - equal:
           path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: none
 
   # Namespaces labelled `istio-injection=enabled` would otherwise inject an
   # Envoy sidecar AND the ambient capture label would direct traffic to
@@ -608,14 +612,20 @@ tests:
           path: spec.template.metadata.labels["sidecar.istio.io/inject"]
           value: "false"
 
-  - it: should NOT force sidecar.istio.io/inject=false in sidecar mode
+  # Sidecar mode now forces injection on at the pod level so the chart
+  # doesn't silently depend on the namespace carrying
+  # istio-injection=enabled. Previously this was the user's problem to get
+  # right — half the "it's not working" issue reports in sidecar mode came
+  # down to "the namespace wasn't labelled".
+  - it: should set sidecar.istio.io/inject=true in sidecar mode
     set:
       istio.enabled: true
       istio.mode: sidecar
     template: templates/deploy_valkey.yaml
     asserts:
-      - notExists:
+      - equal:
           path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "true"
 
   - it: should NOT add ambient dataplane-mode label when istio is disabled
     set:
@@ -624,3 +634,89 @@ tests:
     asserts:
       - notExists:
           path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+
+  # Regression: the istioPodLabels helper used to emit nothing in sidecar
+  # mode AND still have its caller run `nindent 8`, which injects a blank
+  # line into the labels map. Valid YAML, but crap to read in diffs. After
+  # the fix the labels map holds exactly the selector labels + the two
+  # mode-specific keys — no blank key, no stray whitespace.
+  - it: should produce exactly the sidecar label set in sidecar mode
+    set:
+      istio.enabled: true
+      istio.mode: sidecar
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels
+          value:
+            app.kubernetes.io/name: valkey
+            app.kubernetes.io/instance: RELEASE-NAME
+            sidecar.istio.io/inject: "true"
+            istio.io/dataplane-mode: none
+
+  # And with ambient, exactly the two ambient-specific keys on top of the
+  # selector labels — and nothing else.
+  - it: should produce exactly the ambient label set in ambient mode
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels
+          value:
+            app.kubernetes.io/name: valkey
+            app.kubernetes.io/instance: RELEASE-NAME
+            istio.io/dataplane-mode: ambient
+            sidecar.istio.io/inject: "false"
+
+  # And with istio disabled, no mesh labels at all — users can still opt
+  # into their own mesh labels via podLabels.
+  - it: should emit no mesh labels when istio.enabled is false
+    set:
+      istio.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels
+          value:
+            app.kubernetes.io/name: valkey
+            app.kubernetes.io/instance: RELEASE-NAME
+
+  # User override: a podLabels entry that collides with a chart-computed
+  # mesh label (e.g. sidecar.istio.io/inject) must win cleanly, with NO
+  # duplicate YAML keys in the rendered output. This lets operators run
+  # istio.enabled=true but force a specific release out of the sidecar
+  # mesh (rare but legitimate — e.g. pinning a canary pod to plain TCP).
+  - it: user podLabels must override chart mesh labels cleanly
+    set:
+      istio.enabled: true
+      istio.mode: sidecar
+      podLabels:
+        sidecar.istio.io/inject: "false"
+        custom-label: "custom-value"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "false"
+      - equal:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: none
+      - equal:
+          path: spec.template.metadata.labels["custom-label"]
+          value: "custom-value"
+
+  # Regression: installing istio.enabled=false with a typo'd istio.mode
+  # (istio.mode=ambiet) used to sail through because the validator gated
+  # on istio.enabled. With schema validation active it now fails at lint,
+  # and the template helper would catch it too if someone force-fed an
+  # invalid value past the schema. This ensures the helper still errors.
+  - it: should reject typo'd istio.mode even when istio.enabled=false (at schema layer)
+    set:
+      istio.enabled: false
+      istio.mode: ambiet
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nvalkey:\n- at '/istio/mode': value must be one of 'sidecar', 'ambient'\n"

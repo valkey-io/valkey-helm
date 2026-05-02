@@ -2,6 +2,7 @@
 {{- include "valkey.validateAuthConfig" . }}
 {{- include "valkey.validateReplicaPersistence" . }}
 {{- include "valkey.validateReplicaAuth" . }}
+{{- include "valkey.validateIstioConfig" . }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -39,14 +40,14 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "valkey.selectorLabels" . | nindent 8 }}
-        {{- with .Values.commonLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- include "valkey.istioPodLabels" . | nindent 8 }}
+        {{- /*
+        Single merged label set: selector + commonLabels + chart-computed
+        mesh labels + user podLabels (user wins on collision). Keeps the
+        rendered YAML free of duplicate keys when e.g. a user sets
+        sidecar.istio.io/inject=false via podLabels alongside
+        istio.enabled=true.
+        */}}
+        {{- include "valkey.podLabels" . | nindent 8 }}
       annotations:
       {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}

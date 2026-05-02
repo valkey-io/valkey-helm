@@ -43,13 +43,14 @@ testbench_exec() { testbench_exec_in "${TESTBENCH}" "$@"; }
 helm_flags=()
 
 if is_on "${ISTIO}"; then
-    # Let Envoy get injected into every chart pod; turn on the chart's Istio templates.
+    # Let Envoy get injected into every chart pod; turn on the chart's Istio
+    # templates. The chart pins sidecar.istio.io/inject=true on every pod
+    # itself, so no namespace-level label is required.
     helm_flags+=(--set=istio.enabled=true)
-else
-    # Opt out of injection when Istio isn't the target — the sidecar would break
-    # the probe and the cluster-init Job would never finish.
-    helm_flags+=(--set-string='podLabels.sidecar\.istio\.io/inject=false')
 fi
+# istio=off needs no extra flags: with the namespace unlabelled and
+# istio.enabled=false, the chart emits zero mesh labels and pods stay out
+# of both data planes.
 
 if is_on "${AUTH}"; then
     helm_flags+=(

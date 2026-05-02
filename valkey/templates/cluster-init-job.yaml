@@ -17,23 +17,16 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "valkey.selectorLabels" . | nindent 8 }}
-        {{- with .Values.commonLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
         {{- /*
-        In ambient mode, the Job pod needs the dataplane-mode label so
-        ztunnel captures its outbound connections to the Valkey pods. Without
-        this, the Job speaks plaintext to pods whose PeerAuthentication
-        requires STRICT mTLS and the Job hangs until backoffLimit, which is
-        what surfaces as "Job in progress / context deadline exceeded" on
-        helm install.
-        The same label is benign in sidecar mode (ambient gated inside).
+        Single merged label set (see valkey.podLabels helper). In ambient
+        mode the Job pod picks up the dataplane-mode label automatically so
+        ztunnel captures its outbound connections to the Valkey pods;
+        without it the Job speaks plaintext against STRICT mTLS and hangs
+        until backoffLimit. In sidecar mode the pod carries an explicit
+        sidecar.istio.io/inject=true so the Job works on namespaces that
+        don't carry the injection label.
         */}}
-        {{- include "valkey.istioPodLabels" . | nindent 8 }}
+        {{- include "valkey.podLabels" . | nindent 8 }}
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}

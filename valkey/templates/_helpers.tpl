@@ -224,31 +224,63 @@ Calculate total number of nodes in the cluster
 {{- end -}}
 
 {{/*
-Istio pod labels. Emits the label that tells Istio how to capture this pod's
-traffic. Ambient requires `istio.io/dataplane-mode: ambient` on the pod (or
-namespace); omitting it leaves the pod outside the mesh even when ambient is
-installed cluster-wide. Sidecar mode uses the webhook-injection label unless
-the namespace is already labelled `istio-injection=enabled`.
+Istio pod labels. Emits the labels that tell Istio exactly how to capture
+this pod's traffic, so the chart works whether or not the namespace carries
+`istio-injection=enabled` or `istio.io/dataplane-mode=ambient` — and, just
+as importantly, so that toggling `istio.mode` on a dual-mode cluster moves
+pods between data planes cleanly.
 
-In ambient mode we also emit `sidecar.istio.io/inject: "false"` so the pod
-opts out of Envoy sidecar injection even when the namespace is labelled
-`istio-injection=enabled` (a common setup when a cluster runs both data
-planes side-by-side, e.g. during a sidecar→ambient migration). Without this,
-injecting both a sidecar AND labelling the pod ambient produces a pod whose
-traffic is redirected twice and mTLS negotiation breaks silently — the
-pod's client port returns "Connection reset by peer" on every request.
+Sidecar mode:
+  sidecar.istio.io/inject: "true"   — force Envoy injection even if the
+                                       namespace lacks the injection label.
+  istio.io/dataplane-mode: none     — veto ambient capture, so a cluster
+                                       that ALSO runs ambient (e.g. during
+                                       a sidecar→ambient migration) does
+                                       not double-redirect this pod.
 
-When istio.enabled is false this helper emits nothing so the user can still
-set their own `sidecar.istio.io/inject=false` via podLabels (see the
-functional-tests istio=off path).
+Ambient mode:
+  istio.io/dataplane-mode: ambient  — ztunnel captures this pod's traffic.
+  sidecar.istio.io/inject: "false"  — veto Envoy injection even if the
+                                       namespace has the injection label,
+                                       so the pod isn't simultaneously
+                                       sidecar'd (which double-redirects
+                                       and silently breaks mTLS, surfacing
+                                       as "Connection reset by peer" on
+                                       every request).
+
+Either mode by itself is enough; emitting both (per mode) makes pod-level
+intent the source of truth and eliminates the cluster-configuration
+dependency that's easy to miss at install time.
+
+When istio.enabled is false this helper emits nothing so the user remains
+free to pick their own opt-in/out via podLabels (see the istio=off
+functional-tests path).
 */}}
 {{- define "valkey.istioPodLabels" -}}
 {{- if .Values.istio.enabled -}}
-{{- if eq .Values.istio.mode "ambient" }}
+{{- if eq (.Values.istio.mode | default "sidecar") "ambient" -}}
 istio.io/dataplane-mode: ambient
 sidecar.istio.io/inject: "false"
+{{- else -}}
+sidecar.istio.io/inject: "true"
+istio.io/dataplane-mode: none
 {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+Compute the merged pod labels map: selector + common + chart-computed mesh
+labels + user podLabels (user wins on collision). Emits the merged dict as
+YAML so the rendered output has no duplicate keys, even when a user sets
+e.g. `sidecar.istio.io/inject=false` via podLabels alongside
+`istio.enabled=true`.
+*/}}
+{{- define "valkey.podLabels" -}}
+{{- $selector := fromYaml (include "valkey.selectorLabels" .) -}}
+{{- $common   := .Values.commonLabels | default dict -}}
+{{- $mesh     := fromYaml (include "valkey.istioPodLabels" .) | default dict -}}
+{{- $user     := .Values.podLabels   | default dict -}}
+{{- toYaml (mergeOverwrite $selector $common $mesh $user) -}}
 {{- end -}}
 
 {{/*
@@ -257,16 +289,54 @@ Used by the AuthorizationPolicy to pin the cluster-bus port to same-release
 pods cryptographically rather than by pod-selector IP.
 */}}
 {{- define "valkey.istioPrincipal" -}}
-{{- printf "cluster.local/ns/%s/sa/%s" .Release.Namespace (include "valkey.serviceAccountName" .) -}}
+{{- $trustDomain := .Values.istio.trustDomain | default "cluster.local" -}}
+{{- printf "%s/ns/%s/sa/%s" $trustDomain .Release.Namespace (include "valkey.serviceAccountName" .) -}}
 {{- end -}}
 
 {{/*
-Validate istio configuration
+Validate istio configuration. Runs regardless of istio.enabled so a typo in
+istio.mode (e.g. `mode: ambiet` buried in a GitOps values file) surfaces at
+template time instead of silently rendering the sidecar-only code paths.
 */}}
 {{- define "valkey.validateIstioConfig" -}}
-{{- if .Values.istio.enabled }}
+{{- if hasKey .Values.istio "mode" }}
   {{- if not (or (eq .Values.istio.mode "sidecar") (eq .Values.istio.mode "ambient")) }}
     {{- fail (printf "istio.mode must be 'sidecar' or 'ambient', got: %s" .Values.istio.mode) }}
+  {{- end }}
+{{- end }}
+{{- /*
+Guard against the silent-no-protection footgun for the cluster bus port:
+when istio is enabled in ambient mode AND cluster mode is on, dropping BOTH
+the NetworkPolicy (skipped for ambient) AND the AuthorizationPolicy leaves
+the bus port open to any pod that can route to it. The feature's whole
+point is cross-release isolation; failing closed is the only safe default.
+Users who genuinely want the bus port unprotected can set
+`cluster.isolation.enabled=true` (NetworkPolicy path still runs in sidecar
+mode, but in ambient it's dropped) and explicitly acknowledge by setting
+`istio.authorizationPolicy.enabled=true`; the chart refuses to let BOTH be
+false when both layers have been chosen-off.
+*/}}
+{{- if and .Values.istio.enabled (eq .Values.istio.mode "ambient") .Values.cluster.enabled }}
+  {{- if not .Values.istio.authorizationPolicy.enabled }}
+    {{- fail "istio.authorizationPolicy.enabled=false in ambient mode + cluster mode leaves the cluster-bus port unprotected: the NetworkPolicy is skipped for ambient (it would block HBONE), and disabling the AuthorizationPolicy removes the only remaining cross-release isolation layer. Re-enable istio.authorizationPolicy.enabled, or switch to istio.mode=sidecar if you intend to rely on the NetworkPolicy." }}
+  {{- end }}
+{{- end }}
+{{- /*
+Guard against the shared-ServiceAccount footgun. The AuthorizationPolicy
+uses the SPIFFE principal `<trust-domain>/ns/<ns>/sa/<sa>` to scope the bus
+port to same-release pods. If two releases in the same namespace share a SA
+(e.g. both use `serviceAccount.create=false` with the namespace default, or
+both explicitly set the same `serviceAccount.name`), their APs encode the
+SAME principal — cross-release MEET passes the identity check and the
+clusters silently merge. The chart cannot detect other releases at template
+time, but it can surface the risk: refuse the obviously-unsafe case
+(`serviceAccount.create=false` with no explicit name, i.e. the shared
+`default` SA) whenever the AP is rendered. Users who deliberately share
+a named SA across releases can still do so; they just have to type it.
+*/}}
+{{- if and .Values.istio.enabled .Values.istio.authorizationPolicy.enabled .Values.cluster.enabled }}
+  {{- if and (not .Values.serviceAccount.create) (not .Values.serviceAccount.name) }}
+    {{- fail "istio.authorizationPolicy gives cross-release cluster-bus isolation by scoping the bus port to a SPIFFE principal built from the pod's ServiceAccount. With serviceAccount.create=false AND serviceAccount.name empty, the chart falls back to the namespace's 'default' ServiceAccount — which every other release using the same fallback ALSO maps to, so the AuthorizationPolicy cannot distinguish them and cross-release CLUSTER MEET succeeds. Either set serviceAccount.create=true (per-release SA) or serviceAccount.name=<distinct-name>." }}
   {{- end }}
 {{- end }}
 {{- end -}}
