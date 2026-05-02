@@ -445,3 +445,99 @@ tests:
       - equal:
           path: spec.host
           value: my-valkey-headless.NAMESPACE.svc.cluster.local
+
+  # --- Mode validation ---
+  - it: should fail with a helpful error when istio.mode is invalid
+    set:
+      istio.enabled: true
+      istio.mode: waypoint   # typo — not a real mode
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "istio.mode must be 'sidecar' or 'ambient'.*"
+
+  - it: should accept istio.mode=sidecar
+    set:
+      istio.enabled: true
+      istio.mode: sidecar
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: should accept istio.mode=ambient
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # --- Ambient mode: DestinationRule must NOT render ---
+  # ztunnel already wraps pod-to-pod hops in HBONE mTLS; a DR on top would
+  # layer Envoy mTLS inside ztunnel mTLS (double crypto) and requires a
+  # waypoint proxy to even take effect. Keep it off.
+  - it: should not render DestinationRule in ambient mode (standalone)
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render DestinationRule in ambient mode (cluster)
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render DestinationRule in ambient mode (replica)
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render DestinationRule in sidecar mode (default)
+    set:
+      istio.enabled: true
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # --- Ambient mode: PeerAuthentication still applies ---
+  # Enforced by ztunnel instead of Envoy, but the CRD shape is identical.
+  - it: should render PeerAuthentication in ambient mode
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.mtls.mode
+          value: STRICT
+
+  - it: PeerAuthentication should be identical across modes
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      istio.peerAuthentication.mode: PERMISSIVE
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: spec.mtls.mode
+          value: PERMISSIVE

@@ -71,4 +71,7 @@ fi
 # wouldn't match anyway and running them would be surprising.
 if [[ -z ${FILTER:-} ]]; then
     "${HERE}/run-extra-scenarios.sh"
+    # Ambient-mesh regressions. Self-skipping when ztunnel isn't installed
+    # (e.g. against an older cluster with only the `demo` profile).
+    "${HERE}/run-ambient-scenarios.sh"
 fi

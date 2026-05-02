@@ -1,0 +1,291 @@
+suite: istio authorization policy (cluster-bus isolation)
+templates:
+  - templates/istio-authorization-policy.yaml
+tests:
+  # --- Feature flag tests ---
+  - it: should not render when istio is disabled
+    set:
+      istio.enabled: false
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when cluster mode is disabled
+    # No bus port to protect in standalone/replica mode.
+    set:
+      istio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render in replica (non-cluster) mode
+    set:
+      istio.enabled: true
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when authorizationPolicy is explicitly disabled
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.authorizationPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render in cluster mode with istio enabled (sidecar default)
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: AuthorizationPolicy
+      - isAPIVersion:
+          of: security.istio.io/v1
+
+  - it: should render in cluster mode with istio enabled (ambient)
+    # Ambient ztunnel enforces the same L4 AuthorizationPolicy shape.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: AuthorizationPolicy
+
+  # --- Resource identity ---
+  - it: should have correct name
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-bus
+
+  - it: should use fullnameOverride in name
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      fullnameOverride: "my-valkey"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-valkey-cluster-bus
+
+  - it: should include chart labels
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - isNotNull:
+          path: metadata.labels["helm.sh/chart"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+
+  - it: should include commonLabels
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      commonLabels:
+        env: production
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: production
+
+  - it: should include custom labels on the policy
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.authorizationPolicy.labels:
+        security.example.com/reviewed: "true"
+    asserts:
+      - equal:
+          path: metadata.labels["security.example.com/reviewed"]
+          value: "true"
+
+  - it: should include custom annotations on the policy
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.authorizationPolicy.annotations:
+        security.example.com/reviewed: "yes"
+    asserts:
+      - equal:
+          path: metadata.annotations["security.example.com/reviewed"]
+          value: "yes"
+
+  - it: should not have annotations when none are set
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - notExists:
+          path: metadata.annotations
+
+  # --- Selector and action ---
+  - it: should target Valkey pods via selector labels
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: should be an ALLOW policy
+    # An ALLOW AuthorizationPolicy attached to these pods triggers Istio's
+    # implicit default-deny: anything not matched by a rule is blocked.
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - equal:
+          path: spec.action
+          value: ALLOW
+
+  # --- Bus-port principal rule ---
+  - it: bus-port rule must be scoped to the release's SPIFFE principal
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.busPort: 16379
+    asserts:
+      - contains:
+          path: spec.rules
+          content:
+            from:
+              - source:
+                  principals:
+                    - "cluster.local/ns/NAMESPACE/sa/RELEASE-NAME-valkey"
+            to:
+              - operation:
+                  ports:
+                    - "16379"
+
+  - it: bus-port rule should follow custom busPort
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.busPort: 26379
+    asserts:
+      - contains:
+          path: spec.rules
+          content:
+            from:
+              - source:
+                  principals:
+                    - "cluster.local/ns/NAMESPACE/sa/RELEASE-NAME-valkey"
+            to:
+              - operation:
+                  ports:
+                    - "26379"
+
+  - it: bus-port rule should follow custom serviceAccount name
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.name: "my-sa"
+    asserts:
+      - contains:
+          path: spec.rules
+          content:
+            from:
+              - source:
+                  principals:
+                    - "cluster.local/ns/NAMESPACE/sa/my-sa"
+            to:
+              - operation:
+                  ports:
+                    - "16379"
+
+  # --- Client / metrics open rules ---
+  - it: client port should be open (no principal restriction)
+    # ACL/TLS live above the mesh; locking the client port to the release's
+    # own principal would lock out every legitimate caller.
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - contains:
+          path: spec.rules
+          content:
+            to:
+              - operation:
+                  ports:
+                    - "6379"
+
+  - it: metrics port should be in the open rule when metrics enabled
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      metrics.enabled: true
+      metrics.exporter.port: 9121
+    asserts:
+      - contains:
+          path: spec.rules
+          content:
+            to:
+              - operation:
+                  ports:
+                    - "6379"
+                    - "9121"
+
+  - it: metrics port should NOT appear when metrics disabled
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      metrics.enabled: false
+    asserts:
+      - notContains:
+          path: spec.rules
+          content:
+            to:
+              - operation:
+                  ports:
+                    - "6379"
+                    - "9121"
+
+  # --- Invalid mode ---
+  - it: should fail when istio.mode is invalid
+    set:
+      istio.enabled: true
+      istio.mode: "not-a-real-mode"
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - failedTemplate:
+          errorPattern: "istio.mode must be 'sidecar' or 'ambient'.*"

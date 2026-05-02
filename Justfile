@@ -49,6 +49,10 @@ functional-run:
 functional-extras:
     ./functional-tests/run-extra-scenarios.sh
 
+# Run the Istio ambient-mesh regressions on their own
+functional-ambient:
+    ./functional-tests/run-ambient-scenarios.sh
+
 # Full functional suite: setup + matrix + teardown including cluster
 functional-test:
     ./functional-tests/setup.sh

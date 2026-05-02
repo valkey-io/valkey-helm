@@ -14,10 +14,19 @@ RELEASE=${VALKEY_RELEASE:-valkey}
 
 AUTH_SECRET=valkey-auth
 TLS_SECRET=valkey-tls
-# Two testbenches: one never gets an Envoy sidecar (istio=off scenarios, or when
-# Istio isn't installed at all), one does (istio=on scenarios).
+# Three testbenches, covering every shape of mesh participation:
+#   valkey-testbench          — never gets an Envoy sidecar (istio=off
+#                               scenarios, or when Istio isn't installed at
+#                               all). Opts out of both sidecar injection
+#                               and ambient capture.
+#   valkey-testbench-injected — sidecar-injected (istio=on, mode=sidecar).
+#   valkey-testbench-ambient  — ambient-enrolled (istio=on, mode=ambient):
+#                               no sidecar, ztunnel captures its traffic so
+#                               it presents the expected SPIFFE identity to
+#                               Valkey pods' AuthorizationPolicy.
 TESTBENCH_POD=valkey-testbench
 TESTBENCH_POD_INJECTED=valkey-testbench-injected
+TESTBENCH_POD_AMBIENT=valkey-testbench-ambient
 # Deliberately hostile: spaces, shell metacharacters ($, `, &, !), a backslash,
 # and a double-quote. Every auth=on scenario then exercises both layers of
 # quoting on the chart side:
@@ -49,4 +58,11 @@ wait_for_testbench() {
 
 istio_installed() {
     kubectl --context="${KUBE_CONTEXT}" get namespace "${ISTIO_NAMESPACE}" >/dev/null 2>&1
+}
+
+# Whether the cluster has Istio's ambient data plane (ztunnel DaemonSet)
+# installed. Scenarios that require ambient exit-skip if this returns false.
+istio_ambient_installed() {
+    kubectl --context="${KUBE_CONTEXT}" -n "${ISTIO_NAMESPACE}" \
+        get daemonset ztunnel >/dev/null 2>&1
 }

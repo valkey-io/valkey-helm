@@ -22,7 +22,7 @@ if kind get clusters | grep -Fxq "${CLUSTER_NAME}"; then
     # Best-effort: any lingering release + PVCs.
     hctl uninstall "${RELEASE}"                                    2>/dev/null || true
     kctl delete pvc --selector="app.kubernetes.io/instance=${RELEASE}" --ignore-not-found
-    kctl delete pod    "${TESTBENCH_POD}" "${TESTBENCH_POD_INJECTED}" --ignore-not-found
+    kctl delete pod    "${TESTBENCH_POD}" "${TESTBENCH_POD_INJECTED}" "${TESTBENCH_POD_AMBIENT}" --ignore-not-found
     kctl delete secret "${AUTH_SECRET}" "${TLS_SECRET}"                --ignore-not-found
 fi
 

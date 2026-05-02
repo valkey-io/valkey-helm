@@ -979,3 +979,58 @@ tests:
                 name: RELEASE-NAME-valkey-auth
                 key: default-password
 
+  # --- Istio ambient mode (cluster) ---
+  - it: should add ambient dataplane-mode label when istio.mode=ambient
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: ambient
+
+  - it: should NOT emit traffic.sidecar.istio.io exclude annotations in ambient mode
+    # Ambient has no pod-local Envoy; the exclude* annotations are sidecar-only
+    # and meaningless to ztunnel. ztunnel leaves the bus port unproxied by
+    # default (nothing in the AuthorizationPolicy's ALLOW set binds it).
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeInboundPorts"]
+      - notExists:
+          path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeOutboundPorts"]
+
+  - it: should emit traffic.sidecar.istio.io exclude annotations in sidecar mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: sidecar
+      cluster.busPort: 16379
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeInboundPorts"]
+          value: "16379"
+      - equal:
+          path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeOutboundPorts"]
+          value: "16379"
+
+  - it: should NOT emit traffic.sidecar.istio.io annotations when istio is disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: false
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeInboundPorts"]
+

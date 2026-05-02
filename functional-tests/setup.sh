@@ -14,18 +14,34 @@ else
     kind create cluster --config "${HERE}/kind-config.yaml" --wait 120s
 fi
 
-log "Installing Istio (demo profile)"
+log "Installing Istio (ambient profile)"
 if istio_installed; then
     echo "istio-system namespace already exists; assuming Istio is installed"
 else
-    # `demo` gives us istiod + an ingress/egress gateway. We only need istiod,
-    # but the profile is the simplest path and adds no meaningful overhead.
-    istioctl install --context="${KUBE_CONTEXT}" --set profile=demo --skip-confirmation
+    # `ambient` ships istiod + the ambient data plane (istio-cni DaemonSet
+    # for iptables redirection, ztunnel DaemonSet for node-local HBONE
+    # mTLS). It also installs the sidecar injection webhook, so classic
+    # sidecar-mode pods still work on the same cluster — we can run both
+    # the sidecar matrix and the ambient regressions against one install.
+    istioctl install --context="${KUBE_CONTEXT}" \
+        --set profile=ambient --skip-confirmation
+fi
+
+# Wait for the ambient data plane to be live before launching testbenches.
+# Without this, the first few ambient scenarios race ztunnel startup and
+# the testbench gets no HBONE wrapping.
+if istio_ambient_installed; then
+    log "Waiting for ztunnel DaemonSet to be ready"
+    kubectl --context="${KUBE_CONTEXT}" -n "${ISTIO_NAMESPACE}" \
+        rollout status daemonset/ztunnel --timeout=180s
 fi
 
 log "Enabling sidecar injection on namespace ${NAMESPACE}"
 # Label idempotently — `kubectl label --overwrite` works whether or not the
-# label exists.
+# label exists. Sidecar and ambient opt-in are independent: the namespace
+# carries the sidecar webhook label, and individual pods opt into ambient
+# via the pod-level `istio.io/dataplane-mode` label (the Helm chart sets
+# this on every Valkey pod when istio.mode=ambient).
 kubectl --context="${KUBE_CONTEXT}" label namespace "${NAMESPACE}" \
     istio-injection=enabled --overwrite
 
@@ -70,18 +86,39 @@ kctl create secret generic "${TLS_SECRET}" \
     --from-file="ca.crt=${CERT_DIR}/valkey-ca.crt"
 
 # ---------------------------------------------------------------------------
-# Testbench pods. Two flavours:
-#   valkey-testbench          — never injected (sidecar.istio.io/inject=false)
-#   valkey-testbench-injected — injected, used for istio=on scenarios
+# Testbench pods. Three flavours:
+#   valkey-testbench          — never injected (sidecar.istio.io/inject=false).
+#                               Also opts out of ambient capture so the
+#                               default testbench is a plain pod regardless
+#                               of mesh mode.
+#   valkey-testbench-injected — Envoy sidecar, used for istio=on mode=sidecar.
+#   valkey-testbench-ambient  — ambient-enrolled (no sidecar, ztunnel-wrapped),
+#                               used for istio=on mode=ambient.
+# Each flavour is a POD-level opt-in/out so one cluster (which has both data
+# planes installed by the `ambient` profile) can host all three side by side.
 # ---------------------------------------------------------------------------
+# $1: pod name
+# $2: flavour (plain|sidecar|ambient)
 launch_testbench() {
-    local pod=$1 inject=$2 overrides
-    local labels
-    if [[ ${inject} == "false" ]]; then
-        labels='sidecar.istio.io/inject=false'
-    else
-        labels='sidecar.istio.io/inject=true'
-    fi
+    local pod=$1 flavour=$2 overrides labels
+    case "${flavour}" in
+        plain)
+            # Out of both meshes: classic no-Istio behaviour for istio=off.
+            labels='sidecar.istio.io/inject=false,istio.io/dataplane-mode=none'
+            ;;
+        sidecar)
+            labels='sidecar.istio.io/inject=true'
+            ;;
+        ambient)
+            # Pod-level ambient opt-in. Overrides the namespace's
+            # istio-injection=enabled so this pod gets ztunnel, not Envoy.
+            labels='sidecar.istio.io/inject=false,istio.io/dataplane-mode=ambient'
+            ;;
+        *)
+            echo "launch_testbench: unknown flavour ${flavour}" >&2
+            return 2
+            ;;
+    esac
     overrides='{
       "spec": {
         "containers": [{
@@ -106,10 +143,17 @@ launch_testbench() {
     wait_for_testbench "${pod}"
 }
 
-log "Launching ${TESTBENCH_POD} (no sidecar)"
-launch_testbench "${TESTBENCH_POD}" false
+log "Launching ${TESTBENCH_POD} (no mesh)"
+launch_testbench "${TESTBENCH_POD}" plain
 
-log "Launching ${TESTBENCH_POD_INJECTED} (with Envoy sidecar)"
-launch_testbench "${TESTBENCH_POD_INJECTED}" true
+log "Launching ${TESTBENCH_POD_INJECTED} (Envoy sidecar)"
+launch_testbench "${TESTBENCH_POD_INJECTED}" sidecar
+
+if istio_ambient_installed; then
+    log "Launching ${TESTBENCH_POD_AMBIENT} (ambient / ztunnel)"
+    launch_testbench "${TESTBENCH_POD_AMBIENT}" ambient
+else
+    log "Skipping ${TESTBENCH_POD_AMBIENT} — ambient data plane not installed"
+fi
 
 log "Setup complete"

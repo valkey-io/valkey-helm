@@ -1,4 +1,13 @@
-{{- if .Values.istio.enabled }}
+{{- /*
+DestinationRule wraps outbound connections in ISTIO_MUTUAL mTLS. This is a
+sidecar-mode concept — an outbound Envoy sees the DR and upgrades the TLS.
+In ambient mode the ztunnel already wraps every pod-to-pod hop in HBONE mTLS
+transparently, so a DR on top would layer a second mTLS (Envoy-in-ztunnel)
+— double crypto for no security gain, and it requires a waypoint proxy to
+even take effect. Skip it.
+*/}}
+{{- if and .Values.istio.enabled (eq .Values.istio.mode "sidecar") }}
+{{- include "valkey.validateIstioConfig" . }}
 apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:

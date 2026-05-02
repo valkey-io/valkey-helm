@@ -1,4 +1,9 @@
+{{- /*
+PeerAuthentication applies in both sidecar and ambient mode — Envoy enforces
+in sidecar, ztunnel enforces in ambient. The CRD shape is the same for both.
+*/}}
 {{- if .Values.istio.enabled }}
+{{- include "valkey.validateIstioConfig" . }}
 apiVersion: security.istio.io/v1
 kind: PeerAuthentication
 metadata:

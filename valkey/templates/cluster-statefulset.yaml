@@ -44,6 +44,7 @@ spec:
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- include "valkey.istioPodLabels" . | nindent 8 }}
       annotations:
       {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
@@ -52,7 +53,26 @@ spec:
         {{- if .Values.valkeyConfig }}
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 | quote }}
         {{- end }}
-        {{- if .Values.istio.enabled }}
+        {{- /*
+        The cluster-bus port (16379 by default) carries raw Valkey gossip: a
+        binary, long-lived, bidirectional protocol that neither Envoy nor
+        ztunnel can proxy sensibly. The chart keeps it unproxied in both
+        modes, but the mechanics differ:
+
+          sidecar — explicit: Envoy sees the port in its iptables rules, so
+                    we emit traffic.sidecar.istio.io/exclude*Ports to take
+                    it out. The AuthorizationPolicy (rendered separately)
+                    does the cross-release enforcement via Envoy-terminated
+                    mTLS on the OTHER ports.
+
+          ambient — implicit: ztunnel only captures traffic for pods it
+                    recognises, and the AuthorizationPolicy's ALLOW rules
+                    only bind the client/metrics ports. That leaves the bus
+                    port outside ztunnel's HBONE tunnel; pod-to-pod TCP on
+                    16379 takes the direct CNI path. No annotation needed
+                    (they're sidecar-only).
+        */}}
+        {{- if and .Values.istio.enabled (eq .Values.istio.mode "sidecar") }}
         traffic.sidecar.istio.io/excludeInboundPorts: {{ .Values.cluster.busPort | quote }}
         traffic.sidecar.istio.io/excludeOutboundPorts: {{ .Values.cluster.busPort | quote }}
         {{- end }}
