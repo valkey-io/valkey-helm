@@ -38,7 +38,6 @@ scenario_aclconfig_metrics() {
             --set=metrics.enabled=true \
             --set=auth.enabled=true \
             --set-string="auth.aclConfig=user default on >simplepass ~* &* +@all" \
-            --set-string='podLabels.sidecar\.istio\.io/inject=false' \
             --wait --timeout=180s >/dev/null; then
         fail "${name}" "helm install failed"
         hctl uninstall "${release}" 2>/dev/null || true
@@ -103,7 +102,6 @@ scenario_default_deny_netpol() {
     cleanup_release
 
     if ! hctl install "${RELEASE}" "${CHART_DIR}" \
-            --set-string='podLabels.sidecar\.istio\.io/inject=false' \
             --set-json='networkPolicy={"ingress":[]}' \
             --wait --timeout=120s >/dev/null; then
         fail "${name}" "helm install failed"
@@ -161,7 +159,6 @@ scenario_bus_port_hidden() {
             --set=cluster.shards=3 \
             --set=cluster.replicasPerShard=0 \
             --set=cluster.busPort=16379 \
-            --set-string='podLabels.sidecar\.istio\.io/inject=false' \
             --wait --timeout=300s >/dev/null; then
         fail "${name}" "helm install failed"
         return
@@ -197,7 +194,6 @@ scenario_readiness_probe_exists() {
     cleanup_release
 
     if ! hctl install "${RELEASE}" "${CHART_DIR}" \
-            --set-string='podLabels.sidecar\.istio\.io/inject=false' \
             --wait --timeout=120s >/dev/null; then
         fail "${name}" "helm install failed"
         return
@@ -248,7 +244,6 @@ install_cluster() {
         --set=cluster.shards=3 \
         --set=cluster.replicasPerShard=0 \
         --set="cluster.isolation.enabled=${isolation}" \
-        --set-string='podLabels.sidecar\.istio\.io/inject=false' \
         --wait --timeout=300s >/dev/null
 }
 

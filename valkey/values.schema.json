@@ -194,6 +194,16 @@
                 "enabled": {
                     "type": "boolean"
                 },
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "sidecar",
+                        "ambient"
+                    ]
+                },
+                "trustDomain": {
+                    "type": "string"
+                },
                 "peerAuthentication": {
                     "type": "object",
                     "properties": {
@@ -225,6 +235,20 @@
                                 "MUTUAL",
                                 "ISTIO_MUTUAL"
                             ]
+                        },
+                        "labels": {
+                            "type": "object"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        }
+                    }
+                },
+                "authorizationPolicy": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
                         },
                         "labels": {
                             "type": "object"

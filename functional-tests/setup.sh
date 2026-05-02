@@ -36,14 +36,18 @@ if istio_ambient_installed; then
         rollout status daemonset/ztunnel --timeout=180s
 fi
 
-log "Enabling sidecar injection on namespace ${NAMESPACE}"
-# Label idempotently — `kubectl label --overwrite` works whether or not the
-# label exists. Sidecar and ambient opt-in are independent: the namespace
-# carries the sidecar webhook label, and individual pods opt into ambient
-# via the pod-level `istio.io/dataplane-mode` label (the Helm chart sets
-# this on every Valkey pod when istio.mode=ambient).
+# Namespace-level Istio injection intentionally NOT set. The chart now
+# carries per-pod `sidecar.istio.io/inject` and `istio.io/dataplane-mode`
+# labels derived from `istio.enabled` + `istio.mode`, so every workload
+# opts in or out explicitly at the pod layer. Labelling the namespace
+# `istio-injection=enabled` on top would (a) override istio=off scenarios
+# into sidecar'd pods unless each test sinks labels manually, and (b)
+# blur which layer is actually responsible for mesh capture when
+# troubleshooting. Keep the decision at the pod level, the same as how
+# the chart ships to real operators.
+log "Namespace ${NAMESPACE} left unlabelled — chart controls mesh opt-in at the pod level"
 kubectl --context="${KUBE_CONTEXT}" label namespace "${NAMESPACE}" \
-    istio-injection=enabled --overwrite
+    istio-injection- istio.io/dataplane-mode- 2>/dev/null || true
 
 log "Creating ${AUTH_SECRET} secret"
 kctl delete secret "${AUTH_SECRET}" --ignore-not-found
@@ -86,16 +90,19 @@ kctl create secret generic "${TLS_SECRET}" \
     --from-file="ca.crt=${CERT_DIR}/valkey-ca.crt"
 
 # ---------------------------------------------------------------------------
-# Testbench pods. Three flavours:
-#   valkey-testbench          — never injected (sidecar.istio.io/inject=false).
-#                               Also opts out of ambient capture so the
-#                               default testbench is a plain pod regardless
-#                               of mesh mode.
-#   valkey-testbench-injected — Envoy sidecar, used for istio=on mode=sidecar.
-#   valkey-testbench-ambient  — ambient-enrolled (no sidecar, ztunnel-wrapped),
-#                               used for istio=on mode=ambient.
-# Each flavour is a POD-level opt-in/out so one cluster (which has both data
-# planes installed by the `ambient` profile) can host all three side by side.
+# Testbench pods. Three flavours, each expressing its mesh intent via
+# POD-level labels (the namespace is intentionally unlabelled — see the
+# comment at the sidecar-injection step above). The chart's Valkey pods
+# take the same pod-level approach, so the tests exercise the same opt-in
+# path operators use in production.
+#
+#   valkey-testbench          — out of both meshes. Used for istio=off
+#                               scenarios; no mesh labels emitted.
+#   valkey-testbench-injected — Envoy sidecar via per-pod inject=true.
+#                               Used for istio=on mode=sidecar.
+#   valkey-testbench-ambient  — ztunnel-wrapped via
+#                               istio.io/dataplane-mode=ambient.
+#                               Used for istio=on mode=ambient.
 # ---------------------------------------------------------------------------
 # $1: pod name
 # $2: flavour (plain|sidecar|ambient)
@@ -103,16 +110,15 @@ launch_testbench() {
     local pod=$1 flavour=$2 overrides labels
     case "${flavour}" in
         plain)
-            # Out of both meshes: classic no-Istio behaviour for istio=off.
-            labels='sidecar.istio.io/inject=false,istio.io/dataplane-mode=none'
+            # No mesh labels: with the namespace unlabelled, the default is
+            # already "out of both meshes".
+            labels=''
             ;;
         sidecar)
             labels='sidecar.istio.io/inject=true'
             ;;
         ambient)
-            # Pod-level ambient opt-in. Overrides the namespace's
-            # istio-injection=enabled so this pod gets ztunnel, not Envoy.
-            labels='sidecar.istio.io/inject=false,istio.io/dataplane-mode=ambient'
+            labels='istio.io/dataplane-mode=ambient'
             ;;
         *)
             echo "launch_testbench: unknown flavour ${flavour}" >&2
@@ -133,10 +139,12 @@ launch_testbench() {
         }]
       }
     }'
+    local label_args=()
+    [[ -n ${labels} ]] && label_args=(--labels="${labels}")
     kctl delete pod "${pod}" --ignore-not-found --wait=true
     kctl run "${pod}" \
         --image=valkey/valkey:9.0.1 \
-        --labels="${labels}" \
+        "${label_args[@]}" \
         --restart=Never \
         --overrides="${overrides}" \
         --command -- sleep infinity

@@ -57,6 +57,21 @@ spec:
     # least one AuthorizationPolicy now targets these pods, Istio applies
     # default-deny to anything not matched — i.e. the bus port for
     # non-same-release principals.
+    #
+    # Istio-managed ports (15020 merged-stats, 15021 Envoy readiness, 15090
+    # Envoy admin) are intentionally NOT listed:
+    #   sidecar mode — Istio auto-excludes these via iptables so they never
+    #                  hit Envoy's authz stack; the AP has no bearing on
+    #                  them. Verified on a live kind+Istio 1.29 install:
+    #                  15021/15090 reachable from in-mesh pods without an
+    #                  explicit allow rule; 15020 is bound to pilot-agent
+    #                  outside Envoy's path.
+    #   ambient mode — no Envoy exists, so none of these ports have analogues
+    #                  (ztunnel metrics live on the NODE, not the pod).
+    # Prometheus scrapes this chart via the shipped Service/PodMonitor on
+    # the app-level 9121 port, so this is the only port Prometheus cares
+    # about here. Scrapers that rely on Istio's Envoy-merged 15020 path
+    # hit pilot-agent directly and aren't gated by this AP.
     - to:
         - operation:
             ports:

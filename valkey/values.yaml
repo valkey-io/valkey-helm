@@ -372,8 +372,27 @@ istio:
   # pins the cluster-bus port to same-release principals.
   mode: sidecar  # @schema enum:[sidecar,ambient]
 
+  # SPIFFE trust domain this mesh issues identities under. Used by the
+  # AuthorizationPolicy to build the principal string
+  # `<trustDomain>/ns/<ns>/sa/<sa>`. Must match the `trustDomain` value in
+  # the mesh ConfigMap (`kubectl -n istio-system get cm istio -o jsonpath=
+  # '{.data.mesh}' | grep trustDomain`); a mismatch means the rule matches
+  # nothing and same-release pods get default-denied on the bus port, not
+  # just cross-release ones.
+  trustDomain: cluster.local
+
   # PeerAuthentication controls mTLS enforcement on inbound connections.
   # Applies to both sidecar and ambient modes.
+  #
+  # A note on Prometheus scraping: STRICT requires every inbound connection
+  # to present a mesh-issued mTLS cert. An out-of-mesh Prometheus (e.g. a
+  # Prometheus running in a namespace without injection, or on a cluster
+  # without Istio) cannot present such a cert, so scraping the metrics
+  # service fails with "Connection reset by peer". Fix either by putting
+  # the scraper in the mesh (ambient capture or sidecar injection), or by
+  # setting this mode to PERMISSIVE so the mesh accepts plaintext too.
+  # The chart's AuthorizationPolicy keeps 9121 wide open at the identity
+  # layer regardless — PeerAuthentication is the gate that flips.
   peerAuthentication:
     # mTLS mode for inbound traffic (STRICT, PERMISSIVE, DISABLE, UNSET)
     # STRICT: Require mTLS on all ports

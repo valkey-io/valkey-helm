@@ -416,7 +416,10 @@ tests:
           path: spec.template.metadata.labels["istio.io/dataplane-mode"]
           value: ambient
 
-  - it: should NOT add ambient dataplane-mode label when istio.mode=sidecar
+  # Sidecar mode emits istio.io/dataplane-mode=none (veto ambient capture)
+  # and sidecar.istio.io/inject=true (force injection), so the chart is
+  # self-sufficient on clusters that run both data planes side-by-side.
+  - it: should set sidecar-mode mesh labels in sidecar mode
     set:
       replica.enabled: true
       replica.persistence.size: "5Gi"
@@ -424,5 +427,9 @@ tests:
       istio.mode: sidecar
     template: templates/statefulset.yaml
     asserts:
-      - notExists:
+      - equal:
           path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: none
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "true"

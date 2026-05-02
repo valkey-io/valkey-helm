@@ -323,12 +323,195 @@ scenario_ambient_authz_blocks_cross_release_meet() {
     pass "${name}"
 }
 
+# ---------------------------------------------------------------------------
+# Scenario 5: the chart must refuse to install in ambient+cluster mode when
+# AuthorizationPolicy is explicitly disabled — dropping it leaves the bus
+# port with NO cross-release protection (the chart also skips the
+# NetworkPolicy in ambient mode to avoid blocking HBONE). We proved live
+# during review that this silently ships an open bus port; the fix is to
+# fail closed at install time.
+# ---------------------------------------------------------------------------
+scenario_ambient_ap_disabled_refused() {
+    local name="ambient: chart refuses install when authorizationPolicy.enabled=false + cluster"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    local out rc
+    set +e
+    out=$(hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=istio.enabled=true \
+            --set=istio.mode=ambient \
+            --set=cluster.enabled=true \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=0 \
+            --set=cluster.persistence.size=100Mi \
+            --set=istio.authorizationPolicy.enabled=false \
+            --dry-run 2>&1)
+    rc=$?
+    set -e
+
+    if (( rc == 0 )); then
+        fail "${name}" "dry-run succeeded but should have failed: ${out}"
+        return
+    fi
+    if ! grep -q 'cluster-bus port unprotected' <<<"${out}"; then
+        fail "${name}" "got error without the expected message (rc=${rc}): ${out}"
+        return
+    fi
+    pass "${name}"
+}
+
+# ---------------------------------------------------------------------------
+# Scenario 6: the chart must refuse to install when ambient + cluster +
+# serviceAccount.create=false (with no explicit name), because every release
+# collapses to the namespace's `default` SA and the AP can no longer
+# distinguish between them. Live-repro'd in review: two releases merged
+# despite both having the AP rendered. The fix is to fail closed at install
+# time and force the user to pick a distinct SA name (or let the chart
+# create one).
+# ---------------------------------------------------------------------------
+scenario_ambient_shared_default_sa_refused() {
+    local name="ambient: chart refuses install when serviceAccount defaults to namespace-wide 'default'"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    local out rc
+    set +e
+    out=$(hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=istio.enabled=true \
+            --set=istio.mode=ambient \
+            --set=cluster.enabled=true \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=0 \
+            --set=cluster.persistence.size=100Mi \
+            --set=serviceAccount.create=false \
+            --dry-run 2>&1)
+    rc=$?
+    set -e
+
+    if (( rc == 0 )); then
+        fail "${name}" "dry-run succeeded but should have failed: ${out}"
+        return
+    fi
+    if ! grep -q "serviceAccount.create=false AND serviceAccount.name empty" <<<"${out}"; then
+        fail "${name}" "got error without the expected message (rc=${rc}): ${out}"
+        return
+    fi
+    pass "${name}"
+}
+
+# ---------------------------------------------------------------------------
+# Scenario 7: custom trustDomain must propagate into the AuthorizationPolicy
+# principal. A cluster with `istio.trustDomain=my.mesh.example.com` whose AP
+# still emits `cluster.local/…` would self-deny: same-release callers
+# present an identity under the CUSTOM trust domain but the AP's ALLOW rule
+# only matches the hardcoded one — the cluster-bus port defaults-denies
+# even for its own pods and the cluster never forms.
+# We install with the chart's default (cluster.local) but prove the RENDER
+# honours the override. Testing the failure mode in-cluster would require
+# reconfiguring Istio's trust domain, which isn't a chart-level concern.
+# ---------------------------------------------------------------------------
+scenario_ambient_trustdomain_override() {
+    local name="ambient: AP principal follows istio.trustDomain override"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    if ! hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=istio.enabled=true \
+            --set=istio.mode=ambient \
+            --set=cluster.enabled=true \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=0 \
+            --set=cluster.persistence.size=100Mi \
+            --set=istio.trustDomain=my.mesh.example.com \
+            --wait --timeout=240s >/dev/null 2>&1; then
+        # Install will NOT converge because Istio actually uses cluster.local —
+        # that's a feature of this scenario. We only need the AP rendered to
+        # verify the principal string.
+        :
+    fi
+
+    local principals
+    principals=$(kctl get authorizationpolicy "${RELEASE}-cluster-bus" \
+        -o jsonpath='{.spec.rules[0].from[0].source.principals[*]}' 2>/dev/null)
+    if [[ ${principals} != "my.mesh.example.com/ns/${NAMESPACE}/sa/${RELEASE}" ]]; then
+        fail "${name}" "AP principals=${principals}, want my.mesh.example.com/ns/${NAMESPACE}/sa/${RELEASE}"
+        return
+    fi
+
+    cleanup_release
+    pass "${name}"
+}
+
 trap 'cleanup_release; cleanup_ambient_pair' EXIT
 
-scenario_standalone_ambient                    || true
-scenario_cluster_ambient                       || true
-scenario_cluster_ambient_tls_auth              || true
+# ---------------------------------------------------------------------------
+# Scenario 8: Prometheus scraping the metrics exporter must work in
+# ambient mode. The AuthorizationPolicy is ALLOW-only, which triggers
+# default-deny for any non-matching traffic — if the chart forgets to
+# include the metrics port in the open rule, production Prometheus stacks
+# silently stop seeing Valkey metrics the moment someone enables Istio.
+# ---------------------------------------------------------------------------
+scenario_ambient_prometheus_scrape() {
+    local name="ambient: in-mesh Prometheus can scrape metrics exporter"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    if ! hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=istio.enabled=true \
+            --set=istio.mode=ambient \
+            --set=cluster.enabled=true \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=0 \
+            --set=cluster.persistence.size=100Mi \
+            --set=metrics.enabled=true \
+            --wait --timeout=300s >/dev/null; then
+        fail "${name}" "helm install failed"; return
+    fi
+    kctl wait --for=condition=complete "job/${RELEASE}-cluster-init" --timeout=300s >/dev/null
+
+    # Launch a curl pod enrolled in ambient (same mesh-participation shape
+    # as an in-mesh Prometheus would have).
+    local scraper="scrape-${RELEASE}-$$"
+    kctl delete pod "${scraper}" --ignore-not-found --wait=true >/dev/null
+    kctl run "${scraper}" \
+        --image=curlimages/curl \
+        --labels='istio.io/dataplane-mode=ambient' \
+        --restart=Never \
+        --command -- sleep 300 >/dev/null
+    kctl wait --for=condition=Ready "pod/${scraper}" --timeout=120s >/dev/null
+
+    local code out
+    set +e
+    out=$(kctl exec "${scraper}" -c "${scraper}" -- \
+        curl -sS --max-time 10 -w '\nHTTP=%{http_code}\n' \
+        "http://${RELEASE}-metrics.${NAMESPACE}.svc.cluster.local:9121/metrics" 2>&1)
+    set -e
+    code=$(awk -F= '/^HTTP=/{print $2}' <<<"${out}")
+
+    kctl delete pod "${scraper}" --ignore-not-found --wait=false >/dev/null
+
+    if [[ ${code} != "200" ]]; then
+        fail "${name}" "scrape returned HTTP=${code:-<empty>}, body was: ${out}"
+        return
+    fi
+    if ! grep -q '^redis_' <<<"${out}"; then
+        fail "${name}" "HTTP 200 but body lacks redis_* metrics"
+        return
+    fi
+
+    cleanup_release
+    pass "${name}"
+}
+
+scenario_standalone_ambient                      || true
+scenario_cluster_ambient                         || true
+scenario_cluster_ambient_tls_auth                || true
 scenario_ambient_authz_blocks_cross_release_meet || true
+scenario_ambient_ap_disabled_refused             || true
+scenario_ambient_shared_default_sa_refused       || true
+scenario_ambient_trustdomain_override            || true
+scenario_ambient_prometheus_scrape               || true
 
 echo
 log "Ambient scenario summary"

@@ -279,8 +279,23 @@ tests:
                     - "6379"
                     - "9121"
 
+  # Regression: the "open" rule (second element in spec.rules) must have
+  # NO `from` clause. If somebody ever adds a principal filter there the
+  # metrics port becomes same-release only, which silently kills every
+  # Prometheus scrape from a different namespace (the shipped
+  # ServiceMonitor path). Keep this rule unconditional.
+  - it: the open port rule must have no principal restriction
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      metrics.enabled: true
+    asserts:
+      - notExists:
+          path: spec.rules[1].from
+
   # --- Invalid mode ---
-  - it: should fail when istio.mode is invalid
+  - it: should reject invalid istio.mode at the schema layer
     set:
       istio.enabled: true
       istio.mode: "not-a-real-mode"
@@ -288,4 +303,125 @@ tests:
       cluster.persistence.size: "5Gi"
     asserts:
       - failedTemplate:
-          errorPattern: "istio.mode must be 'sidecar' or 'ambient'.*"
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nvalkey:\n- at '/istio/mode': value must be one of 'sidecar', 'ambient'\n"
+
+  # --- Custom trust domain ---
+  # A cluster federated via multi-cluster mesh (or any install that
+  # overrides istiod's default) publishes identities under a non-default
+  # trust domain. The AP principal string must follow — otherwise same-
+  # release callers ALSO fail the ALLOW match and the bus rule is a
+  # self-denial.
+  - it: principal should honour istio.trustDomain override
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.trustDomain: "my.mesh.example.com"
+    asserts:
+      - contains:
+          path: spec.rules
+          content:
+            from:
+              - source:
+                  principals:
+                    - "my.mesh.example.com/ns/NAMESPACE/sa/RELEASE-NAME-valkey"
+            to:
+              - operation:
+                  ports:
+                    - "16379"
+
+  - it: principal should default to cluster.local when trustDomain unset
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - contains:
+          path: spec.rules
+          content:
+            from:
+              - source:
+                  principals:
+                    - "cluster.local/ns/NAMESPACE/sa/RELEASE-NAME-valkey"
+            to:
+              - operation:
+                  ports:
+                    - "16379"
+
+  # --- Cross-release isolation footguns ---
+  # These two validators exist to make the feature's SECURITY GUARANTEE
+  # hold: ambient cross-release isolation relies on the SPIFFE principal
+  # being UNIQUE per release AND on SOMETHING enforcing it. Without the
+  # guards you can silently ship a chart install with zero bus-port
+  # protection.
+
+  - it: should refuse ambient+cluster when shared 'default' SA would be used
+    # serviceAccount.create=false AND no explicit name collapses every
+    # release's AP principal to sa/default; cross-release MEET passes the
+    # identity check and the clusters silently merge. Live-repro'd in
+    # review — this MUST fail template at install time.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.create: false
+      serviceAccount.name: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "serviceAccount.create=false AND serviceAccount.name empty.*"
+
+  - it: should accept ambient+cluster with explicit (distinct) serviceAccount.name
+    # Opt-in for the advanced multi-release-shared-SA case — we can't tell
+    # whether the user picked a DIFFERENT name from a hypothetical other
+    # release, but at least the name is intentional.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.create: false
+      serviceAccount.name: "my-valkey-sa"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.rules
+          content:
+            from:
+              - source:
+                  principals:
+                    - "cluster.local/ns/NAMESPACE/sa/my-valkey-sa"
+            to:
+              - operation:
+                  ports:
+                    - "16379"
+
+  # Note: the "refuse ambient+cluster when AuthorizationPolicy AND
+  # NetworkPolicy are both off" assertion lives in istio_test.yaml — that
+  # suite renders the PeerAuthentication template, which is what carries
+  # the validator (the AP template correctly renders NOTHING when the AP
+  # is disabled, so it's the wrong place to prove the guard fires).
+
+  - it: should allow authorizationPolicy.enabled=false in sidecar mode (NetworkPolicy still guards)
+    set:
+      istio.enabled: true
+      istio.mode: sidecar
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.authorizationPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should allow authorizationPolicy.enabled=false when istio is off
+    set:
+      istio.enabled: false
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.authorizationPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
