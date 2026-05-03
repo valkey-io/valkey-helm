@@ -4,16 +4,19 @@
 #
 # Usage:
 #   ./run-scenario.sh <tls> <auth> <shard> <rep> <istio>
-# Each arg is "on" or "off". Example:
-#   ./run-scenario.sh off off on on on
-# drives the "TLS off, auth off, shard on, rep on, Istio on" scenario.
+# tls/auth/shard/rep are on|off; istio is off|sidecar|ambient.
+# Example:
+#   ./run-scenario.sh off off on on ambient
+# drives the "TLS off, auth off, shard on, rep on, Istio ambient" scenario.
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib.sh
 . "${HERE}/lib.sh"
 
 if (( $# != 5 )); then
-    echo "usage: $0 <tls> <auth> <shard> <rep> <istio>   (each on|off)" >&2
+    echo "usage: $0 <tls> <auth> <shard> <rep> <istio>" >&2
+    echo "       tls/auth/shard/rep: on|off" >&2
+    echo "       istio: off|sidecar|ambient" >&2
     exit 2
 fi
 
@@ -23,18 +26,29 @@ on_or_off() {
         *) echo "expected 'on' or 'off', got: $1" >&2; return 1 ;;
     esac
 }
-for v in "$@"; do on_or_off "${v}"; done
+for v in "$1" "$2" "$3" "$4"; do on_or_off "${v}"; done
+case "$5" in
+    off|sidecar|ambient) ;;
+    *) echo "expected istio=off|sidecar|ambient, got: $5" >&2; exit 2 ;;
+esac
 
 TLS=$1; AUTH=$2; SHARD=$3; REP=$4; ISTIO=$5
 SCENARIO="tls=${TLS} auth=${AUTH} shard=${SHARD} rep=${REP} istio=${ISTIO}"
 
-is_on() { [[ $1 == on ]]; }
+is_on()       { [[ $1 == on ]]; }
+is_mesh()     { [[ ${ISTIO} != off ]]; }
+is_sidecar()  { [[ ${ISTIO} == sidecar ]]; }
+is_ambient()  { [[ ${ISTIO} == ambient ]]; }
 
-if is_on "${ISTIO}"; then
-    TESTBENCH=${TESTBENCH_POD_INJECTED}
-else
-    TESTBENCH=${TESTBENCH_POD}
-fi
+# Pick a testbench that shares the right mesh participation with the chart
+# workload — that's the only way the in-mesh connectivity checks reflect
+# what an in-production client on the same mesh would experience. The three
+# testbench flavours are launched once by setup.sh.
+case "${ISTIO}" in
+    off)     TESTBENCH=${TESTBENCH_POD} ;;
+    sidecar) TESTBENCH=${TESTBENCH_POD_INJECTED} ;;
+    ambient) TESTBENCH=${TESTBENCH_POD_AMBIENT} ;;
+esac
 testbench_exec() { testbench_exec_in "${TESTBENCH}" "$@"; }
 
 # ---------------------------------------------------------------------------
@@ -42,15 +56,15 @@ testbench_exec() { testbench_exec_in "${TESTBENCH}" "$@"; }
 # ---------------------------------------------------------------------------
 helm_flags=()
 
-if is_on "${ISTIO}"; then
-    # Let Envoy get injected into every chart pod; turn on the chart's Istio
-    # templates. The chart pins sidecar.istio.io/inject=true on every pod
-    # itself, so no namespace-level label is required.
-    helm_flags+=(--set=istio.enabled=true)
+if is_mesh; then
+    helm_flags+=(
+        --set=istio.enabled=true
+        "--set=istio.mode=${ISTIO}"
+    )
 fi
-# istio=off needs no extra flags: with the namespace unlabelled and
-# istio.enabled=false, the chart emits zero mesh labels and pods stay out
-# of both data planes.
+# istio=off needs no extra flags: the chart emits zero mesh labels when
+# istio.enabled=false, and setup.sh leaves the namespace unlabelled so
+# pods stay out of both data planes by default.
 
 if is_on "${AUTH}"; then
     helm_flags+=(
@@ -152,38 +166,125 @@ assert_eq() {
     fi
 }
 
-# Istio resources: PeerAuthentication + DestinationRule (headless DR only exists
-# in replica / cluster mode) should be present iff istio=on.
-if is_on "${ISTIO}"; then
-    log "Istio check: chart-owned resources must exist"
-    kctl get peerauthentication "${RELEASE}" >/dev/null \
-        || fail "PeerAuthentication/${RELEASE} missing"
-    kctl get destinationrule "${RELEASE}" >/dev/null \
-        || fail "DestinationRule/${RELEASE} missing"
-    if is_on "${SHARD}" || is_on "${REP}"; then
-        kctl get destinationrule "${RELEASE}-headless" >/dev/null \
-            || fail "DestinationRule/${RELEASE}-headless missing"
-    fi
+# Pick any chart pod so mode-specific checks can inspect live container /
+# label state. The first matching pod is fine — all pods in a release
+# share the same mesh participation shape.
+pod=$(kctl get pod -l "app.kubernetes.io/instance=${RELEASE}" \
+    -o jsonpath='{.items[0].metadata.name}')
 
-    # Chart pods must actually have the Envoy sidecar. Istio >=1.29 injects it
-    # as a native sidecar (initContainer with restartPolicy=Always), so check
-    # both containers and initContainers.
-    pod=$(kctl get pod -l "app.kubernetes.io/instance=${RELEASE}" \
-        -o jsonpath='{.items[0].metadata.name}')
-    if ! kctl get pod "${pod}" \
-         -o jsonpath='{.spec.containers[*].name} {.spec.initContainers[*].name}' \
-         | tr ' ' '\n' | grep -Fxq istio-proxy; then
-        fail "pod ${pod} has no istio-proxy container"
-    fi
-else
-    log "Istio check: chart-owned resources must be absent"
-    if kctl get peerauthentication "${RELEASE}" >/dev/null 2>&1; then
-        fail "PeerAuthentication/${RELEASE} should not exist when istio=off"
-    fi
-    if kctl get destinationrule "${RELEASE}" >/dev/null 2>&1; then
-        fail "DestinationRule/${RELEASE} should not exist when istio=off"
-    fi
-fi
+# Chart-owned Istio resources should be present iff istio is enabled.
+# PeerAuthentication is mode-neutral (enforced by Envoy in sidecar, ztunnel
+# in ambient). DestinationRule is sidecar-only — ambient's ztunnel HBONE
+# supersedes it. AuthorizationPolicy renders only in cluster mode.
+case "${ISTIO}" in
+    off)
+        log "Istio check: chart-owned resources must be absent"
+        if kctl get peerauthentication "${RELEASE}" >/dev/null 2>&1; then
+            fail "PeerAuthentication/${RELEASE} should not exist when istio=off"
+        fi
+        if kctl get destinationrule "${RELEASE}" >/dev/null 2>&1; then
+            fail "DestinationRule/${RELEASE} should not exist when istio=off"
+        fi
+        if kctl get authorizationpolicy "${RELEASE}-cluster-bus" >/dev/null 2>&1; then
+            fail "AuthorizationPolicy/${RELEASE}-cluster-bus should not exist when istio=off"
+        fi
+        # Pod must have no istio-proxy container.
+        if kctl get pod "${pod}" \
+             -o jsonpath='{.spec.containers[*].name} {.spec.initContainers[*].name}' \
+             | tr ' ' '\n' | grep -Fxq istio-proxy; then
+            fail "pod ${pod} has an istio-proxy container when istio=off"
+        fi
+        ;;
+    sidecar)
+        log "Istio check: sidecar-mode resources must exist"
+        kctl get peerauthentication "${RELEASE}" >/dev/null \
+            || fail "PeerAuthentication/${RELEASE} missing in sidecar mode"
+        kctl get destinationrule "${RELEASE}" >/dev/null \
+            || fail "DestinationRule/${RELEASE} missing in sidecar mode"
+        if is_on "${SHARD}" || is_on "${REP}"; then
+            kctl get destinationrule "${RELEASE}-headless" >/dev/null \
+                || fail "DestinationRule/${RELEASE}-headless missing in sidecar mode"
+        fi
+        # Istio >=1.29 injects as a native sidecar (initContainer with
+        # restartPolicy=Always), so check both containers and initContainers.
+        if ! kctl get pod "${pod}" \
+             -o jsonpath='{.spec.containers[*].name} {.spec.initContainers[*].name}' \
+             | tr ' ' '\n' | grep -Fxq istio-proxy; then
+            fail "pod ${pod} has no istio-proxy container in sidecar mode"
+        fi
+        if is_on "${SHARD}"; then
+            # AP renders only in cluster mode, but it applies in BOTH sidecar
+            # and ambient. Verify once per mode so a sidecar-only regression
+            # (e.g. dropping the AP when !ambient) can't hide.
+            kctl get authorizationpolicy "${RELEASE}-cluster-bus" >/dev/null \
+                || fail "AuthorizationPolicy/${RELEASE}-cluster-bus missing in sidecar+cluster mode"
+            # The bus-port exclude annotations are sidecar-only (ambient has
+            # no Envoy to exclude ports from).
+            excl=$(kctl get statefulset "${RELEASE}" \
+                -o jsonpath='{.spec.template.metadata.annotations.traffic\.sidecar\.istio\.io/excludeInboundPorts}')
+            if [[ ${excl} != "16379" ]]; then
+                fail "traffic.sidecar.istio.io/excludeInboundPorts=${excl:-<unset>}, want '16379' in sidecar+cluster"
+            fi
+        else
+            # AP is cluster-mode only. Don't render for standalone/replica.
+            if kctl get authorizationpolicy "${RELEASE}-cluster-bus" >/dev/null 2>&1; then
+                fail "AuthorizationPolicy/${RELEASE}-cluster-bus should not render outside cluster mode"
+            fi
+        fi
+        ;;
+    ambient)
+        log "Istio check: ambient-mode resources must exist"
+        kctl get peerauthentication "${RELEASE}" >/dev/null \
+            || fail "PeerAuthentication/${RELEASE} missing in ambient mode"
+        # DestinationRule is sidecar-only; a DR in ambient requires a
+        # waypoint proxy and layers a second mTLS inside ztunnel's HBONE.
+        if kctl get destinationrule "${RELEASE}" >/dev/null 2>&1; then
+            fail "DestinationRule/${RELEASE} must not exist in ambient mode"
+        fi
+        if kctl get destinationrule "${RELEASE}-headless" >/dev/null 2>&1; then
+            fail "DestinationRule/${RELEASE}-headless must not exist in ambient mode"
+        fi
+        # Ambient has no sidecar — ztunnel handles HBONE at the node. If any
+        # chart pod picks one up, our inject=false label is being ignored.
+        if kctl get pod "${pod}" \
+             -o jsonpath='{.spec.containers[*].name} {.spec.initContainers[*].name}' \
+             | tr ' ' '\n' | grep -Fxq istio-proxy; then
+            fail "pod ${pod} has an istio-proxy container in ambient mode"
+        fi
+        dpmode=$(kctl get pod "${pod}" -o jsonpath='{.metadata.labels.istio\.io/dataplane-mode}')
+        if [[ ${dpmode} != ambient ]]; then
+            fail "pod ${pod} has istio.io/dataplane-mode=${dpmode:-<unset>}, want ambient"
+        fi
+        if is_on "${SHARD}"; then
+            # Ambient skips the cluster-isolation NetworkPolicy (it would
+            # drop HBONE) and relies entirely on the AP at the ztunnel
+            # layer. Verify both halves of that swap.
+            kctl get authorizationpolicy "${RELEASE}-cluster-bus" >/dev/null \
+                || fail "AuthorizationPolicy/${RELEASE}-cluster-bus missing in ambient+cluster mode"
+            if kctl get networkpolicy "${RELEASE}-cluster-isolation" >/dev/null 2>&1; then
+                fail "NetworkPolicy/${RELEASE}-cluster-isolation must not exist in ambient+cluster mode"
+            fi
+            # Sidecar-only exclude annotations must not leak through.
+            excl=$(kctl get statefulset "${RELEASE}" \
+                -o jsonpath='{.spec.template.metadata.annotations.traffic\.sidecar\.istio\.io/excludeInboundPorts}')
+            if [[ -n ${excl} ]]; then
+                fail "traffic.sidecar.istio.io/excludeInboundPorts=${excl} leaked into ambient pod"
+            fi
+            # And the AP bus rule must be scoped to this release's SPIFFE
+            # principal, not a wildcard or missing `from` — that's the whole
+            # point of the ambient cross-release isolation promise.
+            principals=$(kctl get authorizationpolicy "${RELEASE}-cluster-bus" \
+                -o jsonpath='{.spec.rules[0].from[0].source.principals[*]}')
+            if [[ ${principals} != *"/sa/${RELEASE}" ]]; then
+                fail "AuthorizationPolicy principals=${principals}, want .../sa/${RELEASE}"
+            fi
+        else
+            if kctl get authorizationpolicy "${RELEASE}-cluster-bus" >/dev/null 2>&1; then
+                fail "AuthorizationPolicy/${RELEASE}-cluster-bus should not render outside cluster mode"
+            fi
+        fi
+        ;;
+esac
 
 # Positive: the fully-correct invocation should succeed.
 log "Positive check"

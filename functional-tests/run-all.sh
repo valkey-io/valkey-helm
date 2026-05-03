@@ -6,9 +6,16 @@ HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib.sh
 . "${HERE}/lib.sh"
 
-# 32 scenarios: every combination of tls/auth/shard/rep/istio.
+# 48 scenarios: every combination of tls/auth/shard/rep × istio=
+# off|sidecar|ambient. The istio dimension is three-valued rather than two
+# because sidecar and ambient share almost nothing below the chart-owned
+# templates — different label paths, different mTLS enforcement points
+# (Envoy vs ztunnel), different rendered resources (DestinationRule only
+# in sidecar; AuthorizationPolicy in both but enforced differently). Keep
+# them both in the matrix so a regression in one mode can't hide behind a
+# passing result in the other.
 SCENARIOS=()
-for istio in off on; do
+for istio in off sidecar ambient; do
     for tls in off on; do
         for auth in off on; do
             for shard in off on; do
@@ -20,7 +27,9 @@ for istio in off on; do
     done
 done
 
-# Optional filter: `FILTER='tls=on istio=on'` runs only matching scenarios.
+# Optional filter: `FILTER='tls=on istio=ambient'` runs only matching
+# scenarios. Filter values for `istio` are off|sidecar|ambient; `on` is
+# accepted as an alias for "sidecar or ambient" to keep old habits working.
 matches() {
     local tls=$1 auth=$2 shard=$3 rep=$4 istio=$5
     for sel in ${FILTER:-}; do
@@ -31,7 +40,13 @@ matches() {
             auth)  have=${auth} ;;
             shard) have=${shard} ;;
             rep)   have=${rep} ;;
-            istio) have=${istio} ;;
+            istio)
+                if [[ ${v} == on ]]; then
+                    [[ ${istio} == sidecar || ${istio} == ambient ]] || return 1
+                    continue
+                fi
+                have=${istio}
+                ;;
             *) echo "bad filter key: ${k}" >&2; exit 2 ;;
         esac
         [[ ${have} == "${v}" ]] || return 1
@@ -41,12 +56,24 @@ matches() {
 
 passed=0
 failed=0
+skipped=0
 failures=()
 
 for s in "${SCENARIOS[@]}"; do
     # shellcheck disable=SC2086
     read -r tls auth shard rep istio <<<"${s}"
     if ! matches "${tls}" "${auth}" "${shard}" "${rep}" "${istio}"; then
+        continue
+    fi
+
+    # Ambient scenarios require ztunnel to be installed. setup.sh now
+    # installs the ambient profile by default, but a user running against
+    # a pre-existing cluster might have only the sidecar data plane —
+    # skip rather than fail in that case so the rest of the matrix still
+    # runs.
+    if [[ ${istio} == ambient ]] && ! istio_ambient_installed; then
+        log "SKIP: tls=${tls} auth=${auth} shard=${shard} rep=${rep} istio=${istio} (ztunnel not installed)"
+        skipped=$(( skipped + 1 ))
         continue
     fi
 
@@ -60,18 +87,19 @@ for s in "${SCENARIOS[@]}"; do
 done
 
 echo
-log "Matrix summary: ${passed} passed, ${failed} failed"
+log "Matrix summary: ${passed} passed, ${failed} failed, ${skipped} skipped"
 if (( failed > 0 )); then
     printf '  failed: %s\n' "${failures[@]}"
     exit 1
 fi
 
-# Extra, non-matrix regressions (aclConfig+metrics, default-deny netpol, etc).
-# Skipped when FILTER is set — filters are matrix-scoped, so the extras
+# Extra, non-matrix regressions (aclConfig+metrics, default-deny netpol,
+# cross-release MEET isolation, ambient validator footguns, Prometheus
+# scraping, etc.). Each one is independent of the tls/auth/shard/rep
+# combinations — folding them into the matrix would just pay the
+# install/teardown cost N times to exercise the same single assertion.
+# Skipped when FILTER is set: filters are matrix-scoped, so the extras
 # wouldn't match anyway and running them would be surprising.
 if [[ -z ${FILTER:-} ]]; then
     "${HERE}/run-extra-scenarios.sh"
-    # Ambient-mesh regressions. Self-skipping when ztunnel isn't installed
-    # (e.g. against an older cluster with only the `demo` profile).
-    "${HERE}/run-ambient-scenarios.sh"
 fi
