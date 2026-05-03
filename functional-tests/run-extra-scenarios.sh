@@ -355,14 +355,288 @@ scenario_isolation_off_lets_merge_happen() {
     pass "${name}"
 }
 
-trap 'cleanup_release; cleanup_pair' EXIT
+# ---------------------------------------------------------------------------
+# Ambient-only regressions. Each of these tests a behaviour that's
+# independent of the tls/auth/shard/rep dimensions, so it lives here
+# rather than inflating the matrix with 16 copies of the same assertion.
+# Each self-skips if the cluster lacks the ambient data plane.
+# ---------------------------------------------------------------------------
 
-scenario_aclconfig_metrics              || true
-scenario_default_deny_netpol            || true
-scenario_bus_port_hidden                || true
-scenario_readiness_probe_exists         || true
-scenario_two_clusters_isolated          || true
-scenario_isolation_off_lets_merge_happen|| true
+install_ambient_cluster() {
+    local release=$1
+    hctl install "${release}" "${CHART_DIR}" \
+        --set=istio.enabled=true \
+        --set=istio.mode=ambient \
+        --set=cluster.enabled=true \
+        --set=cluster.persistence.size=100Mi \
+        --set=cluster.shards=3 \
+        --set=cluster.replicasPerShard=0 \
+        --set=cluster.isolation.enabled=false \
+        --wait --timeout=300s >/dev/null
+}
+
+count_cluster_nodes_ambient() {
+    local release=$1
+    kctl exec "${release}-0" -c "${release}" -- sh -c \
+        "valkey-cli cluster nodes 2>/dev/null | awk 'NF {print \$1}' | sort -u | wc -l" \
+        2>/dev/null | tr -d '[:space:]' || echo 0
+}
+
+poison_meet_ambient() {
+    local src_release=$1 dst_release=$2 dst_ip
+    dst_ip=$(kctl get pod "${dst_release}-0" -o jsonpath='{.status.podIP}')
+    [[ -n ${dst_ip} ]] || return 1
+    kctl exec "${src_release}-0" -c "${src_release}" -- \
+        valkey-cli cluster meet "${dst_ip}" 6379 >/dev/null 2>&1 || true
+}
+
+cleanup_ambient_pair() {
+    hctl uninstall valkey-amb-a 2>/dev/null || true
+    hctl uninstall valkey-amb-b 2>/dev/null || true
+    kctl delete pvc --selector='app.kubernetes.io/instance=valkey-amb-a' --ignore-not-found >/dev/null
+    kctl delete pvc --selector='app.kubernetes.io/instance=valkey-amb-b' --ignore-not-found >/dev/null
+}
+
+# Cross-release CLUSTER MEET must be blocked by the ambient
+# AuthorizationPolicy. Analogous to scenario_two_clusters_isolated above
+# but driven at L4 via ztunnel rather than by NetworkPolicy (the
+# NetworkPolicy is intentionally skipped in ambient — it would drop
+# HBONE). The ONLY thing stopping the merge here is the AP, so we
+# disable cluster.isolation.enabled to force that.
+scenario_ambient_authz_blocks_cross_release_meet() {
+    local name="ambient: AuthorizationPolicy blocks cross-release CLUSTER MEET"
+    log "SCENARIO: ${name}"
+    if ! istio_ambient_installed; then
+        log "SKIP: ${name} (ztunnel not installed)"
+        return
+    fi
+    cleanup_ambient_pair
+
+    if ! install_ambient_cluster valkey-amb-a; then
+        fail "${name}" "install of valkey-amb-a failed"; cleanup_ambient_pair; return
+    fi
+    if ! install_ambient_cluster valkey-amb-b; then
+        fail "${name}" "install of valkey-amb-b failed"; cleanup_ambient_pair; return
+    fi
+    kctl wait --for=condition=complete job/valkey-amb-a-cluster-init --timeout=300s >/dev/null
+    kctl wait --for=condition=complete job/valkey-amb-b-cluster-init --timeout=300s >/dev/null
+
+    local a_before b_before
+    a_before=$(count_cluster_nodes_ambient valkey-amb-a)
+    b_before=$(count_cluster_nodes_ambient valkey-amb-b)
+    if [[ ${a_before} != 3 || ${b_before} != 3 ]]; then
+        fail "${name}" "baseline wrong (a=${a_before}, b=${b_before}; want 3+3)"
+        cleanup_ambient_pair; return
+    fi
+
+    poison_meet_ambient valkey-amb-a valkey-amb-b
+
+    # Same rationale as the sidecar-mode isolation test: after the MEET,
+    # `cluster nodes` on A briefly shows 4 as a handshake placeholder.
+    # The real signal is post-settle. Node-timeout defaults to 15s; give
+    # it multiple intervals.
+    sleep 45
+
+    local a_after b_after
+    a_after=$(count_cluster_nodes_ambient valkey-amb-a)
+    b_after=$(count_cluster_nodes_ambient valkey-amb-b)
+    if [[ ${a_after} != 3 || ${b_after} != 3 ]]; then
+        fail "${name}" "clusters merged despite AuthorizationPolicy (a=${a_after}, b=${b_after}; want 3+3)"
+        cleanup_ambient_pair; return
+    fi
+
+    cleanup_ambient_pair
+    pass "${name}"
+}
+
+# The chart must refuse to install in ambient+cluster mode when the
+# AuthorizationPolicy is explicitly disabled — dropping it leaves the bus
+# port with NO cross-release protection (the NetworkPolicy is also
+# skipped in ambient to avoid blocking HBONE). Fail-closed at template
+# time so nobody silently ships an open cluster.
+scenario_ambient_ap_disabled_refused() {
+    local name="ambient: chart refuses install when authorizationPolicy.enabled=false + cluster"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    local out rc
+    set +e
+    out=$(hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=istio.enabled=true \
+            --set=istio.mode=ambient \
+            --set=cluster.enabled=true \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=0 \
+            --set=cluster.persistence.size=100Mi \
+            --set=istio.authorizationPolicy.enabled=false \
+            --dry-run 2>&1)
+    rc=$?
+    set -e
+
+    if (( rc == 0 )); then
+        fail "${name}" "dry-run succeeded but should have failed: ${out}"
+        return
+    fi
+    if ! grep -q 'cluster-bus port unprotected' <<<"${out}"; then
+        fail "${name}" "got error without the expected message (rc=${rc}): ${out}"
+        return
+    fi
+    pass "${name}"
+}
+
+# The chart must refuse when ambient + cluster + serviceAccount.create=false
+# with no explicit name, because every release collapses to the namespace's
+# `default` SA and the AP can no longer distinguish releases. Repro'd live
+# during review: two clusters merged despite both having the AP rendered.
+scenario_ambient_shared_default_sa_refused() {
+    local name="ambient: chart refuses install when serviceAccount defaults to namespace-wide 'default'"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    local out rc
+    set +e
+    out=$(hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=istio.enabled=true \
+            --set=istio.mode=ambient \
+            --set=cluster.enabled=true \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=0 \
+            --set=cluster.persistence.size=100Mi \
+            --set=serviceAccount.create=false \
+            --dry-run 2>&1)
+    rc=$?
+    set -e
+
+    if (( rc == 0 )); then
+        fail "${name}" "dry-run succeeded but should have failed: ${out}"
+        return
+    fi
+    if ! grep -q "serviceAccount.create=false AND serviceAccount.name empty" <<<"${out}"; then
+        fail "${name}" "got error without the expected message (rc=${rc}): ${out}"
+        return
+    fi
+    pass "${name}"
+}
+
+# Custom trustDomain must propagate into the AuthorizationPolicy principal.
+# A cluster with `istio.trustDomain=my.mesh.example.com` whose AP still
+# emits `cluster.local/…` would self-deny: same-release callers present an
+# identity under the CUSTOM trust domain but the AP's ALLOW rule only
+# matches the hardcoded one, so the bus port default-denies even for its
+# own pods.
+# We don't actually reconfigure Istio's trust domain here — that's a
+# cluster-wide concern, not chart-level — so the install does NOT fully
+# converge. The test inspects the rendered AP to confirm the principal
+# string follows the override. That's the piece the chart owns.
+scenario_ambient_trustdomain_override() {
+    local name="ambient: AP principal follows istio.trustDomain override"
+    log "SCENARIO: ${name}"
+    if ! istio_ambient_installed; then
+        log "SKIP: ${name} (ztunnel not installed)"
+        return
+    fi
+    cleanup_release
+
+    if ! hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=istio.enabled=true \
+            --set=istio.mode=ambient \
+            --set=cluster.enabled=true \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=0 \
+            --set=cluster.persistence.size=100Mi \
+            --set=istio.trustDomain=my.mesh.example.com \
+            --wait --timeout=240s >/dev/null 2>&1; then
+        # Expected: install won't converge because the actual mesh trust
+        # domain is still cluster.local. We only need the AP rendered to
+        # verify the principal string.
+        :
+    fi
+
+    local principals
+    principals=$(kctl get authorizationpolicy "${RELEASE}-cluster-bus" \
+        -o jsonpath='{.spec.rules[0].from[0].source.principals[*]}' 2>/dev/null)
+    if [[ ${principals} != "my.mesh.example.com/ns/${NAMESPACE}/sa/${RELEASE}" ]]; then
+        fail "${name}" "AP principals=${principals}, want my.mesh.example.com/ns/${NAMESPACE}/sa/${RELEASE}"
+        return
+    fi
+
+    cleanup_release
+    pass "${name}"
+}
+
+# Prometheus scraping the metrics exporter must work in ambient mode. The
+# AuthorizationPolicy is ALLOW-only, which triggers Istio default-deny for
+# any non-matching traffic — if the chart forgets to include the metrics
+# port in the open rule, production Prometheus stacks silently stop
+# seeing Valkey metrics the moment someone enables Istio.
+scenario_ambient_prometheus_scrape() {
+    local name="ambient: in-mesh Prometheus can scrape metrics exporter"
+    log "SCENARIO: ${name}"
+    if ! istio_ambient_installed; then
+        log "SKIP: ${name} (ztunnel not installed)"
+        return
+    fi
+    cleanup_release
+
+    if ! hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=istio.enabled=true \
+            --set=istio.mode=ambient \
+            --set=cluster.enabled=true \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=0 \
+            --set=cluster.persistence.size=100Mi \
+            --set=metrics.enabled=true \
+            --wait --timeout=300s >/dev/null; then
+        fail "${name}" "helm install failed"; return
+    fi
+    kctl wait --for=condition=complete "job/${RELEASE}-cluster-init" --timeout=300s >/dev/null
+
+    # An ambient-enrolled curl pod simulates an in-mesh Prometheus.
+    local scraper="scrape-${RELEASE}-$$"
+    kctl delete pod "${scraper}" --ignore-not-found --wait=true >/dev/null
+    kctl run "${scraper}" \
+        --image=curlimages/curl \
+        --labels='istio.io/dataplane-mode=ambient' \
+        --restart=Never \
+        --command -- sleep 300 >/dev/null
+    kctl wait --for=condition=Ready "pod/${scraper}" --timeout=120s >/dev/null
+
+    local code out
+    set +e
+    out=$(kctl exec "${scraper}" -c "${scraper}" -- \
+        curl -sS --max-time 10 -w '\nHTTP=%{http_code}\n' \
+        "http://${RELEASE}-metrics.${NAMESPACE}.svc.cluster.local:9121/metrics" 2>&1)
+    set -e
+    code=$(awk -F= '/^HTTP=/{print $2}' <<<"${out}")
+
+    kctl delete pod "${scraper}" --ignore-not-found --wait=false >/dev/null
+
+    if [[ ${code} != "200" ]]; then
+        fail "${name}" "scrape returned HTTP=${code:-<empty>}, body was: ${out}"
+        return
+    fi
+    if ! grep -q '^redis_' <<<"${out}"; then
+        fail "${name}" "HTTP 200 but body lacks redis_* metrics"
+        return
+    fi
+
+    cleanup_release
+    pass "${name}"
+}
+
+trap 'cleanup_release; cleanup_pair; cleanup_ambient_pair' EXIT
+
+scenario_aclconfig_metrics                       || true
+scenario_default_deny_netpol                     || true
+scenario_bus_port_hidden                         || true
+scenario_readiness_probe_exists                  || true
+scenario_two_clusters_isolated                   || true
+scenario_isolation_off_lets_merge_happen         || true
+scenario_ambient_authz_blocks_cross_release_meet || true
+scenario_ambient_ap_disabled_refused             || true
+scenario_ambient_shared_default_sa_refused       || true
+scenario_ambient_trustdomain_override            || true
+scenario_ambient_prometheus_scrape               || true
 
 echo
 log "Extra scenario summary"

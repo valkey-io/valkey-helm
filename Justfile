@@ -37,21 +37,18 @@ functional-teardown *ARGS:
     ./functional-tests/teardown.sh {{ARGS}}
 
 # Run one scenario against the already-set-up kind cluster, e.g.
-#   just functional-scenario off off on on off
+#   just functional-scenario off off on on sidecar
+# tls/auth/shard/rep are on|off; istio is off|sidecar|ambient.
 functional-scenario tls auth shard rep istio:
     ./functional-tests/run-scenario.sh {{tls}} {{auth}} {{shard}} {{rep}} {{istio}}
 
-# Run the full 32-scenario matrix (set FILTER='tls=on istio=on' to narrow)
+# Run the full 48-scenario matrix (set FILTER='tls=on istio=ambient' to narrow)
 functional-run:
     ./functional-tests/run-all.sh
 
 # Run the extra (non-matrix) regression scenarios on their own
 functional-extras:
     ./functional-tests/run-extra-scenarios.sh
-
-# Run the Istio ambient-mesh regressions on their own
-functional-ambient:
-    ./functional-tests/run-ambient-scenarios.sh
 
 # Full functional suite: setup + matrix + teardown including cluster
 functional-test:
