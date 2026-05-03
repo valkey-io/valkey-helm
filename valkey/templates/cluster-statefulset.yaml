@@ -182,11 +182,25 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
+          {{- if and (gt (int .Values.cluster.replicasPerShard) 0) .Values.cluster.preStopFailover.enabled }}
+          lifecycle:
+            # Graceful CLUSTER FAILOVER on primary-pod shutdown. Gated on
+            # replicasPerShard>0 (no replica to hand over to otherwise —
+            # the hook would no-op and just eat grace-period budget). The
+            # script itself is best-effort and never blocks SIGTERM.
+            preStop:
+              exec:
+                command: [ "/bin/sh", "/cluster-script/prestop.sh" ]
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: valkey-data
               mountPath: /data
+            {{- if and (gt (int .Values.cluster.replicasPerShard) 0) .Values.cluster.preStopFailover.enabled }}
+            - name: cluster-script
+              mountPath: /cluster-script
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
@@ -281,11 +295,18 @@ spec:
         {{- with .Values.extraContainers }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.cluster.terminationGracePeriodSeconds }}
       volumes:
         - name: scripts
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts
             defaultMode: 0555
+        {{- if and (gt (int .Values.cluster.replicasPerShard) 0) .Values.cluster.preStopFailover.enabled }}
+        - name: cluster-script
+          configMap:
+            name: {{ include "valkey.fullname" . }}-cluster-script
+            defaultMode: 0555
+        {{- end }}
         {{- if .Values.auth.enabled }}
         - name: valkey-acl
           emptyDir:

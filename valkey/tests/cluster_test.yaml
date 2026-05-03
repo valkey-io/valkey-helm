@@ -138,10 +138,14 @@ tests:
           path: spec.template.spec.containers[0].args
           value: [ "/data/conf/valkey.conf" ]
 
-  - it: should not mount cluster-script volume in StatefulSet container
+  # Cluster-script is consumed on the STS side exclusively by the preStop
+  # CLUSTER FAILOVER hook: no replicas in the shard ⇒ no failover target
+  # ⇒ no need for the script on the main container.
+  - it: should not mount cluster-script volume in StatefulSet container when no replicas
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 0
     template: templates/cluster-statefulset.yaml
     asserts:
       - notContains:
@@ -150,10 +154,11 @@ tests:
             name: cluster-script
             mountPath: /cluster-script
 
-  - it: should not define cluster-script volume in StatefulSet
+  - it: should not define cluster-script volume in StatefulSet when no replicas
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 0
     template: templates/cluster-statefulset.yaml
     asserts:
       - notContains:
@@ -161,6 +166,161 @@ tests:
           content:
             name: cluster-script
           any: true
+
+  - it: should not mount cluster-script volume when preStopFailover disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 1
+      cluster.preStopFailover.enabled: false
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cluster-script
+            mountPath: /cluster-script
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: cluster-script
+          any: true
+
+  - it: should mount cluster-script volume in StatefulSet container when replicas>=1 (default)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 1
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cluster-script
+            mountPath: /cluster-script
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: cluster-script
+            configMap:
+              name: RELEASE-NAME-valkey-cluster-script
+              defaultMode: 365  # 0555
+
+  # --- preStop CLUSTER FAILOVER hook ---
+  - it: should render preStop CLUSTER FAILOVER hook when replicas>=1 (default)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 1
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+          value: [ "/bin/sh", "/cluster-script/prestop.sh" ]
+
+  - it: should NOT render preStop hook when replicasPerShard=0
+    # Nothing to hand over to — the hook would be a no-op that just eats
+    # grace-period budget.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 0
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle
+
+  - it: should NOT render preStop hook when preStopFailover explicitly disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 1
+      cluster.preStopFailover.enabled: false
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle
+
+  - it: should set terminationGracePeriodSeconds from cluster.terminationGracePeriodSeconds
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.terminationGracePeriodSeconds: 120
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 120
+
+  - it: should default terminationGracePeriodSeconds to 60 (enough for default preStop timeout of 40s + SIGTERM flush)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 60
+
+  - it: cluster-script ConfigMap should contain prestop.sh with CLUSTER FAILOVER
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-script.yaml
+    asserts:
+      - isNotNull:
+          path: data["prestop.sh"]
+      - matchRegex:
+          path: data["prestop.sh"]
+          pattern: "cluster failover"
+
+  - it: prestop.sh should inline TLS args when tls.enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: valkey-tls
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["prestop.sh"]
+          pattern: "--tls --cacert"
+
+  - it: prestop.sh should NOT inline TLS args when tls disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-script.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["prestop.sh"]
+          pattern: "--tls --cacert"
+
+  - it: prestop.sh should source REDISCLI_AUTH when auth.enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "secretpass"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["prestop.sh"]
+          pattern: "REDISCLI_AUTH"
+
+  - it: prestop.sh timeout should follow cluster.preStopFailover.timeoutSeconds
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.preStopFailover.timeoutSeconds: 25
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["prestop.sh"]
+          pattern: "TIMEOUT=25"
 
   # Init container tests
   - it: should have init container with cluster environment variables

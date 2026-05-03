@@ -8,4 +8,6 @@ metadata:
 data:
   init-cluster.sh: |-
 {{ tpl (.Files.Get "scripts/cluster-init-script.sh") . | indent 4 }}
+  prestop.sh: |-
+{{ tpl (.Files.Get "scripts/cluster-prestop-script.sh") . | indent 4 }}
 {{- end }}

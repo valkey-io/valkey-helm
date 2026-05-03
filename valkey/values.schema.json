@@ -74,6 +74,22 @@
                         }
                     }
                 },
+                "preStopFailover": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "timeoutSeconds": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                },
+                "terminationGracePeriodSeconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"
                 }

@@ -624,6 +624,187 @@ scenario_ambient_prometheus_scrape() {
     pass "${name}"
 }
 
+# ---------------------------------------------------------------------------
+# Scenario: `kubectl rollout restart` on a replicated cluster must not cause
+# client-visible disruption. The preStop hook runs `CLUSTER FAILOVER` on
+# every primary before SIGTERM, so the shard already has a new primary by
+# the time the old pod terminates. We assert this by:
+#
+#   1) Installing cluster.shards=3, cluster.replicasPerShard=1 (6 pods).
+#   2) Recording each pod's role (master/slave) — this is our baseline.
+#   3) Writing a known key through any pod (cluster redirects handle placement).
+#   4) `kubectl rollout restart` the STS and waiting for the rollout.
+#   5) Re-checking cluster_state, master/slave counts, and the key's value.
+#   6) Comparing new roles to baseline: since every primary is asked to hand
+#      off to its own replica, every primary/replica pair should have flipped
+#      ordinals. We assert AT LEAST ONE pod's role changed — any weaker check
+#      would pass even if the hook never ran and the cluster simply waited
+#      through node-timeout failovers.
+#
+# If the preStop hook is broken or absent, steps 5-6 still "work" in the sense
+# that the cluster eventually self-heals via node-timeout, but:
+#   - there's a 15s+ window of unavailability per primary,
+#   - and the pod role stays the same after restart (the restarted pod
+#     re-joins as primary because its nodes.conf persisted), so the role-flip
+#     assertion catches it.
+# ---------------------------------------------------------------------------
+scenario_rollout_restart_orderly_failover() {
+    local name="rollout restart performs orderly CLUSTER FAILOVER (no client-visible gap)"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    # nodeTimeout pinned high (3 min) so cluster-node-timeout auto-failover
+    # CANNOT fire during the rollout — a normal per-pod restart takes ~10-30s
+    # and the whole rollout ~2-3min, so with a 15s default timeout the
+    # observed role-flip signal could be produced either by preStop OR by
+    # auto-failover of an in-flight primary. Bumping to 180s guarantees any
+    # observed flip is the work of preStop.
+    if ! hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=cluster.enabled=true \
+            --set=cluster.persistence.size=100Mi \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=1 \
+            --set=cluster.nodeTimeout=180000 \
+            --wait --timeout=300s >/dev/null; then
+        fail "${name}" "helm install failed"
+        return
+    fi
+    kctl wait --for=condition=complete "job/${RELEASE}-cluster-init" --timeout=300s >/dev/null
+
+    # Gossip convergence lags job completion: the init Job returns "done"
+    # once `cluster create` is ACK'd, but `cluster_state:ok` requires every
+    # node to have seen every other node's PING/PONG. Writing canary data
+    # or triggering a rollout before that window closes lets the preStop
+    # script's own `cluster_state != ok` early-exit fire, bypassing the
+    # graceful FAILOVER and silently dropping in-memory writes when the
+    # primary pod is replaced.
+    local s
+    for _ in $(seq 1 60); do
+        s=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+            valkey-cli cluster info 2>/dev/null \
+            | awk -F: '/^cluster_state:/{print $2}' | tr -d '\r\n' || true)
+        [[ ${s} == ok ]] && break
+        sleep 2
+    done
+    if [[ ${s} != ok ]]; then
+        fail "${name}" "cluster_state=${s:-<unavailable>} after install (want ok before rollout)"
+        cleanup_release; return
+    fi
+
+    # Capture the role of every pod pre-restart. Keyed by pod ordinal so we
+    # can compare "same ordinal, different role" after.
+    snapshot_roles() {
+        local n=6 i role
+        for i in $(seq 0 $((n - 1))); do
+            role=$(kctl exec "${RELEASE}-${i}" -c "${RELEASE}" -- \
+                valkey-cli info replication 2>/dev/null \
+                | awk -F: '/^role:/{print $2}' | tr -d '\r\n' || true)
+            printf '%s=%s\n' "${i}" "${role}"
+        done
+    }
+
+    local before
+    before=$(snapshot_roles)
+    local masters_before slaves_before
+    masters_before=$(printf '%s\n' "${before}" | grep -c '=master' || true)
+    slaves_before=$(printf '%s\n' "${before}" | grep -c '=slave\|=replica' || true)
+    if [[ ${masters_before} != 3 || ${slaves_before} != 3 ]]; then
+        fail "${name}" "baseline wrong: masters=${masters_before} slaves=${slaves_before} (want 3+3)"
+        cleanup_release; return
+    fi
+
+    # Write a canary key so we can prove data integrity after the rollout.
+    # Must write through a CLUSTER-aware client so slot routing works —
+    # valkey-cli -c follows MOVED redirects. The value contains shell
+    # metacharacters for the same reason AUTH_PASSWORD does.
+    local canary_key="prestop-canary-$$"
+    local canary_val='rollout-ok $shell "quote" \back`tick`'
+    if ! kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+            valkey-cli -c set "${canary_key}" "${canary_val}" >/dev/null 2>&1; then
+        fail "${name}" "initial SET failed"
+        cleanup_release; return
+    fi
+
+    # The actual rollout. Default updateStrategy=RollingUpdate → pods
+    # restart one at a time from highest ordinal (podManagementPolicy
+    # controls creation/deletion parallelism, not rolling-update pacing).
+    # Each primary-pod restart should trigger a preStop FAILOVER; each
+    # replica-pod restart should no-op.
+    log "triggering rollout restart"
+    kctl rollout restart "statefulset/${RELEASE}" >/dev/null
+
+    # Rollout must complete within terminationGracePeriodSeconds * 6 + a
+    # little slack — each pod can take up to the grace period in the
+    # worst case (preStop timeout + SIGTERM flush).
+    if ! kctl rollout status "statefulset/${RELEASE}" --timeout=600s >/dev/null; then
+        fail "${name}" "rollout status never converged"
+        cleanup_release; return
+    fi
+
+    # Give gossip a moment to settle post-rollout — cluster_state flips to
+    # :ok only after every node sees every other node, and the last pod to
+    # restart may still be converging when rollout status returns.
+    local state
+    for _ in $(seq 1 30); do
+        state=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+            valkey-cli cluster info 2>/dev/null \
+            | awk -F: '/^cluster_state:/{print $2}' | tr -d '\r\n' || true)
+        [[ ${state} == ok ]] && break
+        sleep 2
+    done
+    if [[ ${state} != ok ]]; then
+        fail "${name}" "cluster_state=${state:-<unavailable>} after rollout (want ok)"
+        cleanup_release; return
+    fi
+
+    # Still 3 masters / 3 slaves — i.e. the handovers completed and every
+    # shard has the right shape.
+    local after masters_after slaves_after
+    after=$(snapshot_roles)
+    masters_after=$(printf '%s\n' "${after}" | grep -c '=master' || true)
+    slaves_after=$(printf '%s\n' "${after}" | grep -c '=slave\|=replica' || true)
+    if [[ ${masters_after} != 3 || ${slaves_after} != 3 ]]; then
+        fail "${name}" "post-rollout shape wrong: masters=${masters_after} slaves=${slaves_after} (want 3+3)"
+        cleanup_release; return
+    fi
+
+    # Canary key survives (via MOVED redirect if the slot moved to a
+    # different primary).
+    local got
+    got=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+        valkey-cli -c get "${canary_key}" 2>/dev/null || true)
+    if [[ ${got} != "${canary_val}" ]]; then
+        fail "${name}" "canary key lost: got='${got}' want='${canary_val}'"
+        cleanup_release; return
+    fi
+
+    # Expect every primary's ordinal to flip: the rollout restarts each pod
+    # once, each primary-pod restart's preStop hands off to a replica, and
+    # the ex-primary returns as replica. So of the 3 original primaries,
+    # all 3 should now be replicas on those ordinals ⇒ at least 3 flips.
+    # With nodeTimeout pinned high above, no other mechanism can produce
+    # flips during the rollout window, so this is a precise signal.
+    # A broken / missing preStop yields 0 flips (every pod persists its
+    # role in nodes.conf and rejoins as that role).
+    local flips=0 line ordinal role_before role_after
+    for line in ${before}; do
+        ordinal=${line%=*}
+        role_before=${line#*=}
+        role_after=$(printf '%s\n' "${after}" | awk -F= -v o="${ordinal}" '$1 == o {print $2}')
+        if [[ ${role_before} != "${role_after}" ]]; then
+            flips=$(( flips + 1 ))
+        fi
+    done
+    if (( flips < 3 )); then
+        fail "${name}" "only ${flips}/6 ordinals flipped — expected >=3 (every primary's preStop should hand off to a replica). before='${before}' after='${after}'"
+        cleanup_release; return
+    fi
+    log "roles flipped on ${flips}/6 pods — handover ran"
+
+    cleanup_release
+    pass "${name}"
+}
+
 trap 'cleanup_release; cleanup_pair; cleanup_ambient_pair' EXIT
 
 scenario_aclconfig_metrics                       || true
@@ -632,6 +813,7 @@ scenario_bus_port_hidden                         || true
 scenario_readiness_probe_exists                  || true
 scenario_two_clusters_isolated                   || true
 scenario_isolation_off_lets_merge_happen         || true
+scenario_rollout_restart_orderly_failover        || true
 scenario_ambient_authz_blocks_cross_release_meet || true
 scenario_ambient_ap_disabled_refused             || true
 scenario_ambient_shared_default_sa_refused       || true
