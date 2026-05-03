@@ -305,6 +305,42 @@ cluster:
   # This port is used for node-to-node communication in the cluster
   busPort: 16379
 
+  # Orderly handover on primary pod shutdown. A `kubectl rollout restart`
+  # (or any voluntary eviction) sends SIGTERM to Valkey directly; without a
+  # preStop hook, the primary dies with open client connections and the
+  # cluster takes up to nodeTimeout to promote a replica. During that
+  # window, connection pools fill with dead sockets and the app errors out
+  # on every pooled command.
+  #
+  # With this enabled, each pod's preStop checks whether it is a primary
+  # and (if so) asks one of its own replicas to run `CLUSTER FAILOVER` —
+  # Valkey's canonical graceful-handover command. The primary demotes to
+  # replica in the same pass, so by the time SIGTERM arrives the shard
+  # already has a new primary and existing connections close cleanly.
+  #
+  # No-op when:
+  #   * the pod is already a replica (nothing to fail over);
+  #   * the shard has no replicas (replicasPerShard=0 — nothing to fail
+  #     over TO);
+  #   * cluster_state is not ok (don't shuffle roles on a sick cluster).
+  # The hook is strictly best-effort — any error path falls through to the
+  # normal SIGTERM, which is the pre-existing (suboptimal) behaviour.
+  preStopFailover:
+    # Enable the preStop CLUSTER FAILOVER hook.
+    enabled: true
+    # How long to wait for the ex-primary to observe its own demotion
+    # before giving up and letting kubelet send SIGTERM. Keep comfortably
+    # below terminationGracePeriodSeconds — kubelet counts the preStop
+    # time against that total grace period.
+    timeoutSeconds: 40
+
+  # Grace period for pod shutdown. Needs to accommodate the preStop
+  # CLUSTER FAILOVER handshake (default timeoutSeconds: 40) with headroom
+  # for SIGTERM + flush. The K8s default (30s) is too short for an orderly
+  # cluster rollout — a clipped preStop forces the abrupt close this
+  # feature is trying to avoid.
+  terminationGracePeriodSeconds: 60
+
   # Isolate this Valkey cluster's gossip bus from any other release in the
   # Kubernetes cluster. Valkey's CLUSTER MEET has no authentication, so
   # without this, any pod that can open a TCP connection to a node's bus
