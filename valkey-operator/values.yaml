@@ -100,8 +100,6 @@ podLabels: {}
 # Labels to add to all resources
 commonLabels: {}
 
-# TODO: metrics auth RBAC (metrics-auth-role, metrics-reader-role)
-# TODO: prometheus ServiceMonitor
 # TODO: networkPolicy
 # TODO: aggregated ClusterRoles (admin/editor/viewer)
 # TODO: topologySpreadConstraints
@@ -110,6 +108,10 @@ commonLabels: {}
 metrics:
   # Enable the metrics endpoint
   enabled: true
+  # Serve metrics over HTTPS with authentication/authorization.
+  # When true, metrics auth RBAC (tokenreviews, subjectaccessreviews) is created.
+  # Requires a valid serving certificate (e.g. via cert-manager).
+  secure: false
   # Port for the metrics endpoint
   port: 8443
   service:
@@ -118,4 +120,18 @@ metrics:
     # Annotations for the metrics service
     annotations: {}
     # Labels for the metrics service
+    labels: {}
+
+# Prometheus ServiceMonitor
+prometheus:
+  serviceMonitor:
+    # Create a ServiceMonitor resource for Prometheus Operator
+    enabled: false
+    # Namespace for the ServiceMonitor (defaults to release namespace)
+    namespace: ""
+    # Scrape interval
+    interval: ""
+    # Scrape timeout
+    scrapeTimeout: ""
+    # Additional labels for the ServiceMonitor
     labels: {}

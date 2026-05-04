@@ -1,0 +1,16 @@
+{{- if and .Values.rbac.create .Values.metrics.enabled .Values.metrics.secure -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "valkey-operator.fullname" . }}-metrics-auth
+  labels:
+    {{- include "valkey-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "valkey-operator.fullname" . }}-metrics-auth
+subjects:
+- kind: ServiceAccount
+  name: {{ include "valkey-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
