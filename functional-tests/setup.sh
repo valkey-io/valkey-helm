@@ -40,11 +40,12 @@ fi
 # carries per-pod `sidecar.istio.io/inject` and `istio.io/dataplane-mode`
 # labels derived from `istio.enabled` + `istio.mode`, so every workload
 # opts in or out explicitly at the pod layer. Labelling the namespace
-# `istio-injection=enabled` on top would (a) override istio=off scenarios
-# into sidecar'd pods unless each test sinks labels manually, and (b)
-# blur which layer is actually responsible for mesh capture when
-# troubleshooting. Keep the decision at the pod level, the same as how
-# the chart ships to real operators.
+# `istio-injection=enabled` on top would (a) pull every istio=off pod
+# into the sidecar data plane — since namespace injection is inherited
+# unless each pod stamps `sidecar.istio.io/inject=false` to veto it —
+# and (b) blur which layer is actually responsible for mesh capture
+# when troubleshooting. Keep the decision at the pod level, the same as
+# how the chart ships to real operators.
 log "Namespace ${NAMESPACE} left unlabelled — chart controls mesh opt-in at the pod level"
 kubectl --context="${KUBE_CONTEXT}" label namespace "${NAMESPACE}" \
     istio-injection- istio.io/dataplane-mode- 2>/dev/null || true
