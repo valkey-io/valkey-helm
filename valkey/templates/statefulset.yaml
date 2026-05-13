@@ -2,6 +2,7 @@
 {{- include "valkey.validateAuthConfig" . }}
 {{- include "valkey.validateReplicaPersistence" . }}
 {{- include "valkey.validateReplicaAuth" . }}
+{{- include "valkey.validateProbeAuth" . }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -134,19 +135,13 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           startupProbe:
-            exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
-              {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
-              {{- end }}
+            {{- include "valkey.probe.valkey" (dict "root" . "config" .Values.probes.startup) | nindent 12 }}
           livenessProbe:
-            exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
-              {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
-              {{- end }}
+            {{- include "valkey.probe.valkey" (dict "root" . "config" .Values.probes.liveness) | nindent 12 }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            {{- include "valkey.probe.valkey" (dict "root" . "config" .Values.probes.readiness) | nindent 12 }}
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

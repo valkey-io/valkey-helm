@@ -169,6 +169,60 @@ extraVolumeMounts: []
 #  - mountPath: /some/path/
 #    name: hostpath-volume
 
+# Probe configuration for the main Valkey container.
+# The default exec command is distroless-compatible: ["valkey-cli", "ping"].
+# TLS flags are added automatically when tls.enabled=true.
+#
+# When auth.enabled=true, the chart cannot safely handle authentication
+# without knowing your security model. You MUST provide an override for
+# each probe. Two supported patterns:
+#
+#   Option A — distroless compatible.
+#   Requires REDISCLI_AUTH injected via env.secretKeyRef in the container:
+#
+#     override:
+#       exec:
+#         command: ["valkey-cli", "ping"]
+#
+#   Option B — shell-based, reads password from the mounted secret at runtime.
+#   Not compatible with distroless images:
+#
+#     override:
+#       exec:
+#         command:
+#           - sh
+#           - -c
+#           - "p=$(cat /valkey-auth-secret/<passwordKey>); valkey-cli --user <user> -a \"$p\" --no-auth-warning ping"
+#
+probes:
+  startup:
+    # override: {}
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 1
+    failureThreshold: 20
+    successThreshold: 1
+
+  liveness:
+    # override: {}
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+    successThreshold: 1
+
+  readiness:
+    # Disabled by default. In replica mode the Service already routes traffic
+    # based on pod availability. Enable only when fine-grained traffic
+    # exclusion is required (e.g. during large dataset loads).
+    enabled: false
+    # override: {}
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 1
+    failureThreshold: 3
+    successThreshold: 1
+
 # Content for valkey.conf (will be mounted via ConfigMap)
 valkeyConfig: ""
 

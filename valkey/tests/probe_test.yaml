@@ -1,0 +1,279 @@
+suite: configurable probes
+templates:
+  - templates/statefulset.yaml
+  - templates/deploy_valkey.yaml
+
+tests:
+
+  - it: valkey startup probe uses direct exec when auth is disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command
+          value: ["valkey-cli", "ping"]
+
+  - it: valkey readiness probe is absent when disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.enabled: false
+      probes.readiness.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: valkey startup probe respects custom initialDelaySeconds
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.enabled: false
+      probes.startup.initialDelaySeconds: 30
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
+          value: 30
+
+  - it: valkey startup probe uses override when provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.enabled: false
+      probes.startup.override:
+        tcpSocket:
+          port: 6379
+        initialDelaySeconds: 10
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.tcpSocket.port
+          value: 6379
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe.exec
+
+  - it: valkey probe includes TLS flags when tls.enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.enabled: false
+      tls.enabled: true
+      tls.existingSecret: "my-tls-secret"
+      tls.caPublicKey: "ca.crt"
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].startupProbe.exec.command
+          content: "--tls"
+
+  - it: sentinel startup probe uses correct port
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      auth.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].startupProbe.exec.command
+          content: "26379"
+
+  - it: sentinel readiness probe absent by default
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      auth.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[1].readinessProbe
+
+  # ── deploy_valkey.yaml (standalone mode, replica.enabled=false) ─────────────
+
+  - it: standalone startup probe uses direct exec when auth is disabled
+    set:
+      replica.enabled: false
+      auth.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command
+          value: ["valkey-cli", "ping"]
+
+  - it: standalone liveness probe uses direct exec when auth is disabled
+    set:
+      replica.enabled: false
+      auth.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command
+          value: ["valkey-cli", "ping"]
+
+  - it: standalone readiness probe is absent when disabled
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      probes.readiness.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: standalone readiness probe is rendered when enabled
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      probes.readiness.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: standalone probe includes TLS flags when tls.enabled
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      tls.enabled: true
+      tls.existingSecret: "my-tls-secret"
+      tls.caPublicKey: "ca.crt"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].startupProbe.exec.command
+          content: "--tls"
+
+  - it: standalone probe respects custom initialDelaySeconds
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      probes.startup.initialDelaySeconds: 30
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
+          value: 30
+
+  - it: standalone startup probe uses override when provided
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      probes.startup.override:
+        tcpSocket:
+          port: 6379
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.tcpSocket.port
+          value: 6379
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe.exec
+
+  - it: standalone metrics probes are not affected by probe config
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].startupProbe.tcpSocket.port
+          value: metrics
+
+
+  # ── deploy_valkey.yaml (standalone mode, replica.enabled=false) ─────────────
+
+  - it: standalone startup probe uses direct exec when auth is disabled
+    set:
+      replica.enabled: false
+      auth.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command
+          value: ["valkey-cli", "ping"]
+
+  - it: standalone liveness probe uses direct exec when auth is disabled
+    set:
+      replica.enabled: false
+      auth.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command
+          value: ["valkey-cli", "ping"]
+
+  - it: standalone readiness probe is absent when disabled
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      probes.readiness.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: standalone readiness probe is rendered when enabled
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      probes.readiness.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: standalone probe includes TLS flags when tls.enabled
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      tls.enabled: true
+      tls.existingSecret: "my-tls-secret"
+      tls.caPublicKey: "ca.crt"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].startupProbe.exec.command
+          content: "--tls"
+
+  - it: standalone probe respects custom initialDelaySeconds
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      probes.startup.initialDelaySeconds: 30
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
+          value: 30
+
+  - it: standalone startup probe uses override when provided
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      probes.startup.override:
+        tcpSocket:
+          port: 6379
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.tcpSocket.port
+          value: 6379
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe.exec
+
+  - it: standalone metrics probes are not affected by probe config
+    set:
+      replica.enabled: false
+      auth.enabled: false
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].startupProbe.tcpSocket.port
+          value: metrics
