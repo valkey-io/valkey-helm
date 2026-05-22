@@ -127,22 +127,23 @@ spec:
             - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-          {{- $probeCmd := include "valkey.probeShellCommand" . }}
+          {{- $strictCmd := include "valkey.probeShellCommand" (dict "ctx" . "acceptLoading" false) }}
+          {{- $loadCmd   := include "valkey.probeShellCommand" (dict "ctx" . "acceptLoading" true)  }}
           startupProbe:
             exec:
-              command: [ "sh", "-c", {{ $probeCmd | quote }} ]
+              command: [ "sh", "-c", {{ $strictCmd | quote }} ]
             periodSeconds: {{ .Values.replica.startupProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.replica.startupProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.replica.startupProbe.failureThreshold }}
           livenessProbe:
             exec:
-              command: [ "sh", "-c", {{ $probeCmd | quote }} ]
+              command: [ "sh", "-c", {{ $loadCmd | quote }} ]
             periodSeconds: {{ .Values.replica.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.replica.livenessProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.replica.livenessProbe.failureThreshold }}
           readinessProbe:
             exec:
-              command: [ "sh", "-c", {{ $probeCmd | quote }} ]
+              command: [ "sh", "-c", {{ $strictCmd | quote }} ]
             periodSeconds: {{ .Values.replica.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.replica.readinessProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.replica.readinessProbe.failureThreshold }}

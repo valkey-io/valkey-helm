@@ -954,6 +954,67 @@ scenario_nodes_conf_ip_refresh() {
     pass "${name}"
 }
 
+# ---------------------------------------------------------------------------
+# Scenario: probe LOADING-policy is wired correctly on the live workload.
+#
+# The chart applies a tri-state policy:
+#   * startupProbe   — rejects LOADING (gate has teeth during initial RDB load)
+#   * livenessProbe  — accepts LOADING (don't kill a replica mid-full-resync)
+#   * readinessProbe — rejects LOADING (don't route traffic to a loading pod)
+#
+# Production regression that motivates this test: a replica in a 38 GB cluster
+# hit `cluster_state:fail` after a replication break triggered a full resync;
+# the post-resync in-memory load took ~57 s, and livenessProbe
+# (failureThreshold=6 * periodSeconds=10s = 60 s) killed the pod just before
+# load completed. The kill discarded the freshly-streamed RDB; the next pod
+# incarnation triggered yet another full resync. Crash-loop until intervention.
+#
+# helm-unittest already locks the rendered command strings in via
+# matchRegex; this functional test goes one layer further by asserting
+# that the live API objects in the cluster carry the right policy. A
+# template change that bypasses the helper would slip past unit tests
+# but get caught here.
+# ---------------------------------------------------------------------------
+scenario_probe_loading_policy() {
+    local name="probes carry tri-state LOADING policy on live workload"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    if ! hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=cluster.enabled=true \
+            --set=cluster.persistence.size=100Mi \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=0 \
+            --wait --timeout=300s >/dev/null; then
+        fail "${name}" "helm install failed"
+        return
+    fi
+
+    local startup liveness readiness
+    startup=$(kctl get statefulset "${RELEASE}" \
+        -o jsonpath='{.spec.template.spec.containers[0].startupProbe.exec.command[2]}')
+    liveness=$(kctl get statefulset "${RELEASE}" \
+        -o jsonpath='{.spec.template.spec.containers[0].livenessProbe.exec.command[2]}')
+    readiness=$(kctl get statefulset "${RELEASE}" \
+        -o jsonpath='{.spec.template.spec.containers[0].readinessProbe.exec.command[2]}')
+
+    if grep -q LOADING <<<"${startup}"; then
+        fail "${name}" "startupProbe must reject LOADING but accepts it: ${startup}"
+        cleanup_release; return
+    fi
+    if ! grep -q LOADING <<<"${liveness}"; then
+        fail "${name}" "livenessProbe must accept LOADING but rejects it: ${liveness}"
+        cleanup_release; return
+    fi
+    if grep -q LOADING <<<"${readiness}"; then
+        fail "${name}" "readinessProbe must reject LOADING but accepts it: ${readiness}"
+        cleanup_release; return
+    fi
+
+    cleanup_release
+    pass "${name}"
+}
+
 trap 'cleanup_release; cleanup_pair; cleanup_ambient_pair' EXIT
 
 scenario_aclconfig_metrics                       || true
@@ -964,6 +1025,7 @@ scenario_two_clusters_isolated                   || true
 scenario_isolation_off_lets_merge_happen         || true
 scenario_rollout_restart_orderly_failover        || true
 scenario_nodes_conf_ip_refresh                   || true
+scenario_probe_loading_policy                    || true
 scenario_ambient_authz_blocks_cross_release_meet || true
 scenario_ambient_ap_disabled_refused             || true
 scenario_ambient_shared_default_sa_refused       || true

@@ -322,32 +322,55 @@ empty mapping, to skip).
 
 {{/*
 Probe shell command. Returns the "sh -c" argument that pings valkey-server
-locally and accepts replies that prove the server is up AND serving.
+locally; the set of replies that count as healthy is parameterised.
+
+Args (passed as a dict):
+  ctx           — the parent context (.) so we can read .Values.tls
+  acceptLoading — whether to treat 'LOADING' as healthy
 
 Replies to PING are one of:
   PONG          — fully up, dataset loaded
   NOAUTH …      — up, requires auth (treat as proof of liveness — the
                   server is fully serving, we just lack credentials)
-  LOADING …     — TCP listener is up but the dataset is still being read
-                  from RDB/AOF; the server cannot serve traffic yet
+  LOADING …     — TCP listener is up but the dataset is being read from
+                  RDB/AOF; the server cannot serve traffic yet
 
-LOADING is deliberately NOT accepted, including by startupProbe. The
-whole reason startupProbe exists in Kubernetes (added in 1.16) is to
-gate liveness/readiness behind a slow-startup window — that gate has
-to actually fail during startup or the gate does nothing. With LOADING
-accepted by startupProbe, the probe passes the moment the TCP listener
-opens; kubelet switches immediately to livenessProbe (which does not
-accept LOADING) and the pod gets killed during load anyway, just
-attributed to liveness. Operators with multi-GB RDBs bump
-`startupProbe.failureThreshold` instead — that is the canonical
-Kubernetes pattern for slow loaders.
+The three probes have different jobs and therefore different LOADING
+policies:
+
+  startupProbe (acceptLoading=false): the gate that holds liveness and
+    readiness off until the pod is actually serving. If startupProbe
+    accepted LOADING it would pass the moment the TCP listener opens,
+    kubelet would switch to liveness/readiness immediately, and the
+    gate would do nothing useful. Operators with multi-GB RDBs bump
+    `startupProbe.failureThreshold` to extend the load window — the
+    canonical Kubernetes pattern for slow loaders.
+
+  livenessProbe (acceptLoading=true): runs only AFTER startupProbe
+    passes. After that point, LOADING almost always means a full-resync
+    from primary is in progress (replica fell behind, replication
+    backlog overflowed, etc.). Killing the pod here loses the in-flight
+    download work and forces yet another full resync, perpetuating the
+    very condition the kill was supposed to escape. A pod stuck loading
+    forever is rare and harmless compared to the kill-loop, so accept
+    LOADING and let the load complete.
+
+  readinessProbe (acceptLoading=false): decides whether the pod is in
+    the Service endpoint set. A LOADING pod can't serve traffic, so it
+    must be removed from the rotation until it's truly ready. This
+    leaves the pod 'Running 0/1' during full-resync — exactly right.
 */}}
 {{- define "valkey.probeShellCommand" -}}
+{{- $ctx := .ctx -}}
 {{- $pingCmd := "valkey-cli ping" -}}
-{{- if .Values.tls.enabled -}}
-{{- $pingCmd = printf "valkey-cli --tls --cacert /tls/%s ping" .Values.tls.caPublicKey -}}
+{{- if $ctx.Values.tls.enabled -}}
+{{- $pingCmd = printf "valkey-cli --tls --cacert /tls/%s ping" $ctx.Values.tls.caPublicKey -}}
 {{- end -}}
-{{- printf "%s 2>&1 | grep -qE 'PONG|NOAUTH'" $pingCmd -}}
+{{- $accepted := "PONG|NOAUTH" -}}
+{{- if .acceptLoading -}}
+{{- $accepted = "PONG|NOAUTH|LOADING" -}}
+{{- end -}}
+{{- printf "%s 2>&1 | grep -qE '%s'" $pingCmd $accepted -}}
 {{- end -}}
 
 {{/*

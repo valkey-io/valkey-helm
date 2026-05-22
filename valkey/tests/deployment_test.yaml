@@ -512,22 +512,22 @@ tests:
       - exists:
           path: spec.template.spec.containers[0].readinessProbe
 
-  # --- LOADING must NOT be accepted by ANY probe (slow-load handling) ---
-  - it: standalone startupProbe must reject LOADING (so the gate has teeth)
+  # --- Tri-state LOADING policy (see cluster_test.yaml for rationale) ---
+  - it: standalone startupProbe must reject LOADING
     template: templates/deploy_valkey.yaml
     asserts:
       - notMatchRegex:
           path: spec.template.spec.containers[0].startupProbe.exec.command[2]
           pattern: "LOADING"
 
-  - it: standalone livenessProbe must NOT accept LOADING
+  - it: standalone livenessProbe must accept LOADING (full-resync tolerance)
     template: templates/deploy_valkey.yaml
     asserts:
-      - notMatchRegex:
+      - matchRegex:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
-          pattern: "LOADING"
+          pattern: "PONG\\|NOAUTH\\|LOADING"
 
-  - it: standalone readinessProbe must NOT accept LOADING
+  - it: standalone readinessProbe must reject LOADING
     template: templates/deploy_valkey.yaml
     asserts:
       - notMatchRegex:

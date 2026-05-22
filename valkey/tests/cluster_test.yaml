@@ -1273,14 +1273,18 @@ tests:
       - exists:
           path: spec.template.spec.containers[0].readinessProbe
 
-  # --- LOADING must NOT be accepted by ANY probe (slow-load handling) ---
-  # Why: startupProbe's job in Kubernetes is to gate liveness/readiness
-  # behind a slow-startup window. If startupProbe accepted LOADING it
-  # would pass the moment the TCP listener opens, kubelet would switch
-  # to liveness, and the not-LOADING-tolerant liveness probe would kill
-  # the still-loading container — same crash loop, different attribution.
-  # The right knob for slow loaders is cluster.startupProbe.failureThreshold.
-  - it: cluster startupProbe must reject LOADING (so the gate has teeth)
+  # --- Tri-state LOADING policy ---
+  # startupProbe: rejects LOADING — must keep the gate honest so a slow
+  #   RDB load doesn't pass-through to liveness, which would then kill
+  #   the still-loading container. Operators bump
+  #   cluster.startupProbe.failureThreshold for slow loaders.
+  # livenessProbe: accepts LOADING — after startup passes, LOADING means
+  #   a full-resync from primary is in progress; killing the pod loses
+  #   the in-flight download and triggers another full resync,
+  #   perpetuating the kill-loop.
+  # readinessProbe: rejects LOADING — a LOADING pod can't serve traffic
+  #   and must drop out of the Service endpoint set until ready.
+  - it: cluster startupProbe must reject LOADING
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
@@ -1290,17 +1294,17 @@ tests:
           path: spec.template.spec.containers[0].startupProbe.exec.command[2]
           pattern: "LOADING"
 
-  - it: cluster livenessProbe must NOT accept LOADING
+  - it: cluster livenessProbe must accept LOADING (full-resync tolerance)
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
     template: templates/cluster-statefulset.yaml
     asserts:
-      - notMatchRegex:
+      - matchRegex:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
-          pattern: "LOADING"
+          pattern: "PONG\\|NOAUTH\\|LOADING"
 
-  - it: cluster readinessProbe must NOT accept LOADING
+  - it: cluster readinessProbe must reject LOADING
     set:
       cluster.enabled: true
       cluster.persistence.size: "5Gi"
