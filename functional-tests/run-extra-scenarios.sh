@@ -875,22 +875,29 @@ scenario_nodes_conf_ip_refresh() {
         cleanup_release; return
     fi
 
-    # Poison: replace every peer's IP token (the leading "ip:port@busport"
-    # of field 2) with 192.0.2.99:6379@16379. Then SIGKILL pid 1 so the
-    # graceful-shutdown handler doesn't rewrite nodes.conf during teardown.
-    # The poisoned file must reach disk; using cat-via-stdin keeps that
-    # write atomic from the pod's perspective.
-    log "Poisoning /data/nodes.conf on ${RELEASE}-0 and SIGKILLing valkey-server"
+    # Poison: replace every peer's IP token with 192.0.2.99 (RFC 5737
+    # documentation prefix — guaranteed unroutable). Critically, SIGSTOP
+    # valkey-server BEFORE rewriting nodes.conf — otherwise the live
+    # server's gossip tick (every cluster-node-timeout/2 ≈ 7.5 s) or any
+    # incoming gossip event from a peer would rewrite nodes.conf back to
+    # the real IPs, defeating the test. SIGSTOP freezes the process so
+    # it can't write the file; the subsequent force-delete sends SIGKILL
+    # which clears the STOP and tears the container down.
+    #
+    # Atomic file swap (write+mv) so a kill mid-write can't corrupt
+    # anything; sync forces the page cache to disk so the new pod's
+    # init container reads the poison from the PVC.
+    log "SIGSTOPping valkey-server and poisoning /data/nodes.conf on ${RELEASE}-0"
     # shellcheck disable=SC2016
     if ! kctl exec "${RELEASE}-0" -c "${RELEASE}" -- sh -c '
-            awk '"'"'
+            kill -STOP 1 \
+            && awk '"'"'
               # Pass through blank lines and the "vars currentEpoch ..." footer.
               /^$/ || /^vars / { print; next }
               # Field 2 is "<ip:port@busport>,<fqdn>,..." — replace ONLY
-              # the leading ip:port@busport, keep everything else. Skipping
-              # myself,* keeps Valkey from refusing to start with a
-              # mismatched cluster id, but the production bug ALSO had
-              # myself stale — the refresh block must handle it. Poison it.
+              # the leading ip:port@busport, keep everything else. The
+              # production bug had myself stale too, so we deliberately
+              # poison the myself line: the refresh block must handle it.
               {
                 # Split field 2 on commas: head is ip:port@busport, tail is rest.
                 n = split($2, a, ",")
@@ -904,21 +911,54 @@ scenario_nodes_conf_ip_refresh() {
               }
             '"'"' /data/nodes.conf >/data/nodes.conf.poisoned \
             && mv /data/nodes.conf.poisoned /data/nodes.conf \
-            && sync \
-            && kill -9 1
+            && sync
         '; then
-        # Even when SIGKILL itself succeeds, the exec returns non-zero
-        # because the connection drops with the pid. Don't fail here —
-        # check whether the pod actually got recreated below.
-        :
+        fail "${name}" "failed to poison /data/nodes.conf on ${RELEASE}-0"
+        cleanup_release; return
     fi
 
-    # The pod must be replaced. The StatefulSet controller will recreate
-    # it; wait for the new pod to be Ready (i.e. probe passes against the
-    # newly-started valkey-server, which means the init container ran).
-    log "Waiting for ${RELEASE}-0 to come back up"
+    # Capture the current pod UID so we can detect the replacement.
+    local old_uid
+    old_uid=$(kctl get pod "${RELEASE}-0" -o jsonpath='{.metadata.uid}' 2>/dev/null)
+    if [[ -z ${old_uid} ]]; then
+        fail "${name}" "could not read UID of ${RELEASE}-0 before delete"
+        cleanup_release; return
+    fi
+
+    # Force-delete the pod to trigger pod RECREATION (not in-place
+    # container restart). Init containers only run on new pods; SIGKILL
+    # of pid 1 alone leaves the same pod object in place and kubelet
+    # just restarts the container, skipping the init phase entirely.
+    # Force + grace=0 also bypasses the preStop hook and the graceful-
+    # shutdown handler, both of which would otherwise rewrite nodes.conf
+    # back to a clean state and defeat the test.
+    log "Force-deleting ${RELEASE}-0 to trigger pod recreation"
+    kctl delete pod "${RELEASE}-0" --force --grace-period=0 \
+        --wait=false >/dev/null 2>&1 || true
+
+    # Wait for the StatefulSet controller to create a NEW pod with a
+    # different UID (the old one may briefly persist in Terminating
+    # state).
+    log "Waiting for ${RELEASE}-0 to be recreated with a fresh UID"
+    local new_uid
+    for _ in $(seq 1 60); do
+        new_uid=$(kctl get pod "${RELEASE}-0" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)
+        if [[ -n ${new_uid} && ${new_uid} != "${old_uid}" ]]; then
+            break
+        fi
+        sleep 2
+    done
+    if [[ ${new_uid} == "${old_uid}" || -z ${new_uid} ]]; then
+        fail "${name}" "${RELEASE}-0 was not recreated (UID still ${old_uid:-empty})"
+        cleanup_release; return
+    fi
+
+    # Now wait for the new pod to be Ready (init container ran, probe
+    # passes — which only happens if cluster_state recovered, which only
+    # happens if the refresh worked).
+    log "Waiting for the new ${RELEASE}-0 (uid=${new_uid}) to be Ready"
     if ! kctl wait --for=condition=Ready "pod/${RELEASE}-0" --timeout=180s >/dev/null; then
-        fail "${name}" "${RELEASE}-0 never became Ready after SIGKILL"
+        fail "${name}" "${RELEASE}-0 never became Ready after recreation"
         cleanup_release; return
     fi
 
