@@ -386,6 +386,12 @@ cluster:
   initJob:
     podLabels: {}
     podAnnotations: {}
+    # Auto-cleanup window for the completed Job. Kubernetes deletes the
+    # Job (and its pod) this many seconds after it transitions to
+    # Complete or Failed via the TTL-after-finished controller. Set
+    # short enough to keep `kubectl get pods` clean across upgrades,
+    # long enough to grab `kubectl logs` for post-mortem if needed.
+    ttlSecondsAfterFinished: 300
 
 tls:
   # Enable TLS

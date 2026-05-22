@@ -98,6 +98,10 @@
                         },
                         "podAnnotations": {
                             "type": "object"
+                        },
+                        "ttlSecondsAfterFinished": {
+                            "type": "integer",
+                            "minimum": 0
                         }
                     }
                 },
