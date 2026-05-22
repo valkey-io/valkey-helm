@@ -472,8 +472,8 @@ tests:
       - exists:
           path: spec.template.spec.containers[0].readinessProbe
 
-  # --- LOADING must NOT be accepted by ANY probe (slow-load handling) ---
-  - it: replicated startupProbe must reject LOADING (so the gate has teeth)
+  # --- Tri-state LOADING policy (see cluster_test.yaml for rationale) ---
+  - it: replicated startupProbe must reject LOADING
     set:
       replica.enabled: true
       replica.persistence.size: "5Gi"
@@ -483,17 +483,17 @@ tests:
           path: spec.template.spec.containers[0].startupProbe.exec.command[2]
           pattern: "LOADING"
 
-  - it: replicated livenessProbe must NOT accept LOADING
+  - it: replicated livenessProbe must accept LOADING (full-resync tolerance)
     set:
       replica.enabled: true
       replica.persistence.size: "5Gi"
     template: templates/statefulset.yaml
     asserts:
-      - notMatchRegex:
+      - matchRegex:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
-          pattern: "LOADING"
+          pattern: "PONG\\|NOAUTH\\|LOADING"
 
-  - it: replicated readinessProbe must NOT accept LOADING
+  - it: replicated readinessProbe must reject LOADING
     set:
       replica.enabled: true
       replica.persistence.size: "5Gi"

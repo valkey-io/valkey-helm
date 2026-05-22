@@ -103,21 +103,28 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
-# Probe tuning. The probe command itself is fixed (valkey-cli ping with
-# TLS args matching tls.enabled, accepting only PONG and NOAUTH —
-# LOADING is rejected); only the timing knobs are configurable.
+# Probe tuning. The probe command is `valkey-cli ping` (with TLS args
+# when tls.enabled). Only the timing knobs are configurable.
 #
-# Why LOADING is rejected: a multi-GB RDB load on a fresh primary takes
-# minutes, during which every PING returns 'LOADING …'. startupProbe is
-# the canonical Kubernetes gate for this — it suppresses liveness and
-# readiness until it passes. So on a slow loader, bump
-# startupProbe.failureThreshold (or periodSeconds) so
-# failureThreshold * periodSeconds comfortably exceeds your worst-case
-# RDB load time. Default 30 * 5s = 150s suits small dev datasets only.
-# A 44 GB primary needs roughly 240 * 5s = 20 minutes.
+# The three probes have different LOADING policies:
 #
-# liveness and readiness keep their tight defaults — they only run
-# AFTER startupProbe has passed, by which point PONG is the right reply.
+#   startupProbe — does NOT accept LOADING, so it actually gates
+#     liveness/readiness during initial RDB load. On a slow loader, bump
+#     failureThreshold (or periodSeconds) so failureThreshold *
+#     periodSeconds comfortably exceeds your worst-case RDB load time.
+#     Default 30 * 5s = 150s suits small dev datasets only; a 44 GB
+#     primary needs roughly 240 * 5s = 20 minutes.
+#
+#   livenessProbe — DOES accept LOADING. After startup passes, LOADING
+#     almost always means a full-resync from primary is in progress
+#     (replica fell behind, replication backlog overflowed, etc.).
+#     Killing the pod here loses the in-flight download and forces yet
+#     another full resync, perpetuating the kill-loop. A pod stuck
+#     loading forever is rare and harmless compared to the kill-loop.
+#
+#   readinessProbe — does NOT accept LOADING. A LOADING pod can't serve
+#     traffic, so it must leave the Service endpoint set until it can.
+#     The pod sits 'Running 0/1' during full-resync — exactly right.
 startupProbe:
   periodSeconds: 5
   timeoutSeconds: 5
