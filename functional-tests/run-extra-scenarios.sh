@@ -805,6 +805,155 @@ scenario_rollout_restart_orderly_failover() {
     pass "${name}"
 }
 
+# ---------------------------------------------------------------------------
+# Scenario: cluster bus dials by IP, even with cluster-preferred-endpoint-type
+# =hostname. After a rolling restart, a pod whose nodes.conf has only stale
+# peer IPs becomes a stranded minority partition — every gossip attempt
+# times out against dead IPs and it never gets the chance to learn fresh
+# ones. The chart's init container re-resolves each peer's announced FQDN
+# and rewrites stale IPs in /data/nodes.conf before valkey-server starts;
+# this scenario proves that refresh works end-to-end.
+#
+# Reproduction:
+#   1) Install cluster (replicasPerShard=1) and wait for cluster_state:ok.
+#   2) Snapshot pod-0's nodes.conf to extract the real peer IPs.
+#   3) Poison: replace every peer IP in pod-0's nodes.conf with TEST-NET-1
+#      (192.0.2.0/24, RFC 5737 documentation range — guaranteed unroutable).
+#   4) SIGKILL valkey-server (pid 1) so the shutdown handler can't rewrite
+#      nodes.conf back to good state; the pod restarts via the StatefulSet
+#      controller.
+#   5) Wait for pod-0 to be Ready again. The init container's refresh
+#      block should re-resolve every peer FQDN and rewrite the IPs back
+#      to the real ones BEFORE valkey-server starts.
+#   6) Assert: pod-0's nodes.conf no longer contains 192.0.2.99 and
+#      cluster_state from pod-0's perspective is back to ok.
+#
+# Without the refresh: pod-0 boots, dials 192.0.2.99 on the bus, every
+# connection times out, cluster_state stays fail forever. So the
+# assertion has teeth — a regression that drops the refresh would leave
+# the poisoned IPs in place and cluster_state would never recover.
+# ---------------------------------------------------------------------------
+scenario_nodes_conf_ip_refresh() {
+    local name="cluster init refreshes stale nodes.conf IPs after pod restart"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    if ! hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=cluster.enabled=true \
+            --set=cluster.persistence.size=100Mi \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=1 \
+            --wait --timeout=300s >/dev/null; then
+        fail "${name}" "helm install failed"
+        return
+    fi
+    kctl wait --for=condition=complete "job/${RELEASE}-cluster-init" --timeout=300s >/dev/null
+
+    # Wait for gossip convergence — same rationale as the rollout
+    # scenario: the init Job returning doesn't mean every node has seen
+    # every PING/PONG yet, and we need cluster_state:ok before we can
+    # meaningfully assert it recovers.
+    local s
+    for _ in $(seq 1 60); do
+        s=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+            valkey-cli cluster info 2>/dev/null \
+            | awk -F: '/^cluster_state:/{print $2}' | tr -d '\r\n' || true)
+        [[ ${s} == ok ]] && break
+        sleep 2
+    done
+    if [[ ${s} != ok ]]; then
+        fail "${name}" "cluster_state=${s:-<unavailable>} after install (need ok before poisoning)"
+        cleanup_release; return
+    fi
+
+    # Snapshot the original nodes.conf for diagnostics and to confirm
+    # poisoning actually changes content.
+    local orig
+    orig=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- cat /data/nodes.conf 2>/dev/null)
+    if [[ -z ${orig} ]]; then
+        fail "${name}" "failed to read /data/nodes.conf on ${RELEASE}-0"
+        cleanup_release; return
+    fi
+
+    # Poison: replace every peer's IP token (the leading "ip:port@busport"
+    # of field 2) with 192.0.2.99:6379@16379. Then SIGKILL pid 1 so the
+    # graceful-shutdown handler doesn't rewrite nodes.conf during teardown.
+    # The poisoned file must reach disk; using cat-via-stdin keeps that
+    # write atomic from the pod's perspective.
+    log "Poisoning /data/nodes.conf on ${RELEASE}-0 and SIGKILLing valkey-server"
+    # shellcheck disable=SC2016
+    if ! kctl exec "${RELEASE}-0" -c "${RELEASE}" -- sh -c '
+            awk '"'"'
+              # Pass through blank lines and the "vars currentEpoch ..." footer.
+              /^$/ || /^vars / { print; next }
+              # Field 2 is "<ip:port@busport>,<fqdn>,..." — replace ONLY
+              # the leading ip:port@busport, keep everything else. Skipping
+              # myself,* keeps Valkey from refusing to start with a
+              # mismatched cluster id, but the production bug ALSO had
+              # myself stale — the refresh block must handle it. Poison it.
+              {
+                # Split field 2 on commas: head is ip:port@busport, tail is rest.
+                n = split($2, a, ",")
+                head = a[1]
+                tail = ""
+                for (i = 2; i <= n; i++) tail = tail "," a[i]
+                # Replace the IP only; preserve port and bus port.
+                sub(/^[0-9.]+/, "192.0.2.99", head)
+                $2 = head tail
+                print
+              }
+            '"'"' /data/nodes.conf >/data/nodes.conf.poisoned \
+            && mv /data/nodes.conf.poisoned /data/nodes.conf \
+            && sync \
+            && kill -9 1
+        '; then
+        # Even when SIGKILL itself succeeds, the exec returns non-zero
+        # because the connection drops with the pid. Don't fail here —
+        # check whether the pod actually got recreated below.
+        :
+    fi
+
+    # The pod must be replaced. The StatefulSet controller will recreate
+    # it; wait for the new pod to be Ready (i.e. probe passes against the
+    # newly-started valkey-server, which means the init container ran).
+    log "Waiting for ${RELEASE}-0 to come back up"
+    if ! kctl wait --for=condition=Ready "pod/${RELEASE}-0" --timeout=180s >/dev/null; then
+        fail "${name}" "${RELEASE}-0 never became Ready after SIGKILL"
+        cleanup_release; return
+    fi
+
+    # The post-restart nodes.conf must NOT contain the poison IP — the
+    # init container's refresh step replaces it before valkey-server
+    # boots. (Valkey itself only writes peers' IPs to nodes.conf as it
+    # observes them via gossip; without our pre-boot refresh, the boot
+    # would proceed against 192.0.2.99 and the file would stay poisoned.)
+    local after
+    after=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- cat /data/nodes.conf 2>/dev/null)
+    if grep -q '192\.0\.2\.99' <<<"${after}"; then
+        fail "${name}" "nodes.conf still contains poison IP 192.0.2.99 after restart — refresh did not run. Content: ${after}"
+        cleanup_release; return
+    fi
+
+    # And the cluster must be functional from pod-0's view — the whole
+    # point of the refresh is that it boots into a cluster it can talk
+    # to. Poll because gossip needs a moment to re-converge after the
+    # restart.
+    for _ in $(seq 1 60); do
+        s=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+            valkey-cli cluster info 2>/dev/null \
+            | awk -F: '/^cluster_state:/{print $2}' | tr -d '\r\n' || true)
+        [[ ${s} == ok ]] && break
+        sleep 2
+    done
+    if [[ ${s} != ok ]]; then
+        fail "${name}" "cluster_state=${s:-<unavailable>} after refresh (want ok). nodes.conf was: ${after}"
+        cleanup_release; return
+    fi
+
+    cleanup_release
+    pass "${name}"
+}
+
 trap 'cleanup_release; cleanup_pair; cleanup_ambient_pair' EXIT
 
 scenario_aclconfig_metrics                       || true
@@ -814,6 +963,7 @@ scenario_readiness_probe_exists                  || true
 scenario_two_clusters_isolated                   || true
 scenario_isolation_off_lets_merge_happen         || true
 scenario_rollout_restart_orderly_failover        || true
+scenario_nodes_conf_ip_refresh                   || true
 scenario_ambient_authz_blocks_cross_release_meet || true
 scenario_ambient_ap_disabled_refused             || true
 scenario_ambient_shared_default_sa_refused       || true
