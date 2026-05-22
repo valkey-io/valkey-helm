@@ -157,31 +157,26 @@ spec:
             - name: tcp-bus
               containerPort: {{ .Values.cluster.busPort }}
               protocol: TCP
-          {{- $pingCmd := "valkey-cli ping" }}
-          {{- if .Values.tls.enabled }}
-          {{- $pingCmd = printf "valkey-cli --tls --cacert /tls/%s ping" .Values.tls.caPublicKey }}
-          {{- end }}
-          {{- /* When auth is enforced the server returns 'NOAUTH Authentication required.' — accept it as proof of liveness. */}}
-          {{- $probeCmd := printf "%s 2>&1 | grep -qE 'PONG|NOAUTH'" $pingCmd }}
+          {{- $probeCmd := include "valkey.probeShellCommand" . }}
           startupProbe:
             exec:
               command: [ "sh", "-c", {{ $probeCmd | quote }} ]
             initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 5
-            failureThreshold: 30
+            periodSeconds: {{ .Values.cluster.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.cluster.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.cluster.startupProbe.failureThreshold }}
           livenessProbe:
             exec:
               command: [ "sh", "-c", {{ $probeCmd | quote }} ]
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 6
+            periodSeconds: {{ .Values.cluster.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.cluster.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.cluster.livenessProbe.failureThreshold }}
           readinessProbe:
             exec:
               command: [ "sh", "-c", {{ $probeCmd | quote }} ]
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
+            periodSeconds: {{ .Values.cluster.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.cluster.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.cluster.readinessProbe.failureThreshold }}
           {{- if and (gt (int .Values.cluster.replicasPerShard) 0) .Values.cluster.preStopFailover.enabled }}
           lifecycle:
             # Graceful CLUSTER FAILOVER on primary-pod shutdown. Gated on

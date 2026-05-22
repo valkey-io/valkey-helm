@@ -1,5 +1,24 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "probeTuning": {
+            "type": "object",
+            "properties": {
+                "periodSeconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "timeoutSeconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "failureThreshold": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        }
+    },
     "type": "object",
     "properties": {
         "affinity": {
@@ -73,6 +92,15 @@
                             "type": "boolean"
                         }
                     }
+                },
+                "startupProbe": {
+                    "$ref": "#/$defs/probeTuning"
+                },
+                "livenessProbe": {
+                    "$ref": "#/$defs/probeTuning"
+                },
+                "readinessProbe": {
+                    "$ref": "#/$defs/probeTuning"
                 },
                 "preStopFailover": {
                     "type": "object",
@@ -518,6 +546,15 @@
         "priorityClassName": {
             "type": "string"
         },
+        "startupProbe": {
+            "$ref": "#/$defs/probeTuning"
+        },
+        "livenessProbe": {
+            "$ref": "#/$defs/probeTuning"
+        },
+        "readinessProbe": {
+            "$ref": "#/$defs/probeTuning"
+        },
         "replica": {
             "type": "object",
             "properties": {
@@ -552,6 +589,15 @@
                 },
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"
+                },
+                "startupProbe": {
+                    "$ref": "#/$defs/probeTuning"
+                },
+                "livenessProbe": {
+                    "$ref": "#/$defs/probeTuning"
+                },
+                "readinessProbe": {
+                    "$ref": "#/$defs/probeTuning"
                 },
                 "replicas": {
                     "type": "integer"

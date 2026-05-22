@@ -1273,6 +1273,90 @@ tests:
       - exists:
           path: spec.template.spec.containers[0].readinessProbe
 
+  # --- LOADING must NOT be accepted by ANY probe (slow-load handling) ---
+  # Why: startupProbe's job in Kubernetes is to gate liveness/readiness
+  # behind a slow-startup window. If startupProbe accepted LOADING it
+  # would pass the moment the TCP listener opens, kubelet would switch
+  # to liveness, and the not-LOADING-tolerant liveness probe would kill
+  # the still-loading container — same crash loop, different attribution.
+  # The right knob for slow loaders is cluster.startupProbe.failureThreshold.
+  - it: cluster startupProbe must reject LOADING (so the gate has teeth)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: cluster livenessProbe must NOT accept LOADING
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: cluster readinessProbe must NOT accept LOADING
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "LOADING"
+
+  # Tuning knobs flow through to the rendered probe. Operators with
+  # large datasets bump cluster.startupProbe.failureThreshold to extend
+  # the load window without affecting steady-state probes.
+  - it: cluster.startupProbe overrides should land on the startupProbe
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.startupProbe.periodSeconds: 10
+      cluster.startupProbe.timeoutSeconds: 8
+      cluster.startupProbe.failureThreshold: 240
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
+          value: 8
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 240
+      # And the overrides must be probe-scoped: liveness/readiness keep
+      # their defaults.
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 6
+
+  - it: cluster.livenessProbe overrides should land on the livenessProbe only
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.livenessProbe.failureThreshold: 12
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 12
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3
+
   # Regression: extraContainers and extraVolumes were unwired in cluster mode.
   - it: should wire extraContainers and extraVolumes through in cluster mode
     set:

@@ -403,6 +403,54 @@ tests:
       - exists:
           path: spec.template.spec.containers[0].readinessProbe
 
+  # --- LOADING must NOT be accepted by ANY probe (slow-load handling) ---
+  - it: replicated startupProbe must reject LOADING (so the gate has teeth)
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: replicated livenessProbe must NOT accept LOADING
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: replicated readinessProbe must NOT accept LOADING
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: replica.startupProbe overrides should land on the startupProbe only
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.startupProbe.failureThreshold: 240
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 240
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 6
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3
+
   # --- Istio ambient mode ---
   - it: should add ambient dataplane-mode label when istio.mode=ambient
     set:

@@ -98,6 +98,34 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
+# Probe tuning. The probe command itself is fixed (valkey-cli ping with
+# TLS args matching tls.enabled, accepting only PONG and NOAUTH —
+# LOADING is rejected); only the timing knobs are configurable.
+#
+# Why LOADING is rejected: a multi-GB RDB load on a fresh primary takes
+# minutes, during which every PING returns 'LOADING …'. startupProbe is
+# the canonical Kubernetes gate for this — it suppresses liveness and
+# readiness until it passes. So on a slow loader, bump
+# startupProbe.failureThreshold (or periodSeconds) so
+# failureThreshold * periodSeconds comfortably exceeds your worst-case
+# RDB load time. Default 30 * 5s = 150s suits small dev datasets only.
+# A 44 GB primary needs roughly 240 * 5s = 20 minutes.
+#
+# liveness and readiness keep their tight defaults — they only run
+# AFTER startupProbe has passed, by which point PONG is the right reply.
+startupProbe:
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 30
+livenessProbe:
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+readinessProbe:
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
 # Resource limits/requests for init containers
 initResources: {}
   # Example:
@@ -261,6 +289,22 @@ replica:
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
   persistentVolumeClaimRetentionPolicy: {}
 
+  # Probe tuning for replicated (non-cluster) StatefulSet pods. Same
+  # rationale as the top-level startupProbe block — bump failureThreshold
+  # for large RDBs.
+  startupProbe:
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+  livenessProbe:
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
 # Cluster mode configuration for Valkey Cluster (sharded deployment)
 # Note: cluster.enabled and replica.enabled are mutually exclusive
 cluster:
@@ -360,6 +404,24 @@ cluster:
   # alone do NOT provide isolation.
   isolation:
     enabled: true
+
+  # Probe tuning for cluster-mode StatefulSet pods. Same rationale as the
+  # top-level startupProbe block — bump failureThreshold for large RDBs.
+  # In cluster mode, replicas catch up via PSYNC + RDB transfer on (re)
+  # connect, so the post-restart load window can be just as long as for
+  # standalone replicated mode.
+  startupProbe:
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+  livenessProbe:
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
 
   # PersistentVolumeClaim retention policy for StatefulSet
   # Controls when PVCs are deleted (requires Kubernetes 1.23+)

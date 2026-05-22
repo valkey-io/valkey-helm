@@ -114,30 +114,25 @@ spec:
             - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-          {{- $pingCmd := "valkey-cli ping" }}
-          {{- if .Values.tls.enabled }}
-          {{- $pingCmd = printf "valkey-cli --tls --cacert /tls/%s ping" .Values.tls.caPublicKey }}
-          {{- end }}
-          {{- /* When auth is enforced the server returns 'NOAUTH Authentication required.' — accept it as proof of liveness. */}}
-          {{- $probeCmd := printf "%s 2>&1 | grep -qE 'PONG|NOAUTH'" $pingCmd }}
+          {{- $probeCmd := include "valkey.probeShellCommand" . }}
           startupProbe:
             exec:
               command: [ "sh", "-c", {{ $probeCmd | quote }} ]
-            periodSeconds: 5
-            timeoutSeconds: 5
-            failureThreshold: 30
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
           livenessProbe:
             exec:
               command: [ "sh", "-c", {{ $probeCmd | quote }} ]
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 6
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
           readinessProbe:
             exec:
               command: [ "sh", "-c", {{ $probeCmd | quote }} ]
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

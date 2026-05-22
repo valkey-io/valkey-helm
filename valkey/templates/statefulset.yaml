@@ -127,30 +127,25 @@ spec:
             - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-          {{- $pingCmd := "valkey-cli ping" }}
-          {{- if .Values.tls.enabled }}
-          {{- $pingCmd = printf "valkey-cli --tls --cacert /tls/%s ping" .Values.tls.caPublicKey }}
-          {{- end }}
-          {{- /* When auth is enforced the server returns 'NOAUTH Authentication required.' — accept it as proof of liveness. */}}
-          {{- $probeCmd := printf "%s 2>&1 | grep -qE 'PONG|NOAUTH'" $pingCmd }}
+          {{- $probeCmd := include "valkey.probeShellCommand" . }}
           startupProbe:
             exec:
               command: [ "sh", "-c", {{ $probeCmd | quote }} ]
-            periodSeconds: 5
-            timeoutSeconds: 5
-            failureThreshold: 30
+            periodSeconds: {{ .Values.replica.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.replica.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.replica.startupProbe.failureThreshold }}
           livenessProbe:
             exec:
               command: [ "sh", "-c", {{ $probeCmd | quote }} ]
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 6
+            periodSeconds: {{ .Values.replica.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.replica.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.replica.livenessProbe.failureThreshold }}
           readinessProbe:
             exec:
               command: [ "sh", "-c", {{ $probeCmd | quote }} ]
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
+            periodSeconds: {{ .Values.replica.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.replica.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.replica.readinessProbe.failureThreshold }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
