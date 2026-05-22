@@ -186,3 +186,54 @@ tests:
           path: data["init.sh"]
           # The escape pass: s/\\/\\\\/g; s/"/\\"/g
           pattern: "REPL_PASSWORD_ESC=\\$\\(printf '%s' \"\\$REPL_PASSWORD\""
+
+  # --- nodes.conf IP refresh on cluster pod restart ---
+  # Cluster bus gossip dials by IP, even with cluster-preferred-endpoint-type=
+  # hostname. After a rolling restart pod IPs change, and a pod whose
+  # nodes.conf has only stale IPs becomes a stranded minority partition.
+  # The refresh block re-resolves each peer's announced FQDN and rewrites
+  # the IP before valkey-server starts.
+  - it: cluster mode should emit a nodes.conf IP refresh block
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "NODES_CONF=/data/nodes\\.conf"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "getent hosts \"\\$fqdn\""
+      # Atomic swap so a kill mid-rewrite can't corrupt the file.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'mv "\$TMP" "\$NODES_CONF"'
+      # No-op when nodes.conf doesn't exist (first boot).
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "first boot, nothing to refresh"
+      # 'vars' line at EOF must be passed through verbatim — it's
+      # currentEpoch / lastVoteEpoch state and corrupting it would force
+      # a fresh cluster join. The case-pattern matches an empty line
+      # OR a line starting with 'vars '.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "''\\|vars"
+
+  - it: non-cluster mode should NOT emit the nodes.conf refresh block
+    # Standalone and replicated modes have no nodes.conf — emitting the
+    # block in their init.sh would just be dead code and could log
+    # confusing "first boot" messages on every restart.
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "NODES_CONF=/data/nodes\\.conf"
+
+  - it: replicated (non-cluster) mode should NOT emit the nodes.conf refresh block
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "NODES_CONF=/data/nodes\\.conf"
