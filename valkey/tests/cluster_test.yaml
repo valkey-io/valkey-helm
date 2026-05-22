@@ -766,6 +766,38 @@ tests:
           path: spec.template.metadata.labels["sidecar.istio.io/inject"]
           value: "true"
 
+  - it: Job should default ttlSecondsAfterFinished to 300 (auto-cleanup window)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 300
+
+  - it: cluster.initJob.ttlSecondsAfterFinished should be configurable
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.ttlSecondsAfterFinished: 60
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 60
+
+  - it: cluster.initJob.ttlSecondsAfterFinished=0 deletes immediately on completion
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.ttlSecondsAfterFinished: 0
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 0
+
   - it: global podLabels still flow through to the Job when initJob.podLabels does not collide
     # Don't shadow the existing pre-feature behaviour: a user who has set
     # only the global podLabels gets them on the Job too.
