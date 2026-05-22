@@ -322,7 +322,8 @@ cluster:
   #   * the pod is already a replica (nothing to fail over);
   #   * the shard has no replicas (replicasPerShard=0 — nothing to fail
   #     over TO);
-  #   * cluster_state is not ok (don't shuffle roles on a sick cluster).
+  #   * the pod has no healthy replica of its own (FAILOVER would target
+  #     nothing).
   # The hook is strictly best-effort — any error path falls through to the
   # normal SIGTERM, which is the pre-existing (suboptimal) behaviour.
   preStopFailover:
@@ -364,6 +365,27 @@ cluster:
   # Controls when PVCs are deleted (requires Kubernetes 1.23+)
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
   persistentVolumeClaimRetentionPolicy: {}
+
+  # Override surface for the cluster-init Job pod only. Layered on top of
+  # the chart-wide podLabels / podAnnotations (these win on key collision)
+  # and merged with the chart-computed mesh labels, so the same opt-out
+  # mechanics that apply to the data pods are still in force unless you
+  # explicitly veto a key here.
+  #
+  # The intended use case is excluding the short-lived bootstrap Job from
+  # cluster-wide pod admission webhooks — observability sidecars, mesh
+  # proxies pulled in by namespace labels, policy agents, etc. — that are
+  # appropriate for long-running data pods but turn the Job into a
+  # never-completing batch task. Because the Job is a Helm post-install
+  # hook with backoffLimit=6, an injected sidecar that never exits means
+  # `helm install --wait` blocks until timeout and the chart fails to
+  # converge.
+  #
+  # Both maps default empty; with no overrides set the Job pod inherits
+  # the chart-wide values exactly as it did before this surface existed.
+  initJob:
+    podLabels: {}
+    podAnnotations: {}
 
 tls:
   # Enable TLS
