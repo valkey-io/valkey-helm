@@ -573,6 +573,43 @@ tests:
       - exists:
           path: spec.template.spec.containers[0].readinessProbe
 
+  # --- LOADING must NOT be accepted by ANY probe (slow-load handling) ---
+  - it: standalone startupProbe must reject LOADING (so the gate has teeth)
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: standalone livenessProbe must NOT accept LOADING
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: standalone readinessProbe must NOT accept LOADING
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: top-level startupProbe overrides should land on the startupProbe only
+    set:
+      startupProbe.failureThreshold: 240
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 240
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 6
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3
+
   # --- Istio ambient mode ---
   - it: should add ambient dataplane-mode label when istio.mode=ambient
     set:

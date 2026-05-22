@@ -321,6 +321,36 @@ empty mapping, to skip).
 {{- end -}}
 
 {{/*
+Probe shell command. Returns the "sh -c" argument that pings valkey-server
+locally and accepts replies that prove the server is up AND serving.
+
+Replies to PING are one of:
+  PONG          — fully up, dataset loaded
+  NOAUTH …      — up, requires auth (treat as proof of liveness — the
+                  server is fully serving, we just lack credentials)
+  LOADING …     — TCP listener is up but the dataset is still being read
+                  from RDB/AOF; the server cannot serve traffic yet
+
+LOADING is deliberately NOT accepted, including by startupProbe. The
+whole reason startupProbe exists in Kubernetes (added in 1.16) is to
+gate liveness/readiness behind a slow-startup window — that gate has
+to actually fail during startup or the gate does nothing. With LOADING
+accepted by startupProbe, the probe passes the moment the TCP listener
+opens; kubelet switches immediately to livenessProbe (which does not
+accept LOADING) and the pod gets killed during load anyway, just
+attributed to liveness. Operators with multi-GB RDBs bump
+`startupProbe.failureThreshold` instead — that is the canonical
+Kubernetes pattern for slow loaders.
+*/}}
+{{- define "valkey.probeShellCommand" -}}
+{{- $pingCmd := "valkey-cli ping" -}}
+{{- if .Values.tls.enabled -}}
+{{- $pingCmd = printf "valkey-cli --tls --cacert /tls/%s ping" .Values.tls.caPublicKey -}}
+{{- end -}}
+{{- printf "%s 2>&1 | grep -qE 'PONG|NOAUTH'" $pingCmd -}}
+{{- end -}}
+
+{{/*
 The valkey ServiceAccount name as an Istio SPIFFE principal.
 Used by the AuthorizationPolicy to pin the cluster-bus port to same-release
 pods cryptographically rather than by pod-selector IP.
