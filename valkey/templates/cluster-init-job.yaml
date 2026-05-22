@@ -18,18 +18,21 @@ spec:
     metadata:
       labels:
         {{- /*
-        Single merged label set (see valkey.podLabels helper). In ambient
-        mode the Job pod picks up the dataplane-mode label automatically so
-        ztunnel captures its outbound connections to the Valkey pods;
-        without it the Job speaks plaintext against STRICT mTLS and hangs
-        until backoffLimit. In sidecar mode the pod carries an explicit
-        sidecar.istio.io/inject=true so the Job works on namespaces that
-        don't carry the injection label.
+        Job-scoped label set (see valkey.initJobPodLabels helper). Same
+        layering as the data-pod helper, plus `cluster.initJob.podLabels`
+        on top so operators can opt the short-lived batch Job out of
+        global label-driven injectors (sidecar metrics agents, etc.)
+        without affecting the long-running data pods. In ambient mode
+        the dataplane-mode label is still emitted automatically so
+        ztunnel captures the Job's outbound connections; in sidecar mode
+        sidecar.istio.io/inject=true is emitted so the Job works on
+        namespaces that don't carry the injection label.
         */}}
-        {{- include "valkey.podLabels" . | nindent 8 }}
-      {{- with .Values.podAnnotations }}
+        {{- include "valkey.initJobPodLabels" . | nindent 8 }}
+      {{- $annotations := include "valkey.initJobPodAnnotations" . }}
+      {{- with $annotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
+        {{- . | nindent 8 }}
       {{- end }}
     spec:
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}

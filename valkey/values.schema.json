@@ -90,6 +90,17 @@
                     "type": "integer",
                     "minimum": 1
                 },
+                "initJob": {
+                    "type": "object",
+                    "properties": {
+                        "podLabels": {
+                            "type": "object"
+                        },
+                        "podAnnotations": {
+                            "type": "object"
+                        }
+                    }
+                },
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"
                 }

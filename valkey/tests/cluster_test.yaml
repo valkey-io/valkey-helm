@@ -637,6 +637,154 @@ tests:
           path: spec.template.metadata.annotations["custom-annotation"]
           value: my-annotation
 
+  # --- cluster.initJob.podLabels / .podAnnotations override surface ---
+  # Lets operators veto a globally-injected sidecar (metrics agent, mesh
+  # proxy via namespace label, policy webhook, etc.) on the short-lived
+  # cluster-init Job without affecting the long-running data pods.
+
+  - it: Job should NOT have annotations key when none are set
+    # Important for Helm/`with` semantics: an empty mapping is not the
+    # same as an absent key; preserving the absent-key shape keeps the
+    # rendered manifest identical to its pre-feature state when no
+    # overrides are configured.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations
+
+  - it: cluster.initJob.podLabels should land on the Job pod
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podLabels:
+        my-injector/skip: "true"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["my-injector/skip"]
+          value: "true"
+
+  - it: cluster.initJob.podAnnotations should land on the Job pod
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podAnnotations:
+        sidecar-injector.example.com/skip: "true"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["sidecar-injector.example.com/skip"]
+          value: "true"
+
+  - it: cluster.initJob.podLabels should NOT leak onto the data StatefulSet
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podLabels:
+        my-injector/skip: "true"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["my-injector/skip"]
+
+  - it: cluster.initJob.podAnnotations should NOT leak onto the data StatefulSet
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podAnnotations:
+        sidecar-injector.example.com/skip: "true"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["sidecar-injector.example.com/skip"]
+
+  - it: cluster.initJob.podLabels should win over global podLabels on key collision
+    # Same key, different values. The Job-scoped layer must override the
+    # global one so an opt-out can be expressed Job-only.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      podLabels:
+        observe.example.com/inject: "true"
+      cluster.initJob.podLabels:
+        observe.example.com/inject: "false"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["observe.example.com/inject"]
+          value: "false"
+
+  - it: cluster.initJob.podAnnotations should win over global podAnnotations on key collision
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      podAnnotations:
+        sidecar.example.com/inject: "true"
+      cluster.initJob.podAnnotations:
+        sidecar.example.com/inject: "false"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["sidecar.example.com/inject"]
+          value: "false"
+
+  - it: cluster.initJob.podLabels should be able to veto chart-emitted istio sidecar inject label
+    # Real-world repro: in sidecar mode the chart emits
+    # sidecar.istio.io/inject=true on every pod. Operators may want the
+    # Job to skip injection (e.g. their own scrape-only inspector
+    # mid-rollout, or to avoid the Job-hangs-on-sidecar problem). The
+    # override must sit at the END of the merge so it can replace a
+    # chart-computed mesh label, not just a user-supplied one.
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podLabels:
+        sidecar.istio.io/inject: "false"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "false"
+
+  - it: cluster.initJob overrides do NOT veto the chart-emitted mesh label on the data StatefulSet
+    # Symmetric guard for the test above — proves the veto is Job-only,
+    # so flipping it in the Job can't accidentally take the data pods
+    # out of the mesh.
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podLabels:
+        sidecar.istio.io/inject: "false"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "true"
+
+  - it: global podLabels still flow through to the Job when initJob.podLabels does not collide
+    # Don't shadow the existing pre-feature behaviour: a user who has set
+    # only the global podLabels gets them on the Job too.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      podLabels:
+        team: platform
+      cluster.initJob.podLabels:
+        my-injector/skip: "true"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.team
+          value: platform
+      - equal:
+          path: spec.template.metadata.labels["my-injector/skip"]
+          value: "true"
+
   - it: Job should include node selector when set
     set:
       cluster.enabled: true

@@ -284,6 +284,43 @@ e.g. `sidecar.istio.io/inject=false` via podLabels alongside
 {{- end -}}
 
 {{/*
+Job-pod labels: same merge as valkey.podLabels with one extra layer for
+`cluster.initJob.podLabels` applied last (so it wins). Lets operators
+veto a globally-injected metrics/observability sidecar on the cluster-
+init Job — which is a short-lived, exit-on-success batch task — without
+having to disable the same injector for the long-running data pods.
+mergeOverwrite handles the deep-merge and the no-duplicate-keys
+guarantee just like the data-pod helper.
+*/}}
+{{- define "valkey.initJobPodLabels" -}}
+{{- $selector := fromYaml (include "valkey.selectorLabels" .) -}}
+{{- $common   := .Values.commonLabels | default dict -}}
+{{- $mesh     := fromYaml (include "valkey.istioPodLabels" .) | default dict -}}
+{{- $user     := .Values.podLabels    | default dict -}}
+{{- $jobUser  := (.Values.cluster.initJob).podLabels | default dict -}}
+{{- toYaml (mergeOverwrite $selector $common $mesh $user $jobUser) -}}
+{{- end -}}
+
+{{/*
+Job-pod annotations: same shape as the global .Values.podAnnotations,
+with `cluster.initJob.podAnnotations` merged on top so it wins on
+collision. Same opt-out rationale as valkey.initJobPodLabels — some
+sidecar injectors read annotations rather than labels.
+
+Emits nothing when the merged map is empty so the Job's metadata block
+collapses cleanly (Helm/`with` semantics expect an absent key, not an
+empty mapping, to skip).
+*/}}
+{{- define "valkey.initJobPodAnnotations" -}}
+{{- $global := .Values.podAnnotations | default dict -}}
+{{- $job    := (.Values.cluster.initJob).podAnnotations | default dict -}}
+{{- $merged := mergeOverwrite (deepCopy $global) $job -}}
+{{- if $merged -}}
+{{- toYaml $merged -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 The valkey ServiceAccount name as an Istio SPIFFE principal.
 Used by the AuthorizationPolicy to pin the cluster-bus port to same-release
 pods cryptographically rather than by pod-selector IP.
