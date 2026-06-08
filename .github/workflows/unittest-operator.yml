@@ -1,16 +1,16 @@
-name: Test Charts
+name: Test valkey-operator chart
 
 on:
   pull_request:
     paths:
-      - "valkey/**"
-      - ".github/workflows/unittest.yml"
+      - "valkey-operator/**"
+      - ".github/workflows/unittest-operator.yml"
   push:
     branches:
       - main
     paths:
-      - "valkey/**"
-      - ".github/workflows/unittest.yml"
+      - "valkey-operator/**"
+      - ".github/workflows/unittest-operator.yml"
   workflow_dispatch:
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
         run: helm plugin install https://github.com/helm-unittest/helm-unittest --version 1.0.2
 
       - name: Lint chart
-        run: helm lint ./valkey
+        run: helm lint ./valkey-operator
 
       - name: Run unit tests
-        run: helm unittest ./valkey
+        run: helm unittest ./valkey-operator

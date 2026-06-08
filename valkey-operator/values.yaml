@@ -1,0 +1,121 @@
+global:
+  # Override the image registry for all images
+  imageRegistry: ""
+  # Global image pull secrets
+  imagePullSecrets: []
+
+image:
+  # Image registry
+  registry: "ghcr.io"
+  # Operator container image repository
+  repository: valkey-io/valkey-operator
+  # Image tag (leave empty to use .Chart.AppVersion)
+  tag: ""
+  # Image pull policy (Always, IfNotPresent, Never)
+  pullPolicy: IfNotPresent
+
+# List of image pull secrets (for private registries)
+imagePullSecrets: []
+
+# Override the default name of resources
+nameOverride: ""
+# Override the full name of resources
+fullnameOverride: ""
+
+# Number of operator replicas
+replicaCount: 1
+
+serviceAccount:
+  # Create a service account for the operator
+  create: true
+  # Name of an existing service account to use (if create: false)
+  name: ""
+  # Annotations to add to the service account
+  annotations: {}
+  # Labels to add to the service account
+  labels: {}
+  # Whether to automount the service account token
+  automount: true
+
+rbac:
+  # Create ClusterRole and ClusterRoleBinding for the operator
+  create: true
+
+manager:
+  # Leader election prevents multiple operator instances from conflicting
+  leaderElection:
+    enabled: true
+  # Additional command-line arguments for the operator binary
+  args: []
+
+# Resource limits/requests for the operator container
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+# Security context for the pod (applies to all containers)
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Security context for the operator container
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# nodeSelector:
+#   kubernetes.io/os: linux
+nodeSelector: {}
+
+# tolerations:
+#   - key: "node-role.kubernetes.io/control-plane"
+#     operator: "Exists"
+#     effect: "NoSchedule"
+tolerations: []
+
+# affinity:
+#   nodeAffinity:
+#     requiredDuringSchedulingIgnoredDuringExecution:
+#       nodeSelectorTerms:
+#         - matchExpressions:
+#             - key: kubernetes.io/arch
+#               operator: In
+#               values:
+#                 - amd64
+#                 - arm64
+affinity: {}
+
+# Annotations for pods
+podAnnotations: {}
+# Labels for pods
+podLabels: {}
+# Labels to add to all resources
+commonLabels: {}
+
+# TODO: metrics auth RBAC (metrics-auth-role, metrics-reader-role)
+# TODO: prometheus ServiceMonitor
+# TODO: networkPolicy
+# TODO: aggregated ClusterRoles (admin/editor/viewer)
+# TODO: topologySpreadConstraints
+# TODO: podDisruptionBudget
+
+metrics:
+  # Enable the metrics endpoint
+  enabled: true
+  # Port for the metrics endpoint
+  port: 8443
+  service:
+    # Service type for the metrics service
+    type: ClusterIP
+    # Annotations for the metrics service
+    annotations: {}
+    # Labels for the metrics service
+    labels: {}
