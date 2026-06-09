@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0
+
+### Added
+
+- Add `topologySpreadConstraints`, `imagePullSecrets`, and `podDisruptionBudget` fields to ValkeyCluster CRD.
+- Add `config`, `imagePullSecrets`, and `topologySpreadConstraints` fields to ValkeyNode CRD.
+- Add `poddisruptionbudgets` permissions to ClusterRole RBAC.
+
+> **Note:** CRDs are not upgraded automatically by Helm. See [UPGRADE.md](UPGRADE.md) for manual steps required before upgrading to this version.
+
 ## 0.1.1
 
 ### Fixed
