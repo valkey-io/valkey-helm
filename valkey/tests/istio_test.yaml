@@ -1,0 +1,640 @@
+suite: istio service mesh integration
+templates:
+  - templates/istio-peer-authentication.yaml
+  - templates/istio-destination-rule.yaml
+tests:
+  # --- Feature flag tests ---
+  - it: should not create PeerAuthentication when istio is disabled
+    set:
+      istio.enabled: false
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create DestinationRule when istio is disabled
+    set:
+      istio.enabled: false
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create PeerAuthentication when istio is enabled
+    set:
+      istio.enabled: true
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PeerAuthentication
+      - isAPIVersion:
+          of: security.istio.io/v1
+
+  - it: should create DestinationRule when istio is enabled
+    set:
+      istio.enabled: true
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: DestinationRule
+      - isAPIVersion:
+          of: networking.istio.io/v1
+
+  # --- PeerAuthentication tests ---
+  - it: PeerAuthentication should target Valkey pods via selector labels
+    set:
+      istio.enabled: true
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: PeerAuthentication should default to STRICT mTLS mode
+    set:
+      istio.enabled: true
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: spec.mtls.mode
+          value: STRICT
+
+  - it: PeerAuthentication should allow overriding mTLS mode to PERMISSIVE
+    set:
+      istio.enabled: true
+      istio.peerAuthentication.mode: PERMISSIVE
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: spec.mtls.mode
+          value: PERMISSIVE
+
+  - it: PeerAuthentication should allow overriding mTLS mode to DISABLE
+    set:
+      istio.enabled: true
+      istio.peerAuthentication.mode: DISABLE
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: spec.mtls.mode
+          value: DISABLE
+
+  - it: PeerAuthentication should allow overriding mTLS mode to UNSET
+    set:
+      istio.enabled: true
+      istio.peerAuthentication.mode: UNSET
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: spec.mtls.mode
+          value: UNSET
+
+  - it: PeerAuthentication should have correct name
+    set:
+      istio.enabled: true
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey
+
+  - it: PeerAuthentication should include chart labels
+    set:
+      istio.enabled: true
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["helm.sh/chart"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+
+  - it: PeerAuthentication should include custom labels
+    set:
+      istio.enabled: true
+      istio.peerAuthentication.labels:
+        security.example.com/policy: strict
+        team: platform
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["security.example.com/policy"]
+          value: strict
+      - equal:
+          path: metadata.labels["team"]
+          value: platform
+
+  - it: PeerAuthentication should include custom annotations
+    set:
+      istio.enabled: true
+      istio.peerAuthentication.annotations:
+        security.example.com/reviewed: "true"
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["security.example.com/reviewed"]
+          value: "true"
+
+  - it: PeerAuthentication should not have annotations when none are set
+    set:
+      istio.enabled: true
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - notExists:
+          path: metadata.annotations
+
+  - it: PeerAuthentication should include common labels when set
+    set:
+      istio.enabled: true
+      commonLabels:
+        env: production
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: production
+
+  # --- DestinationRule tests (main service) ---
+  - it: DestinationRule should target the main service host in standalone mode
+    set:
+      istio.enabled: true
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - equal:
+          path: spec.host
+          value: RELEASE-NAME-valkey.NAMESPACE.svc.cluster.local
+
+  - it: DestinationRule should default to ISTIO_MUTUAL TLS mode
+    set:
+      istio.enabled: true
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - equal:
+          path: spec.trafficPolicy.tls.mode
+          value: ISTIO_MUTUAL
+
+  - it: DestinationRule should allow overriding TLS mode
+    set:
+      istio.enabled: true
+      istio.destinationRule.mode: MUTUAL
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - equal:
+          path: spec.trafficPolicy.tls.mode
+          value: MUTUAL
+
+  - it: DestinationRule should allow SIMPLE TLS mode
+    set:
+      istio.enabled: true
+      istio.destinationRule.mode: SIMPLE
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - equal:
+          path: spec.trafficPolicy.tls.mode
+          value: SIMPLE
+
+  - it: DestinationRule should allow DISABLE TLS mode
+    set:
+      istio.enabled: true
+      istio.destinationRule.mode: DISABLE
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - equal:
+          path: spec.trafficPolicy.tls.mode
+          value: DISABLE
+
+  - it: DestinationRule should have correct name
+    set:
+      istio.enabled: true
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey
+
+  - it: DestinationRule should include chart labels
+    set:
+      istio.enabled: true
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["helm.sh/chart"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+
+  - it: DestinationRule should include custom labels
+    set:
+      istio.enabled: true
+      istio.destinationRule.labels:
+        networking.example.com/managed: "true"
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["networking.example.com/managed"]
+          value: "true"
+
+  - it: DestinationRule should include custom annotations
+    set:
+      istio.enabled: true
+      istio.destinationRule.annotations:
+        networking.example.com/reviewed: "true"
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["networking.example.com/reviewed"]
+          value: "true"
+
+  - it: DestinationRule should not have annotations when none are set
+    set:
+      istio.enabled: true
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - notExists:
+          path: metadata.annotations
+
+  - it: DestinationRule should use custom cluster domain
+    set:
+      istio.enabled: true
+      clusterDomain: my.custom.domain
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - equal:
+          path: spec.host
+          value: RELEASE-NAME-valkey.NAMESPACE.svc.my.custom.domain
+
+  # --- DestinationRule headless service tests (cluster mode) ---
+  - it: should create headless DestinationRule when cluster mode is enabled
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: headless DestinationRule should target the headless service host
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: DestinationRule
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-headless
+      - equal:
+          path: spec.host
+          value: RELEASE-NAME-valkey-headless.NAMESPACE.svc.cluster.local
+
+  - it: headless DestinationRule should use same TLS mode as main
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.trafficPolicy.tls.mode
+          value: ISTIO_MUTUAL
+
+  - it: headless DestinationRule should respect overridden TLS mode
+    set:
+      istio.enabled: true
+      istio.destinationRule.mode: MUTUAL
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.trafficPolicy.tls.mode
+          value: MUTUAL
+
+  - it: headless DestinationRule should include custom labels
+    set:
+      istio.enabled: true
+      istio.destinationRule.labels:
+        networking.example.com/managed: "true"
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.labels["networking.example.com/managed"]
+          value: "true"
+
+  - it: headless DestinationRule should include custom annotations
+    set:
+      istio.enabled: true
+      istio.destinationRule.annotations:
+        networking.example.com/reviewed: "true"
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.annotations["networking.example.com/reviewed"]
+          value: "true"
+
+  - it: headless DestinationRule should include chart labels
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    documentIndex: 1
+    asserts:
+      - isNotNull:
+          path: metadata.labels["helm.sh/chart"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+
+  # --- DestinationRule headless service tests (replica mode) ---
+  - it: should create headless DestinationRule when replica mode is enabled
+    set:
+      istio.enabled: true
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: headless DestinationRule should target headless service in replica mode
+    set:
+      istio.enabled: true
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: DestinationRule
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-headless
+      - equal:
+          path: spec.host
+          value: RELEASE-NAME-valkey-headless.NAMESPACE.svc.cluster.local
+
+  # --- Standalone mode tests ---
+  - it: should only create main DestinationRule in standalone mode (no headless)
+    set:
+      istio.enabled: true
+      cluster.enabled: false
+      replica.enabled: false
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey
+
+  # --- Name override tests ---
+  - it: should use fullnameOverride in PeerAuthentication
+    set:
+      istio.enabled: true
+      fullnameOverride: "my-valkey"
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-valkey
+
+  - it: should use fullnameOverride in DestinationRule
+    set:
+      istio.enabled: true
+      fullnameOverride: "my-valkey"
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-valkey
+      - equal:
+          path: spec.host
+          value: my-valkey.NAMESPACE.svc.cluster.local
+
+  - it: should use fullnameOverride in headless DestinationRule
+    set:
+      istio.enabled: true
+      fullnameOverride: "my-valkey"
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-valkey-headless
+      - equal:
+          path: spec.host
+          value: my-valkey-headless.NAMESPACE.svc.cluster.local
+
+  # --- Mode validation ---
+  # The schema catches typos in istio.mode at install time (before any
+  # template renders). This keeps errors fast and mode-neutral, unlike the
+  # old regime where only templates that happened to render in the chosen
+  # mode would fail — a bogus mode with istio.enabled=false would silently
+  # sail through.
+  - it: should reject invalid istio.mode at the schema layer
+    set:
+      istio.enabled: true
+      istio.mode: waypoint   # typo — not a real mode
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nvalkey:\n- at '/istio/mode': value must be one of 'sidecar', 'ambient'\n"
+
+  - it: should accept istio.mode=sidecar
+    set:
+      istio.enabled: true
+      istio.mode: sidecar
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: should accept istio.mode=ambient
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # --- Ambient mode: DestinationRule must NOT render ---
+  # ztunnel already wraps pod-to-pod hops in HBONE mTLS; a DR on top would
+  # layer Envoy mTLS inside ztunnel mTLS (double crypto) and requires a
+  # waypoint proxy to even take effect. Keep it off.
+  - it: should not render DestinationRule in ambient mode (standalone)
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render DestinationRule in ambient mode (cluster)
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render DestinationRule in ambient mode (replica)
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render DestinationRule in sidecar mode (default)
+    set:
+      istio.enabled: true
+    template: templates/istio-destination-rule.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # --- Ambient mode: PeerAuthentication still applies ---
+  # Enforced by ztunnel instead of Envoy, but the CRD shape is identical.
+  - it: should render PeerAuthentication in ambient mode
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.mtls.mode
+          value: STRICT
+
+  - it: PeerAuthentication should be identical across modes
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      istio.peerAuthentication.mode: PERMISSIVE
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - equal:
+          path: spec.mtls.mode
+          value: PERMISSIVE
+
+  # --- Cross-release isolation guards ---
+  # These assert the chart refuses to silently ship an unprotected cluster
+  # bus. The validator is called from the PeerAuthentication template so it
+  # fires regardless of whether the AuthorizationPolicy itself renders.
+
+  - it: should refuse ambient+cluster when AuthorizationPolicy is off
+    # Ambient mode skips the bus-port NetworkPolicy (it would drop HBONE);
+    # disabling the AP on top leaves the port completely unprotected across
+    # releases. The chart must fail closed.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.authorizationPolicy.enabled: false
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "istio.authorizationPolicy.enabled=false in ambient mode.*cluster-bus port unprotected.*"
+
+  - it: should refuse ambient+cluster when serviceAccount collapses to default
+    # serviceAccount.create=false AND serviceAccount.name="" produces the
+    # shared `default` SA. Two such releases in the same namespace generate
+    # identical AP principals; cross-release MEET succeeds. Repro'd live.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.create: false
+      serviceAccount.name: ""
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "serviceAccount.create=false AND serviceAccount.name empty.*"
+
+  - it: should accept ambient+cluster with serviceAccount.create=true (default)
+    # Per-release SA (default): distinct SPIFFE principal per release,
+    # AP correctly isolates.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.create: true
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: should accept ambient+cluster with explicit serviceAccount.name override
+    # User takes responsibility for distinct naming.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.create: false
+      serviceAccount.name: "my-valkey-sa"
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # --- Custom trust domain ---
+  - it: PeerAuthentication unaffected by custom trustDomain
+    # PA doesn't reference principals, so trustDomain is a no-op here. Just
+    # prove nothing breaks when the value is set.
+    set:
+      istio.enabled: true
+      istio.mode: ambient
+      istio.trustDomain: "my.mesh.example.com"
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.mtls.mode
+          value: STRICT
+
+  # --- Typo defence ---
+  # Schema check fires even when istio.enabled=false so typos surface at
+  # GitOps-commit time, not after someone flips the toggle in production.
+  - it: should reject typo'd istio.mode even with istio.enabled=false
+    set:
+      istio.enabled: false
+      istio.mode: ambiet
+    template: templates/istio-peer-authentication.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nvalkey:\n- at '/istio/mode': value must be one of 'sidecar', 'ambient'\n"

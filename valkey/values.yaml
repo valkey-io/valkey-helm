@@ -98,6 +98,41 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
+# Probe tuning. The probe command is `valkey-cli ping` (with TLS args
+# when tls.enabled). Only the timing knobs are configurable.
+#
+# The three probes have different LOADING policies:
+#
+#   startupProbe — does NOT accept LOADING, so it actually gates
+#     liveness/readiness during initial RDB load. On a slow loader, bump
+#     failureThreshold (or periodSeconds) so failureThreshold *
+#     periodSeconds comfortably exceeds your worst-case RDB load time.
+#     Default 30 * 5s = 150s suits small dev datasets only; a 44 GB
+#     primary needs roughly 240 * 5s = 20 minutes.
+#
+#   livenessProbe — DOES accept LOADING. After startup passes, LOADING
+#     almost always means a full-resync from primary is in progress
+#     (replica fell behind, replication backlog overflowed, etc.).
+#     Killing the pod here loses the in-flight download and forces yet
+#     another full resync, perpetuating the kill-loop. A pod stuck
+#     loading forever is rare and harmless compared to the kill-loop.
+#
+#   readinessProbe — does NOT accept LOADING. A LOADING pod can't serve
+#     traffic, so it must leave the Service endpoint set until it can.
+#     The pod sits 'Running 0/1' during full-resync — exactly right.
+startupProbe:
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 30
+livenessProbe:
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+readinessProbe:
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
 # Resource limits/requests for init containers
 initResources: {}
   # Example:
@@ -155,9 +190,6 @@ extraValkeySecrets: []
 
 # Mount additional configMaps into the Valkey container
 extraValkeyConfigs: []
-
-# Mount extra secrets as volume to init container (deprecated, use extraValkeySecrets)
-extraSecretValkeyConfigs: false
 
 # Mount additional emptyDir or hostPath volumes (advanced use)
 extraVolumes: []
@@ -264,6 +296,172 @@ replica:
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
   persistentVolumeClaimRetentionPolicy: {}
 
+  # Probe tuning for replicated (non-cluster) StatefulSet pods. Same
+  # rationale as the top-level startupProbe block — bump failureThreshold
+  # for large RDBs.
+  startupProbe:
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+  livenessProbe:
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Cluster mode configuration for Valkey Cluster (sharded deployment)
+# Note: cluster.enabled and replica.enabled are mutually exclusive
+cluster:
+  # Enable cluster mode (creates a sharded Valkey cluster)
+  enabled: false
+
+  # Number of shards (primary nodes). Minimum recommended is 3 for cluster mode.
+  # Each shard handles a portion of the hash slot range (16384 slots total).
+  shards: 3
+
+  # Number of replicas per shard (for high availability within each shard)
+  # Total nodes = shards × (1 + replicasPerShard)
+  # For example: 3 shards with 1 replica each = 6 nodes total
+  replicasPerShard: 1
+
+  # Username for cluster replication authentication, ignored if auth.enabled is false.
+  # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
+  # The user must have appropriate replication permissions: +psync +replconf +ping
+  replicationUser: "default"
+
+  # Cluster node timeout in milliseconds (how long before a node is considered failed)
+  nodeTimeout: 15000
+
+  # Require all hash slots to be covered for the cluster to accept writes
+  # Set to false to allow partial cluster operation
+  requireFullCoverage: true
+
+  # Allow cluster to serve read requests when in down state
+  allowReadsWhenDown: false
+
+  # Persistence configuration (required for cluster mode)
+  persistence:
+    # Size of the PVC for each node (required when cluster.enabled is true)
+    size: ""
+    # Storage class name (empty = use default storage class)
+    storageClass: ""
+    # Access modes for the PVC
+    accessModes:
+      - ReadWriteOnce
+
+  # Bus port for cluster communication (default: service.port + 10000)
+  # This port is used for node-to-node communication in the cluster
+  busPort: 16379
+
+  # Orderly handover on primary pod shutdown. A `kubectl rollout restart`
+  # (or any voluntary eviction) sends SIGTERM to Valkey directly; without a
+  # preStop hook, the primary dies with open client connections and the
+  # cluster takes up to nodeTimeout to promote a replica. During that
+  # window, connection pools fill with dead sockets and the app errors out
+  # on every pooled command.
+  #
+  # With this enabled, each pod's preStop checks whether it is a primary
+  # and (if so) asks one of its own replicas to run `CLUSTER FAILOVER` —
+  # Valkey's canonical graceful-handover command. The primary demotes to
+  # replica in the same pass, so by the time SIGTERM arrives the shard
+  # already has a new primary and existing connections close cleanly.
+  #
+  # No-op when:
+  #   * the pod is already a replica (nothing to fail over);
+  #   * the shard has no replicas (replicasPerShard=0 — nothing to fail
+  #     over TO);
+  #   * the pod has no healthy replica of its own (FAILOVER would target
+  #     nothing).
+  # The hook is strictly best-effort — any error path falls through to the
+  # normal SIGTERM, which is the pre-existing (suboptimal) behaviour.
+  preStopFailover:
+    # Enable the preStop CLUSTER FAILOVER hook.
+    enabled: true
+    # How long to wait for the ex-primary to observe its own demotion
+    # before giving up and letting kubelet send SIGTERM. Keep comfortably
+    # below terminationGracePeriodSeconds — kubelet counts the preStop
+    # time against that total grace period.
+    timeoutSeconds: 40
+
+  # Grace period for pod shutdown. Needs to accommodate the preStop
+  # CLUSTER FAILOVER handshake (default timeoutSeconds: 40) with headroom
+  # for SIGTERM + flush. The K8s default (30s) is too short for an orderly
+  # cluster rollout — a clipped preStop forces the abrupt close this
+  # feature is trying to avoid.
+  terminationGracePeriodSeconds: 60
+
+  # Isolate this Valkey cluster's gossip bus from any other release in the
+  # Kubernetes cluster. Valkey's CLUSTER MEET has no authentication, so
+  # without this, any pod that can open a TCP connection to a node's bus
+  # port can merge its owner's cluster into this one — regardless of
+  # namespace, since pod-to-pod traffic crosses namespaces freely by
+  # default.
+  #
+  # The generated NetworkPolicy restricts the bus port to same-release pods
+  # only; client and metrics ports remain open.
+  #
+  # Requires a NetworkPolicy-enforcing CNI (Calico, Cilium, kindnet ≥ 0.20,
+  # Antrea, etc.). On a non-enforcing CNI (plain Flannel, in-tree kubenet)
+  # the rendered policy is a no-op and the chart cannot provide isolation
+  # on its own — an Istio AuthorizationPolicy or a separate Kubernetes
+  # cluster per Valkey cluster is the only remaining option. Namespaces
+  # alone do NOT provide isolation.
+  isolation:
+    enabled: true
+
+  # Probe tuning for cluster-mode StatefulSet pods. Same rationale as the
+  # top-level startupProbe block — bump failureThreshold for large RDBs.
+  # In cluster mode, replicas catch up via PSYNC + RDB transfer on (re)
+  # connect, so the post-restart load window can be just as long as for
+  # standalone replicated mode.
+  startupProbe:
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+  livenessProbe:
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # PersistentVolumeClaim retention policy for StatefulSet
+  # Controls when PVCs are deleted (requires Kubernetes 1.23+)
+  # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
+  persistentVolumeClaimRetentionPolicy: {}
+
+  # Override surface for the cluster-init Job pod only. Layered on top of
+  # the chart-wide podLabels / podAnnotations (these win on key collision)
+  # and merged with the chart-computed mesh labels, so the same opt-out
+  # mechanics that apply to the data pods are still in force unless you
+  # explicitly veto a key here.
+  #
+  # The intended use case is excluding the short-lived bootstrap Job from
+  # cluster-wide pod admission webhooks — observability sidecars, mesh
+  # proxies pulled in by namespace labels, policy agents, etc. — that are
+  # appropriate for long-running data pods but turn the Job into a
+  # never-completing batch task. Because the Job is a Helm post-install
+  # hook with backoffLimit=6, an injected sidecar that never exits means
+  # `helm install --wait` blocks until timeout and the chart fails to
+  # converge.
+  #
+  # Both maps default empty; with no overrides set the Job pod inherits
+  # the chart-wide values exactly as it did before this surface existed.
+  initJob:
+    podLabels: {}
+    podAnnotations: {}
+    # Auto-cleanup window for the completed Job. Kubernetes deletes the
+    # Job (and its pod) this many seconds after it transitions to
+    # Complete or Failed via the TTL-after-finished controller. Set
+    # short enough to keep `kubectl get pods` clean across upgrades,
+    # long enough to grab `kubectl logs` for post-mortem if needed.
+    ttlSecondsAfterFinished: 300
+
 tls:
   # Enable TLS
   enabled: false
@@ -279,6 +477,101 @@ tls:
   dhParamKey: ""
   # Require that clients authenticate with a certificate
   requireClientCertificate: false
+
+istio:
+  # Enable Istio
+  enabled: false
+
+  # Data-plane mode. Two very different shapes:
+  #
+  #   sidecar  — Classic Istio. An Envoy sidecar is injected into every pod.
+  #              Requires the namespace/pod to be labelled for injection
+  #              (`istio-injection=enabled` or `sidecar.istio.io/inject=true`).
+  #              The chart adds `traffic.sidecar.istio.io/exclude*Ports` so
+  #              the cluster-bus port bypasses Envoy (gossip needs raw TCP).
+  #
+  #   ambient  — Istio Ambient Mesh. No sidecar; a node-local ztunnel wraps
+  #              pod traffic in HBONE mTLS transparently. The chart adds
+  #              `istio.io/dataplane-mode: ambient` to every workload pod so
+  #              ztunnel captures their traffic (also works when the whole
+  #              namespace is labelled; the pod label is additive and lets
+  #              operators opt in per-release). The DestinationRule that
+  #              wraps outbound connections in ISTIO_MUTUAL is skipped —
+  #              ztunnel already handles mTLS, and a DR would layer a second
+  #              Envoy mTLS on top, doubling crypto overhead.
+  #
+  # Both modes still render the PeerAuthentication (enforced by ztunnel in
+  # ambient, by Envoy in sidecar) and the chart's AuthorizationPolicy that
+  # pins the cluster-bus port to same-release principals.
+  mode: sidecar  # @schema enum:[sidecar,ambient]
+
+  # SPIFFE trust domain this mesh issues identities under. Used by the
+  # AuthorizationPolicy to build the principal string
+  # `<trustDomain>/ns/<ns>/sa/<sa>`. Must match the `trustDomain` value in
+  # the mesh ConfigMap (`kubectl -n istio-system get cm istio -o jsonpath=
+  # '{.data.mesh}' | grep trustDomain`); a mismatch means the rule matches
+  # nothing and same-release pods get default-denied on the bus port, not
+  # just cross-release ones.
+  trustDomain: cluster.local
+
+  # PeerAuthentication controls mTLS enforcement on inbound connections.
+  # Applies to both sidecar and ambient modes.
+  #
+  # A note on Prometheus scraping: STRICT requires every inbound connection
+  # to present a mesh-issued mTLS cert. An out-of-mesh Prometheus (e.g. a
+  # Prometheus running in a namespace without injection, or on a cluster
+  # without Istio) cannot present such a cert, so scraping the metrics
+  # service fails with "Connection reset by peer". Fix either by putting
+  # the scraper in the mesh (ambient capture or sidecar injection), or by
+  # setting this mode to PERMISSIVE so the mesh accepts plaintext too.
+  # The chart's AuthorizationPolicy keeps 9121 wide open at the identity
+  # layer regardless — PeerAuthentication is the gate that flips.
+  peerAuthentication:
+    # mTLS mode for inbound traffic (STRICT, PERMISSIVE, DISABLE, UNSET)
+    # STRICT: Require mTLS on all ports
+    # PERMISSIVE: Accept both plaintext and mTLS
+    mode: STRICT
+    # Additional labels for the PeerAuthentication resource
+    labels: {}
+    # Additional annotations for the PeerAuthentication resource
+    annotations: {}
+
+  # DestinationRule configures mTLS for outbound connections to Valkey services.
+  # Rendered only when istio.mode is "sidecar" — in ambient mode, ztunnel
+  # handles mTLS transparently and a DR would double-encrypt.
+  destinationRule:
+    # TLS mode for outbound traffic (DISABLE, SIMPLE, MUTUAL, ISTIO_MUTUAL)
+    # ISTIO_MUTUAL: Use Istio-managed certificates for mTLS.
+    # NOTE: When tls.enabled is true the Valkey pods already terminate TLS
+    # themselves. Keeping mode=ISTIO_MUTUAL wraps app-level TLS in Envoy mTLS
+    # (double encryption) and still works, but doubles crypto overhead. If you
+    # only want mesh-level mTLS, set tls.enabled=false here and rely on Istio.
+    # If you prefer app-level TLS only, set mode=DISABLE so Envoy passes the
+    # TLS bytes through untouched.
+    mode: ISTIO_MUTUAL
+    # Additional labels for the DestinationRule resource
+    labels: {}
+    # Additional annotations for the DestinationRule resource
+    annotations: {}
+
+  # AuthorizationPolicy restricts the cluster-bus port to same-release
+  # principals. In sidecar mode, Envoy enforces; in ambient mode, ztunnel
+  # enforces. Unlike the NetworkPolicy (IP-based, requires a policy-enforcing
+  # CNI), this is cryptographic — it requires the caller to hold a SPIFFE
+  # identity matching the Valkey pods' ServiceAccount, so a pod in a different
+  # release cannot forge the check even if it can open a TCP connection.
+  #
+  # Only active in cluster mode (no bus port otherwise).
+  authorizationPolicy:
+    # Enable the chart-owned AuthorizationPolicy.
+    # Defaults to true when istio.enabled is true — the whole point of wiring
+    # Istio in is to get mesh-level enforcement, and this is the piece that
+    # prevents cross-release CLUSTER MEET attacks at L4.
+    enabled: true
+    # Additional labels for the AuthorizationPolicy resource
+    labels: {}
+    # Additional annotations for the AuthorizationPolicy resource
+    annotations: {}
 
 # Node selector for pod assignment
 nodeSelector: {}

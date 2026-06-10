@@ -1,11 +1,10 @@
-{{- if not (or .Values.replica.enabled .Values.cluster.enabled) }}
-{{- $fullname := include "valkey.fullname" . }}
-{{- $storage := .Values.dataStorage }}
-{{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
+{{- if .Values.cluster.enabled }}
 {{- include "valkey.validateAuthConfig" . }}
+{{- include "valkey.validateClusterConfig" . }}
+{{- include "valkey.validateClusterAuth" . }}
 {{- include "valkey.validateIstioConfig" . }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
@@ -15,12 +14,27 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  replicas: 1
-  strategy:
-    type: {{ .Values.deploymentStrategy }}
+  serviceName: {{ include "valkey.fullname" . }}-headless
+  replicas: {{ include "valkey.clusterNodeCount" . }}
+  podManagementPolicy: Parallel
+  {{- if .Values.cluster.persistentVolumeClaimRetentionPolicy }}
+  persistentVolumeClaimRetentionPolicy:
+    {{- toYaml .Values.cluster.persistentVolumeClaimRetentionPolicy | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: valkey-data
+    spec:
+      accessModes: {{ toYaml .Values.cluster.persistence.accessModes | nindent 8 }}
+      {{- if .Values.cluster.persistence.storageClass }}
+      storageClassName: {{ .Values.cluster.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.cluster.persistence.size | quote }}
   template:
     metadata:
       labels:
@@ -33,22 +47,45 @@ spec:
         */}}
         {{- include "valkey.podLabels" . | nindent 8 }}
       annotations:
-        {{- with .Values.podAnnotations }}
+      {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
-        checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 }}
+      {{- end }}
+        checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 | quote }}
         {{- if .Values.valkeyConfig }}
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 | quote }}
+        {{- end }}
+        {{- /*
+        The cluster-bus port (16379 by default) carries raw Valkey gossip: a
+        binary, long-lived, bidirectional protocol that neither Envoy nor
+        ztunnel can proxy sensibly. The chart keeps it unproxied in both
+        modes, but the mechanics differ:
+
+          sidecar — explicit: Envoy sees the port in its iptables rules, so
+                    we emit traffic.sidecar.istio.io/exclude*Ports to take
+                    it out. The AuthorizationPolicy (rendered separately)
+                    does the cross-release enforcement via Envoy-terminated
+                    mTLS on the OTHER ports.
+
+          ambient — implicit: ztunnel only captures traffic for pods it
+                    recognises, and the AuthorizationPolicy's ALLOW rules
+                    only bind the client/metrics ports. That leaves the bus
+                    port outside ztunnel's HBONE tunnel; pod-to-pod TCP on
+                    16379 takes the direct CNI path. No annotation needed
+                    (they're sidecar-only).
+        */}}
+        {{- if and .Values.istio.enabled (eq .Values.istio.mode "sidecar") }}
+        traffic.sidecar.istio.io/excludeInboundPorts: {{ .Values.cluster.busPort | quote }}
+        traffic.sidecar.istio.io/excludeOutboundPorts: {{ .Values.cluster.busPort | quote }}
         {{- end }}
     spec:
-      {{- include "valkey.imagePullSecrets" . | nindent 6 }}
+      {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName | quote }}
       {{- end }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
         - name: {{ include "valkey.fullname" . }}-init
           image: {{ include "valkey.image" . }}
@@ -58,12 +95,18 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           command: [ "/scripts/init.sh" ]
+          env:
+            - name: POD_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+            - name: CLUSTER_SHARDS
+              value: {{ .Values.cluster.shards | quote }}
+            - name: CLUSTER_REPLICAS_PER_SHARD
+              value: {{ .Values.cluster.replicasPerShard | quote }}
           volumeMounts:
-            - name: {{ .Values.dataStorage.volumeName }}
+            - name: valkey-data
               mountPath: /data
-              {{- if .Values.dataStorage.subPath }}
-              subPath: {{ .Values.dataStorage.subPath }}
-              {{- end }}
             - name: scripts
               mountPath: /scripts
             {{- if .Values.valkeyConfig }}
@@ -84,9 +127,6 @@ spec:
               mountPath: /valkey-auth-secret
               readOnly: true
             {{- end }}
-            {{- end }}
-            {{- with .Values.extraVolumeMounts }}
-            {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- with .Values.initResources }}
           resources:
@@ -114,34 +154,49 @@ spec:
             - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            - name: tcp-bus
+              containerPort: {{ .Values.cluster.busPort }}
+              protocol: TCP
           {{- $strictCmd := include "valkey.probeShellCommand" (dict "ctx" . "acceptLoading" false) }}
           {{- $loadCmd   := include "valkey.probeShellCommand" (dict "ctx" . "acceptLoading" true)  }}
           startupProbe:
             exec:
               command: [ "sh", "-c", {{ $strictCmd | quote }} ]
-            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
-            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
-            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            initialDelaySeconds: 5
+            periodSeconds: {{ .Values.cluster.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.cluster.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.cluster.startupProbe.failureThreshold }}
           livenessProbe:
             exec:
               command: [ "sh", "-c", {{ $loadCmd | quote }} ]
-            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
-            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
-            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+            periodSeconds: {{ .Values.cluster.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.cluster.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.cluster.livenessProbe.failureThreshold }}
           readinessProbe:
             exec:
               command: [ "sh", "-c", {{ $strictCmd | quote }} ]
-            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
-            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
-            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            periodSeconds: {{ .Values.cluster.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.cluster.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.cluster.readinessProbe.failureThreshold }}
+          {{- if and (gt (int .Values.cluster.replicasPerShard) 0) .Values.cluster.preStopFailover.enabled }}
+          lifecycle:
+            # Graceful CLUSTER FAILOVER on primary-pod shutdown. Gated on
+            # replicasPerShard>0 (no replica to hand over to otherwise —
+            # the hook would no-op and just eat grace-period budget). The
+            # script itself is best-effort and never blocks SIGTERM.
+            preStop:
+              exec:
+                command: [ "/bin/sh", "/cluster-script/prestop.sh" ]
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - name: {{ .Values.dataStorage.volumeName }}
+            - name: valkey-data
               mountPath: /data
-              {{- if .Values.dataStorage.subPath }}
-              subPath: {{ .Values.dataStorage.subPath }}
-              {{- end }}
+            {{- if and (gt (int .Values.cluster.replicasPerShard) 0) .Values.cluster.preStopFailover.enabled }}
+            - name: cluster-script
+              mountPath: /cluster-script
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
@@ -149,6 +204,16 @@ spec:
             {{- if .Values.auth.enabled }}
             - name: valkey-acl
               mountPath: /etc/valkey
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
             {{- end }}
             {{- range $secret := .Values.extraValkeySecrets }}
             - name: {{ $secret.name }}-valkey
@@ -223,14 +288,21 @@ spec:
               value: "{{ $val }}"
             {{- end }}
         {{- end }}
-      {{- with .Values.extraContainers }}
-      {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.cluster.terminationGracePeriodSeconds }}
       volumes:
         - name: scripts
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts
             defaultMode: 0555
+        {{- if and (gt (int .Values.cluster.replicasPerShard) 0) .Values.cluster.preStopFailover.enabled }}
+        - name: cluster-script
+          configMap:
+            name: {{ include "valkey.fullname" . }}-cluster-script
+            defaultMode: 0555
+        {{- end }}
         {{- if .Values.auth.enabled }}
         - name: valkey-acl
           emptyDir:
@@ -280,20 +352,6 @@ spec:
             secretName: {{ include "valkey.fullname" . }}-auth
             defaultMode: 0400
         {{- end }}
-        {{- end }}
-        - name: {{ $storage.volumeName }}
-        {{- if $storage.persistentVolumeClaimName }}
-          persistentVolumeClaim:
-            claimName: {{ $storage.persistentVolumeClaimName }}
-        {{- else if $createPVC }}
-          persistentVolumeClaim:
-            claimName: {{ include "valkey.fullname" . }}
-        {{- else if $storage.hostPath }}
-          hostPath:
-            path: {{ $storage.hostPath }}
-            type: DirectoryOrCreate
-        {{- else }}
-          emptyDir: {}
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}

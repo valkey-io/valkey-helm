@@ -53,7 +53,10 @@ data:
       fi
       {{- end }}
 
-      echo "$password"
+      # printf is byte-safe; dash's `echo` quietly interprets backslash
+      # escapes (\b, \t, \\, etc.), corrupting any password that contains a
+      # backslash before it's hashed into the ACL.
+      printf '%s' "$password"
     }
     {{- end }}
 
@@ -123,8 +126,9 @@ data:
     # User: {{ $username }}
     PASSWORD=$(get_user_password "{{ $username }}" "{{ $passwordKey }}") || exit 1
 
-    # Hash the password and write ACL entry
-    PASSHASH=$(echo -n "$PASSWORD" | sha256sum | cut -f 1 -d " ")
+    # Hash the password and write ACL entry. printf (not echo -n) is POSIX —
+    # echo -n is implementation-defined and quietly emits `-n\n` under some shells.
+    PASSHASH=$(printf '%s' "$PASSWORD" | sha256sum | cut -f 1 -d " ")
     echo "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> /etc/valkey/users.acl
 
     {{- end }}
@@ -190,8 +194,10 @@ data:
       {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
       REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
 
-      # Write masterauth configuration
-      echo "masterauth $REPL_PASSWORD" >>"$VALKEY_CONFIG"
+      # Write masterauth configuration. Quote + backslash-escape so passwords
+      # containing quotes/backslashes survive valkey.conf parsing.
+      REPL_PASSWORD_ESC=$(printf '%s' "$REPL_PASSWORD" | sed 's/\\/\\\\/g; s/"/\\"/g')
+      printf 'masterauth "%s"\n' "$REPL_PASSWORD_ESC" >>"$VALKEY_CONFIG"
       echo "masteruser {{ $replUsername }}" >>"$VALKEY_CONFIG"
       log "Configured masterauth with user {{ $replUsername }}"
       {{- end }}
@@ -219,13 +225,157 @@ data:
     {{- end }}
     {{- end }}
 
+    {{- if .Values.cluster.enabled }}
+    # Cluster mode configuration
+    log "Configuring cluster mode"
+
+    # Use POD_INDEX from Kubernetes metadata
+    POD_INDEX=${POD_INDEX:-0}
+
+    # Configure cluster-enabled settings
+    {
+      echo ""
+      echo "# Cluster Configuration"
+      echo "cluster-enabled yes"
+      echo "cluster-config-file /data/nodes.conf"
+      echo "cluster-node-timeout {{ .Values.cluster.nodeTimeout }}"
+      {{- if not .Values.cluster.requireFullCoverage }}
+      echo "cluster-require-full-coverage no"
+      {{- end }}
+      {{- if .Values.cluster.allowReadsWhenDown }}
+      echo "cluster-allow-reads-when-down yes"
+      {{- end }}
+      echo ""
+      echo "# Cluster node announcement"
+      echo "cluster-announce-hostname {{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+      echo "cluster-announce-port {{ .Values.service.port }}"
+      echo "cluster-announce-bus-port {{ .Values.cluster.busPort }}"
+      echo "cluster-preferred-endpoint-type hostname"
+    } >>"$VALKEY_CONFIG"
+
+    log "Cluster node $POD_INDEX configured with announce IP"
+
+    {{- if .Values.auth.enabled }}
+    # Configure cluster authentication
+    {{- $replUsername := .Values.cluster.replicationUser }}
+    {{- $replUser := index .Values.auth.aclUsers $replUsername }}
+    {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
+    REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
+    REPL_PASSWORD_ESC=$(printf '%s' "$REPL_PASSWORD" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+    {
+      echo ""
+      echo "# Cluster authentication"
+      printf 'masterauth "%s"\n' "$REPL_PASSWORD_ESC"
+      echo "masteruser {{ $replUsername }}"
+    } >>"$VALKEY_CONFIG"
+    log "Configured cluster authentication with user {{ $replUsername }}"
+    {{- end }}
+
+    {{- if .Values.tls.enabled }}
+    # TLS for cluster
+    {
+      echo ""
+      echo "# TLS for cluster"
+      echo "tls-replication yes"
+      echo "tls-cluster yes"
+    } >>"$VALKEY_CONFIG"
+    log "Enabled TLS for cluster communication"
+    {{- end }}
+
+    # ----------------------------------------------------------------------
+    # Refresh stale IPs in /data/nodes.conf before valkey-server starts.
+    #
+    # Why: cluster bus gossip (port 16379) is dialled by raw IP, even when
+    # cluster-preferred-endpoint-type=hostname (the hostname is announced
+    # over the bus, not used to establish it). After a rolling restart pod
+    # IPs change; if the first pod we restart on a given node also took
+    # the longest to load its RDB, by the time it comes back ALL its peers
+    # have new IPs and its own nodes.conf has none of them. The pod is
+    # then a stranded minority partition and never recovers without
+    # operator intervention.
+    #
+    # Fix: on every cluster pod start, re-resolve each peer's announced
+    # FQDN (already on-disk in nodes.conf as the second comma-separated
+    # token of field 2) and rewrite the IP in place. Valkey reads
+    # nodes.conf at startup and uses those IPs as its initial gossip
+    # targets — fresh IPs in, fresh gossip out, no stranded pod.
+    #
+    # No-ops cleanly when:
+    #   * nodes.conf doesn't exist (first boot — there's nothing to refresh,
+    #     and CLUSTER MEET from cluster-init-script.sh will populate it);
+    #   * a peer's FQDN doesn't resolve (peer is also mid-restart) — we
+    #     leave that line as-is and let Valkey's normal retry/gossip
+    #     reconcile it once the peer's pod IP shows up in DNS.
+    # ----------------------------------------------------------------------
+    NODES_CONF=/data/nodes.conf
+    if [ -f "$NODES_CONF" ]; then
+      log "Refreshing IPs in $NODES_CONF against current DNS"
+      # Write the temp file in /data (the PVC) rather than $TMPDIR — the
+      # init container runs with readOnlyRootFilesystem=true, which
+      # leaves /tmp read-only. /data is the only RW mount we have, and
+      # it's the same filesystem as the destination so the final mv is
+      # atomic (rename(2) within one mount point).
+      TMP=$(mktemp /data/nodes.conf.XXXXXX)
+      changed=0
+      kept=0
+      missing=0
+      # Read line-by-line. Format per line:
+      #   <id> <ip:port@busport>,<fqdn>[,k=v,...] flags ... [slots ...]
+      # The 'vars' line at EOF has no comma so we pass it through unchanged.
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+          ''|vars\ *)
+            printf '%s\n' "$line" >>"$TMP"
+            continue
+            ;;
+        esac
+        # Field 2 is endpoint+metadata, field 1 is node id.
+        endpoint=$(printf '%s' "$line" | awk '{print $2}')
+        # Skip lines we can't parse (defensive — preserve verbatim).
+        case "$endpoint" in
+          *,*) ;;
+          *) printf '%s\n' "$line" >>"$TMP"; continue ;;
+        esac
+        # Pull out the host portion of "ip:port@busport" and the announced FQDN.
+        addr=${endpoint%%,*}
+        rest=${endpoint#*,}
+        fqdn=${rest%%,*}
+        old_ip=${addr%%:*}
+        port_and_bus=${addr#*:}
+        # Skip if the announced FQDN looks empty (older nodes.conf shapes).
+        if [ -z "$fqdn" ]; then
+          printf '%s\n' "$line" >>"$TMP"; continue
+        fi
+        new_ip=$(getent hosts "$fqdn" 2>/dev/null | awk '{print $1; exit}')
+        if [ -z "$new_ip" ]; then
+          missing=$(( missing + 1 ))
+          printf '%s\n' "$line" >>"$TMP"
+          continue
+        fi
+        if [ "$new_ip" = "$old_ip" ]; then
+          kept=$(( kept + 1 ))
+          printf '%s\n' "$line" >>"$TMP"
+          continue
+        fi
+        # Rewrite the endpoint token in field 2; everything else verbatim.
+        new_endpoint="${new_ip}:${port_and_bus},${rest}"
+        # Replace ONLY the first whitespace-separated token after the ID.
+        # Using awk to avoid sed quoting/regex hazards when fqdn contains dots.
+        printf '%s\n' "$line" | awk -v new="$new_endpoint" '{$2 = new; print}' >>"$TMP"
+        changed=$(( changed + 1 ))
+      done <"$NODES_CONF"
+      # Atomic swap so a kill mid-rewrite can't corrupt nodes.conf.
+      mv "$TMP" "$NODES_CONF"
+      log "nodes.conf refresh: ${changed} updated, ${kept} unchanged, ${missing} unresolved"
+    else
+      log "$NODES_CONF absent — first boot, nothing to refresh"
+    fi
+    {{- end }}
+
     # Append extra configs if present
     if [ -f /usr/local/etc/valkey/valkey.conf ]; then
       log "Appending /usr/local/etc/valkey/valkey.conf"
       cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONFIG"
-    fi
-    if [ -d /extravalkeyconfigs ]; then
-      log "Appending files in /extravalkeyconfigs/"
-      cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
     fi
 

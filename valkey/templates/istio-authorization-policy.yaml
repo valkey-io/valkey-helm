@@ -1,0 +1,82 @@
+{{- /*
+AuthorizationPolicy for the cluster-bus port.
+
+Valkey's CLUSTER MEET has no authentication of its own: a pod that can open
+a TCP connection to a node's bus port can merge into the cluster. The chart
+already ships a NetworkPolicy that pins the bus port to same-release pods by
+IP (cluster-isolation-netpol.yaml), but that only works on a CNI that
+enforces NetworkPolicy.
+
+An Istio AuthorizationPolicy is the belt-and-braces: it matches on SPIFFE
+principal (the caller's ServiceAccount identity), not IP, so a pod that
+spoofs its way onto the right IP range still fails the check. It also works
+regardless of CNI — the enforcement point is the sidecar Envoy (sidecar
+mode) or the node-local ztunnel (ambient mode), both of which terminate
+mTLS and have the peer's identity.
+
+Rendered only in cluster mode — no bus port to protect otherwise.
+
+Both L4 (sidecar via Envoy, ambient via ztunnel) enforce ALLOW/DENY on
+principal+port, so a single policy shape works for both modes. Ambient's
+ztunnel does NOT enforce L7 rules (HTTP method, path, etc.) — those need a
+waypoint — but we only need L4 here.
+*/}}
+{{- if and .Values.istio.enabled .Values.istio.authorizationPolicy.enabled .Values.cluster.enabled }}
+{{- include "valkey.validateIstioConfig" . }}
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ include "valkey.fullname" . }}-cluster-bus
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    {{- with .Values.istio.authorizationPolicy.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.istio.authorizationPolicy.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "valkey.selectorLabels" . | nindent 6 }}
+  action: ALLOW
+  rules:
+    # Same-release pods (identified by SPIFFE principal) may reach the bus port.
+    - from:
+        - source:
+            principals:
+              - {{ include "valkey.istioPrincipal" . | quote }}
+      to:
+        - operation:
+            ports:
+              - {{ .Values.cluster.busPort | quote }}
+    # Client and metrics ports stay wide open at this layer — they have
+    # their own auth (ACL, TLS) above the mesh. A separate deny rule on the
+    # bus port is unnecessary: this policy is ALLOW-only, and because at
+    # least one AuthorizationPolicy now targets these pods, Istio applies
+    # default-deny to anything not matched — i.e. the bus port for
+    # non-same-release principals.
+    #
+    # Istio-managed ports (15020 merged-stats, 15021 Envoy readiness, 15090
+    # Envoy admin) are intentionally NOT listed:
+    #   sidecar mode — Istio auto-excludes these via iptables so they never
+    #                  hit Envoy's authz stack; the AP has no bearing on
+    #                  them. Verified on a live kind+Istio 1.29 install:
+    #                  15021/15090 reachable from in-mesh pods without an
+    #                  explicit allow rule; 15020 is bound to pilot-agent
+    #                  outside Envoy's path.
+    #   ambient mode — no Envoy exists, so none of these ports have analogues
+    #                  (ztunnel metrics live on the NODE, not the pod).
+    # Prometheus scrapes this chart via the shipped Service/PodMonitor on
+    # the app-level 9121 port, so this is the only port Prometheus cares
+    # about here. Scrapers that rely on Istio's Envoy-merged 15020 path
+    # hit pilot-agent directly and aren't gated by this AP.
+    - to:
+        - operation:
+            ports:
+              - {{ .Values.service.port | quote }}
+    {{- if .Values.metrics.enabled }}
+              - {{ .Values.metrics.exporter.port | quote }}
+    {{- end }}
+{{- end }}

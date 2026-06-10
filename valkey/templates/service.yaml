@@ -17,8 +17,9 @@ spec:
   {{- if .Values.service.loadBalancerClass }}
   loadBalancerClass: {{ .Values.service.loadBalancerClass }}
   {{- end }}
-  {{- if .Values.service.loadBalancerSourceRanges }}
-  loadBalancerSourceRanges: {{ .Values.service.loadBalancerSourceRanges }}
+  {{- with .Values.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   ports:
     - port: {{ .Values.service.port }}
@@ -36,3 +37,4 @@ spec:
     {{- if .Values.replica.enabled }}
     statefulset.kubernetes.io/pod-name: {{ include "valkey.fullname" . }}-0
     {{- end }}
+    {{- /* In cluster mode, the service routes to all nodes; clients handle redirections */}}
