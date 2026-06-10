@@ -50,6 +50,9 @@ spec:
         {{- else }}
         - --metrics-bind-address=0
         {{- end }}
+        {{- range .Values.manager.watchNamespaces }}
+        - --watch-namespace={{ tpl . $ }}
+        {{- end }}
         {{- with .Values.manager.args }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
