@@ -24,7 +24,7 @@ helm install valkey-operator valkey/valkey-operator \
   -n valkey-operator-system --create-namespace
 ```
 
-This will deploy the operator into the `valkey-operator-system` namespace. The operator will watch for `ValkeyCluster` custom resources across all namespaces.
+This will deploy the operator into the `valkey-operator-system` namespace. By default the operator watches for `ValkeyCluster` resources across all namespaces. Set `manager.watchNamespaces` to restrict it to specific namespaces.
 
 ## Creating a ValkeyCluster
 
@@ -54,6 +54,7 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `serviceAccount.create` | Create a ServiceAccount | `true` |
 | `rbac.create` | Create ClusterRole and ClusterRoleBinding | `true` |
 | `manager.leaderElection.enabled` | Enable leader election | `true` |
+| `manager.watchNamespaces` | Restrict cache to these namespaces (cluster-wide if empty) | `[]` |
 | `metrics.enabled` | Enable the metrics endpoint | `true` |
 | `metrics.port` | Metrics endpoint port | `8443` |
 | `resources.limits.cpu` | CPU limit | `500m` |

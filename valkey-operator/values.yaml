@@ -45,6 +45,17 @@ manager:
   # Leader election prevents multiple operator instances from conflicting
   leaderElection:
     enabled: true
+  # Restrict the operator's informer cache to these namespaces.
+  # Each entry maps to a --watch-namespace flag passed to the operator binary.
+  # Leave empty (default) to watch all namespaces cluster-wide.
+  # When set, include every namespace containing managed resources.
+  # Omitting a namespace where managed resources live will cause reconcile errors.
+  # Example:
+  #   watchNamespaces:
+  #     - valkey-prod
+  #     - valkey-staging
+  #     - valkey-{{ .Values.myEnv }}
+  watchNamespaces: []
   # Additional command-line arguments for the operator binary
   args: []
 
