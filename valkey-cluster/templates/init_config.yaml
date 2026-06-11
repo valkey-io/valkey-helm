@@ -71,6 +71,7 @@ data:
     # with correct peer addresses and the bus reconnects immediately.
     # Requires the headless Service to publishNotReadyAddresses so peers resolve
     # during startup.
+    {{- if .Values.clusterStableAddressing.nodesConfIpFixup }}
     NODES_CONF="/data/nodes.conf"
     if [ -f "$NODES_CONF" ]; then
       log "Fixing up peer IPs in $NODES_CONF from stable hostnames..."
@@ -97,4 +98,5 @@ data:
       mv "$TMP" "$NODES_CONF"
       log "nodes.conf fix-up complete."
     fi
+    {{- end }}
 

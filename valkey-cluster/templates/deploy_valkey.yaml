@@ -92,8 +92,12 @@ spec:
               # can re-establish bus connections after pod IPs change on restart. Without
               # this, a simultaneous restart leaves every node's nodes.conf pointing at
               # stale peer IPs and the cluster cannot reconverge (cluster_state:fail).
+              {{- if .Values.clusterStableAddressing.announceHostname }}
               echo "\ncluster-announce-hostname ${HOSTNAME}.{{ include "valkey-cluster.fullname" . }}-headless.${NAMESPACE}.svc.cluster.local" >> {{ $configFile }}
+              {{- end }}
+              {{- if .Values.clusterStableAddressing.preferHostnameEndpoint }}
               echo "\ncluster-preferred-endpoint-type hostname" >> {{ $configFile }}
+              {{- end }}
               {{- end }}
 
               /cluster-script/init-cluster.sh &
