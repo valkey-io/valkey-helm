@@ -88,6 +88,12 @@ spec:
 
               {{- if gt (int .Values.replicaCount) 5 }}
               echo "\ncluster-announce-ip ${POD_IP}" >> {{ $configFile }}
+              # Announce a STABLE per-pod hostname (headless-service FQDN) so the cluster
+              # can re-establish bus connections after pod IPs change on restart. Without
+              # this, a simultaneous restart leaves every node's nodes.conf pointing at
+              # stale peer IPs and the cluster cannot reconverge (cluster_state:fail).
+              echo "\ncluster-announce-hostname ${HOSTNAME}.{{ include "valkey-cluster.fullname" . }}-headless.${NAMESPACE}.svc.cluster.local" >> {{ $configFile }}
+              echo "\ncluster-preferred-endpoint-type hostname" >> {{ $configFile }}
               {{- end }}
 
               /cluster-script/init-cluster.sh &
