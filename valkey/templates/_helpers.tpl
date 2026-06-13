@@ -188,3 +188,80 @@ Validate replica authentication configuration
 {{- end }}
 {{- end -}}
 
+{{/*
+Validate probe authentication configuration.
+When auth is enabled, an override must be provided for each probe type
+because the chart cannot safely choose an auth approach on behalf of the operator.
+*/}}
+{{- define "valkey.validateProbeAuth" -}}
+{{- if .Values.auth.enabled -}}
+  {{- if not .Values.probes.startup.override -}}
+    {{- fail "probes.startup.override is required when auth.enabled=true. See values.yaml comments for options." -}}
+  {{- end -}}
+  {{- if not .Values.probes.liveness.override -}}
+    {{- fail "probes.liveness.override is required when auth.enabled=true. See values.yaml comments for options." -}}
+  {{- end -}}
+  {{- if and .Values.probes.readiness.enabled (not .Values.probes.readiness.override) -}}
+    {{- fail "probes.readiness.override is required when auth.enabled=true and probes.readiness.enabled=true. See values.yaml comments for options." -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Base probe renderer.
+Accepts any probe action (exec, tcpSocket, httpGet) as a dict and merges
+user-configured timings on top. If config.override is set, it is rendered
+as-is and the action is ignored entirely.
+
+Usage:
+  include "valkey.probe" (dict "action" $action "config" $probeCfg)
+
+  action  — a dict representing the probe action, e.g.:
+              dict "exec" (dict "command" (list "valkey-cli" "ping"))
+              dict "tcpSocket" (dict "port" "valkey-write")
+  config  — the probe config block from values (startup/liveness/readiness)
+*/}}
+{{- define "valkey.probe" -}}
+{{- $action := .action -}}
+{{- $cfg    := .config -}}
+{{- if $cfg.override }}
+{{- toYaml $cfg.override }}
+{{- else }}
+{{- toYaml $action }}
+{{- end }}
+{{- with $cfg.initialDelaySeconds }}
+initialDelaySeconds: {{ . }}
+{{- end }}
+{{- with $cfg.periodSeconds }}
+periodSeconds: {{ . }}
+{{- end }}
+{{- with $cfg.timeoutSeconds }}
+timeoutSeconds: {{ . }}
+{{- end }}
+{{- with $cfg.failureThreshold }}
+failureThreshold: {{ . }}
+{{- end }}
+{{- with $cfg.successThreshold }}
+successThreshold: {{ . }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Render a probe for the main Valkey container.
+When auth is disabled, uses a direct valkey-cli exec (distroless-compatible).
+When auth is enabled, config.override is required (validated at render time).
+
+Usage:
+  include "valkey.probe.valkey" (dict "root" . "config" .Values.probes.startup)
+*/}}
+{{- define "valkey.probe.valkey" -}}
+{{- $root := .root -}}
+{{- $cfg  := .config -}}
+{{- $cmd  := list "valkey-cli" -}}
+{{- if $root.Values.tls.enabled -}}
+  {{- $cmd = concat $cmd (list "--tls" "--cacert" (printf "/tls/%s" $root.Values.tls.caPublicKey)) -}}
+{{- end -}}
+{{- $cmd = append $cmd "ping" -}}
+{{- $action := dict "exec" (dict "command" $cmd) -}}
+{{- include "valkey.probe" (dict "action" $action "config" $cfg) -}}
+{{- end -}}

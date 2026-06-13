@@ -1,6 +1,42 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
+    "$defs": {
+        "probeConfig": {
+            "type": "object",
+            "properties": {
+                "override":            { "type": "object" },
+                "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+                "periodSeconds":       { "type": "integer", "minimum": 1 },
+                "timeoutSeconds":      { "type": "integer", "minimum": 1 },
+                "failureThreshold":    { "type": "integer", "minimum": 1 },
+                "successThreshold":    { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+        },
+        "probeConfigWithEnabled": {
+            "type": "object",
+            "properties": {
+                "enabled":             { "type": "boolean" },
+                "override":            { "type": "object" },
+                "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+                "periodSeconds":       { "type": "integer", "minimum": 1 },
+                "timeoutSeconds":      { "type": "integer", "minimum": 1 },
+                "failureThreshold":    { "type": "integer", "minimum": 1 },
+                "successThreshold":    { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+        },
+        "probesBlock": {
+            "type": "object",
+            "properties": {
+                "startup":   { "$ref": "#/$defs/probeConfig" },
+                "liveness":  { "$ref": "#/$defs/probeConfig" },
+                "readiness": { "$ref": "#/$defs/probeConfigWithEnabled" }
+            },
+            "additionalProperties": false
+        }
+    },
     "properties": {
         "affinity": {
             "type": "object"
@@ -360,6 +396,9 @@
         },
         "priorityClassName": {
             "type": "string"
+        },
+        "probes": {
+            "$ref": "#/$defs/probesBlock"
         },
         "replica": {
             "type": "object",
