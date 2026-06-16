@@ -69,6 +69,25 @@ tests:
             mountPath: /valkey-users-secret
             readOnly: true
 
+  - it: should render users-secret volume with templated usersExistingSecret
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret-{{ .Release.Name }}"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-users-secret
+            secret:
+              secretName: my-custom-secret-RELEASE-NAME
+              defaultMode: 0400
+
   - it: should have both volumes with mixed passwords
     set:
       auth.enabled: true
@@ -405,6 +424,27 @@ tests:
             valueFrom:
               secretKeyRef:
                 name: my-custom-secret
+                key: default
+
+  - it: should render templated usersExistingSecret in metrics exporter
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret-{{ .Release.Name }}"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-custom-secret-RELEASE-NAME
                 key: default
 
   - it: should set REDIS_PASSWORD using custom passwordKey in metrics exporter when usersExistingSecret is set

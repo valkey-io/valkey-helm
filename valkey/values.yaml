@@ -180,6 +180,7 @@ auth:
   enabled: false
 
   # Use an existing secret for user passwords. Key defaults to username.
+  # Supports templating, e.g.: "users-{{ .Release.Name }}"
   usersExistingSecret: ""
 
   # Map of users to create with ACL permissions.
