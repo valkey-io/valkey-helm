@@ -428,3 +428,76 @@ tests:
               secretKeyRef:
                 name: my-custom-secret
                 key: my-password-key
+
+  - it: should not render enabled key in podSecurityContext
+    set:
+      podSecurityContext:
+        enabled: true
+        fsGroup: 1000
+        runAsUser: 1000
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.securityContext.enabled
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1000
+
+  - it: should not render enabled key in container securityContext
+    set:
+      securityContext:
+        enabled: true
+        runAsNonRoot: true
+        readOnlyRootFilesystem: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext.enabled
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: should not render enabled key in init container securityContext
+    set:
+      securityContext:
+        enabled: true
+        allowPrivilegeEscalation: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.initContainers[0].securityContext.enabled
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: should not render enabled key in metrics exporter securityContext
+    set:
+      metrics.enabled: true
+      metrics.exporter.securityContext:
+        enabled: true
+        runAsNonRoot: true
+        runAsUser: 1000
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.containers[1].securityContext.enabled
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsUser
+          value: 1000
