@@ -55,6 +55,11 @@ podSecurityContext:
 # Priority class name for pod scheduling (leave empty to use cluster's default)
 priorityClassName: ""
 
+# RuntimeClassName for the pods, used to select the container runtime configuration
+# (e.g. "gvisor", "kata-containers"). Leave empty to use the cluster's default runtime.
+# See https://kubernetes.io/docs/concepts/containers/runtime-class/#usage
+runtimeClassName: ""
+
 # Security context for the Valkey containers
 securityContext:
   allowPrivilegeEscalation: false

@@ -428,3 +428,24 @@ tests:
               secretKeyRef:
                 name: my-custom-secret
                 key: my-password-key
+
+  - it: should not set runtimeClassName when empty
+    set:
+      runtimeClassName: ""
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.runtimeClassName
+
+  - it: should set runtimeClassName when provided
+    set:
+      runtimeClassName: "gvisor"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.runtimeClassName
+          value: "gvisor"

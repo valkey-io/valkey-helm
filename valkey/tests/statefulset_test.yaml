@@ -371,3 +371,27 @@ tests:
               secretKeyRef:
                 name: my-custom-secret
                 key: my-password-key
+  - it: should not set runtimeClassName when empty
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      runtimeClassName: ""
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - notExists:
+          path: spec.template.spec.runtimeClassName
+
+  - it: should set runtimeClassName when provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      runtimeClassName: "kata-containers"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.runtimeClassName
+          value: "kata-containers"
