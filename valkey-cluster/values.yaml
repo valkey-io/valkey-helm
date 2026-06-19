@@ -11,6 +11,22 @@ existingSecret: ""
 
 podManagementPolicy: "OrderedReady"
 
+# Stable cluster addressing so the cluster can self-heal after a *simultaneous*
+# full restart (all pod IPs change at once). See templates for details.
+# Defaults on; each can be toggled independently for testing/minimal sets.
+clusterStableAddressing:
+  # Record each node's stable headless FQDN in nodes.conf (cluster-announce-hostname).
+  announceHostname: true
+  # Report hostname as the preferred endpoint (cluster-preferred-endpoint-type hostname).
+  # KEEP OFF: validated to HURT simultaneous-restart recovery (1/3 with it vs 8/8 without)
+  # — forcing the cluster bus onto hostnames adds DNS churn during the restart, whereas
+  # letting the nodes.conf IP fix-up correct addresses (bus uses IPs) is reliable.
+  preferHostnameEndpoint: false
+  # Publish per-pod DNS for not-ready pods so peers resolve during startup.
+  publishNotReadyAddresses: true
+  # Init-container rewrites stale peer IPs in nodes.conf to current resolved IPs.
+  nodesConfIpFixup: true
+
 # The same values will be used for service creation
 containerPorts:
   # Port on which Valkey will be exposed

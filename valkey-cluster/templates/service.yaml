@@ -8,6 +8,12 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   clusterIP: None
+  # Publish per-pod DNS even before pods are Ready so that, after a simultaneous
+  # restart, each node can resolve its peers' stable hostnames (and fix up the
+  # stale peer IPs in nodes.conf) during startup, before readiness is achieved.
+  {{- if .Values.clusterStableAddressing.publishNotReadyAddresses }}
+  publishNotReadyAddresses: true
+  {{- end }}
   ports:
     - port: {{ .Values.containerPorts.valkey }}
       targetPort: tcp

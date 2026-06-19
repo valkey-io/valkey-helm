@@ -61,3 +61,42 @@ data:
       cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
     fi
 
+    # ------------------------------------------------------------------
+    # nodes.conf peer-IP fix-up.
+    # After a simultaneous restart, every pod gets a new IP but nodes.conf still
+    # records peers at their OLD IPs, which the cluster bus dials — so the cluster
+    # cannot reconverge (all peers show "fail?"). Each nodes.conf entry also carries
+    # the stable headless hostname (via cluster-announce-hostname). Resolve that
+    # hostname to the CURRENT IP and rewrite the address, so valkey-server starts
+    # with correct peer addresses and the bus reconnects immediately.
+    # Requires the headless Service to publishNotReadyAddresses so peers resolve
+    # during startup.
+    {{- if .Values.clusterStableAddressing.nodesConfIpFixup }}
+    NODES_CONF="/data/nodes.conf"
+    if [ -f "$NODES_CONF" ]; then
+      log "Fixing up peer IPs in $NODES_CONF from stable hostnames..."
+      TMP="${NODES_CONF}.fixup"
+      : > "$TMP"
+      while IFS= read -r line || [ -n "$line" ]; do
+        addr=$(echo "$line" | awk '{print $2}')
+        host=$(echo "$addr" | cut -s -d',' -f2 || true)
+        oldip=$(echo "$addr" | cut -s -d':' -f1 || true)
+        if [ -n "$host" ] && [ -n "$oldip" ]; then
+          newip=""
+          n=0
+          while [ -z "$newip" ] && [ "$n" -lt 10 ]; do
+            newip=$(getent hosts "$host" 2>/dev/null | awk '{print $1; exit}' || true)
+            if [ -z "$newip" ]; then n=$((n+1)); sleep 2; fi
+          done
+          if [ -n "$newip" ] && [ "$newip" != "$oldip" ]; then
+            log "  $host: $oldip -> $newip"
+            line=$(echo "$line" | sed "s|${oldip}:6379@16379|${newip}:6379@16379|")
+          fi
+        fi
+        printf '%s\n' "$line" >> "$TMP"
+      done < "$NODES_CONF"
+      mv "$TMP" "$NODES_CONF"
+      log "nodes.conf fix-up complete."
+    fi
+    {{- end }}
+
