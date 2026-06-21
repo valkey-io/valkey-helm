@@ -16,7 +16,7 @@ metadata:
 spec:
   type: {{ .Values.metrics.service.type }}
   ports:
-  - name: http
+  - name: {{ if .Values.metrics.secure }}https{{ else }}http{{ end }}
     port: {{ .Values.metrics.port }}
     protocol: TCP
     targetPort: metrics

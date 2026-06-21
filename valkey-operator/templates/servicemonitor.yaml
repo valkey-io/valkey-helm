@@ -1,0 +1,34 @@
+{{- if .Values.prometheus.serviceMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "valkey-operator.fullname" . }}
+  namespace: {{ .Values.prometheus.serviceMonitor.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "valkey-operator.labels" . | nindent 4 }}
+    {{- with .Values.prometheus.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  endpoints:
+  - path: /metrics
+    port: {{ if .Values.metrics.secure }}https{{ else }}http{{ end }}
+    {{- if .Values.metrics.secure }}
+    scheme: https
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    tlsConfig:
+      insecureSkipVerify: true
+    {{- else }}
+    scheme: http
+    {{- end }}
+    {{- with .Values.prometheus.serviceMonitor.interval }}
+    interval: {{ . }}
+    {{- end }}
+    {{- with .Values.prometheus.serviceMonitor.scrapeTimeout }}
+    scrapeTimeout: {{ . }}
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- include "valkey-operator.selectorLabels" . | nindent 6 }}
+      control-plane: controller-manager
+{{- end }}
