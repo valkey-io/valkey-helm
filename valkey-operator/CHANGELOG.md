@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add optional PodDisruptionBudget support for the valkey-operator Deployment.
+
 ## 0.2.0
 
 ### Added
