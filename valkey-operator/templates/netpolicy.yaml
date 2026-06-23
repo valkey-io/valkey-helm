@@ -36,7 +36,7 @@ spec:
   {{- end }}
   {{- with .ingress }}
   ingress:
-    {{- toYaml . | nindent 4 }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
   {{- if $hasEgress }}
   egress:
@@ -74,7 +74,7 @@ spec:
           port: {{ $valkeyPort }}
     {{- end }}
     {{- with .egress }}
-    {{- toYaml . | nindent 4 }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
     {{- end }}
   {{- end }}
 {{- end }}
