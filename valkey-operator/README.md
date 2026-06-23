@@ -57,7 +57,7 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `manager.watchNamespaces` | Restrict cache to these namespaces (cluster-wide if empty) | `[]` |
 | `metrics.enabled` | Enable the metrics endpoint | `true` |
 | `metrics.port` | Metrics endpoint port | `8443` |
-| `networkPolicy` | NetworkPolicy for the operator pod (nothing rendered unless set) | `{}` |
+| `networkPolicy` | NetworkPolicy for the operator pod | `{}` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `128Mi` |
 | `resources.requests.cpu` | CPU request | `10m` |
@@ -96,7 +96,6 @@ networkPolicy:
   egress: []
 ```
 
-> **Note:** A NetworkPolicy only takes effect if your cluster's CNI enforces it (e.g. Calico, Cilium). CNIs such as kindnet do not enforce NetworkPolicy.
 
 ## Source Code
 
