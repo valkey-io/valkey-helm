@@ -26,7 +26,6 @@ spec:
   podSelector:
     matchLabels:
       {{- include "valkey-operator.selectorLabels" $ | nindent 6 }}
-      control-plane: controller-manager
   policyTypes:
   {{- if .ingress }}
     - Ingress
