@@ -65,9 +65,20 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 
 ### Network policy
 
-In clusters that default-deny traffic, you can attach a NetworkPolicy to the operator pod via the `networkPolicy` value. Nothing is rendered unless `networkPolicy` is set, so the default behavior is unchanged. The `policyTypes` field is derived automatically from whether you provide `ingress` and/or `egress` rules, and optional `labels` and `annotations` are added to the resource.
+In clusters that default-deny traffic, you can attach a NetworkPolicy to the operator pod via the `networkPolicy` value. Nothing is rendered unless `networkPolicy` is set, so the default behavior is unchanged.
 
-The operator pod exposes the metrics port (`8443` when `metrics.enabled`) and a health probe port (`8081`). The example below allows Prometheus to scrape metrics from a `monitoring` namespace and permits egress to the Kubernetes API server:
+Once you opt in, the chart automatically adds the egress the operator needs to function — DNS, the Kubernetes API server, and the managed Valkey pods on the Valkey port (`6379`) — so locking down egress doesn't break reconciliation. The Valkey egress rule targets the namespaces in `manager.watchNamespaces`; when that list is empty (watch all namespaces) it allows the Valkey port to every namespace. The `policyTypes` field is derived automatically from the rules in effect, and optional `labels` and `annotations` are added to the resource.
+
+You can tune or disable this behavior:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `networkPolicy.defaultEgressRules` | `true` | Inject the operator's required egress. Set `false` to manage all egress yourself. |
+| `networkPolicy.valkeyPort` | `6379` | Port the operator uses to reach Valkey pods. |
+| `networkPolicy.apiServerPort` | `6443` | Kubernetes API server port. |
+| `networkPolicy.dnsNamespace` | `kube-system` | Namespace running kube-dns / CoreDNS. |
+
+The operator pod exposes the metrics port (`8443` when `metrics.enabled`) and a health probe port (`8081`). The example below allows Prometheus to scrape metrics from a `monitoring` namespace; the operator egress rules are added for you:
 
 ```yaml
 networkPolicy:
@@ -81,13 +92,8 @@ networkPolicy:
       ports:
         - protocol: TCP
           port: 8443
-  egress:
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-      ports:
-        - protocol: TCP
-          port: 6443
+  # Any extra egress here is merged with the default operator egress rules.
+  egress: []
 ```
 
 > **Note:** A NetworkPolicy only takes effect if your cluster's CNI enforces it (e.g. Calico, Cilium). CNIs such as kindnet do not enforce NetworkPolicy.

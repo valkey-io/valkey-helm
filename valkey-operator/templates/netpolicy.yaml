@@ -1,4 +1,13 @@
 {{- with .Values.networkPolicy }}
+{{- $useDefaults := true }}
+{{- if hasKey . "defaultEgressRules" }}
+{{- $useDefaults = .defaultEgressRules }}
+{{- end }}
+{{- $valkeyPort := .valkeyPort | default 6379 }}
+{{- $apiServerPort := .apiServerPort | default 6443 }}
+{{- $dnsNamespace := .dnsNamespace | default "kube-system" }}
+{{- $watch := $.Values.manager.watchNamespaces }}
+{{- $hasEgress := or .egress $useDefaults }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -22,15 +31,50 @@ spec:
   {{- if .ingress }}
     - Ingress
   {{- end }}
-  {{- if .egress }}
+  {{- if $hasEgress }}
     - Egress
   {{- end }}
   {{- with .ingress }}
   ingress:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .egress }}
+  {{- if $hasEgress }}
   egress:
+    {{- if $useDefaults }}
+    # DNS resolution (kube-dns / CoreDNS)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $dnsNamespace }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Kubernetes API server
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: {{ $apiServerPort }}
+    # Managed Valkey pods on the Valkey port
+    - to:
+        {{- if $watch }}
+        {{- range $watch }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
+        {{- else }}
+        - namespaceSelector: {}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ $valkeyPort }}
+    {{- end }}
+    {{- with .egress }}
     {{- toYaml . | nindent 4 }}
+    {{- end }}
   {{- end }}
 {{- end }}
