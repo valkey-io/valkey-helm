@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.2
+
+### Added
+
+- New value `networkPolicy` to attach a NetworkPolicy to the operator pod.
+  - Nothing is rendered unless set, preserving existing behavior.
+  - Supports `ingress`, `egress`, `labels`, and `annotations`; `policyTypes` is derived from the rules provided.
+
 ## 0.2.0
 
 ### Added

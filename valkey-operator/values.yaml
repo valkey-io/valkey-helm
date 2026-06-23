@@ -113,10 +113,36 @@ commonLabels: {}
 
 # TODO: metrics auth RBAC (metrics-auth-role, metrics-reader-role)
 # TODO: prometheus ServiceMonitor
-# TODO: networkPolicy
 # TODO: aggregated ClusterRoles (admin/editor/viewer)
 # TODO: topologySpreadConstraints
 # TODO: podDisruptionBudget
+
+# Network policy to control traffic to/from the operator pod.
+# Nothing is rendered unless this is set. When configured, policyTypes are
+# derived from the ingress/egress rules you provide.
+# More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+# Example (allow Prometheus to scrape metrics and egress to the Kubernetes API server):
+#   networkPolicy:
+#     labels: {}
+#     annotations: {}
+#     ingress:
+#       - from:
+#           - namespaceSelector:
+#               matchLabels:
+#                 kubernetes.io/metadata.name: monitoring
+#         ports:
+#           - protocol: TCP
+#             port: 8443
+#     egress:
+#       - to:
+#           - ipBlock:
+#               cidr: 0.0.0.0/0
+#         ports:
+#           - protocol: TCP
+#             port: 6443
+networkPolicy: {}
+
+
 
 metrics:
   # Enable the metrics endpoint

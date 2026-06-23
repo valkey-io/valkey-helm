@@ -2,7 +2,7 @@ apiVersion: v2
 name: valkey-operator
 description: A Helm chart for the Valkey Operator
 type: application
-version: 0.2.0
+version: 0.2.2
 appVersion: "v0.2.0"
 kubeVersion: ">=1.20.0-0"
 home: https://valkey.io/valkey-helm/

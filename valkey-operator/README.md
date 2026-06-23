@@ -1,6 +1,6 @@
 # valkey-operator
 
-![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
+![Version: 0.2.2](https://img.shields.io/badge/Version-0.2.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
 
 A Helm chart for deploying the [Valkey Operator](https://github.com/valkey-io/valkey-operator) on Kubernetes.
 
@@ -57,10 +57,40 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `manager.watchNamespaces` | Restrict cache to these namespaces (cluster-wide if empty) | `[]` |
 | `metrics.enabled` | Enable the metrics endpoint | `true` |
 | `metrics.port` | Metrics endpoint port | `8443` |
+| `networkPolicy` | NetworkPolicy for the operator pod (nothing rendered unless set) | `{}` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `128Mi` |
 | `resources.requests.cpu` | CPU request | `10m` |
 | `resources.requests.memory` | Memory request | `64Mi` |
+
+### Network policy
+
+In clusters that default-deny traffic, you can attach a NetworkPolicy to the operator pod via the `networkPolicy` value. Nothing is rendered unless `networkPolicy` is set, so the default behavior is unchanged. The `policyTypes` field is derived automatically from whether you provide `ingress` and/or `egress` rules, and optional `labels` and `annotations` are added to the resource.
+
+The operator pod exposes the metrics port (`8443` when `metrics.enabled`) and a health probe port (`8081`). The example below allows Prometheus to scrape metrics from a `monitoring` namespace and permits egress to the Kubernetes API server:
+
+```yaml
+networkPolicy:
+  labels: {}
+  annotations: {}
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8443
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 6443
+```
+
+> **Note:** A NetworkPolicy only takes effect if your cluster's CNI enforces it (e.g. Calico, Cilium). CNIs such as kindnet do not enforce NetworkPolicy.
 
 ## Source Code
 
