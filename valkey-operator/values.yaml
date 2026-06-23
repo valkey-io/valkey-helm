@@ -116,7 +116,19 @@ commonLabels: {}
 # TODO: networkPolicy
 # TODO: aggregated ClusterRoles (admin/editor/viewer)
 # TODO: topologySpreadConstraints
-# TODO: podDisruptionBudget
+
+# PodDisruptionBudget configuration
+# Helps keep enough operator replicas available during voluntary disruptions
+podDisruptionBudget:
+  # Enable PodDisruptionBudget
+  enabled: false
+  # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
+  minAvailable:
+  # Maximum number of pods that can be unavailable during disruptions
+  maxUnavailable: 1
+  # Unhealthy pod eviction policy (optional)
+  # Valid values: IfHealthyBudget, AlwaysAllow
+  unhealthyPodEvictionPolicy: ""
 
 metrics:
   # Enable the metrics endpoint
