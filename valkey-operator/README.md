@@ -1,6 +1,6 @@
 # valkey-operator
 
-![Version: 0.2.4](https://img.shields.io/badge/Version-0.2.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
+![Version: 0.2.5](https://img.shields.io/badge/Version-0.2.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
 
 A Helm chart for deploying the [Valkey Operator](https://github.com/valkey-io/valkey-operator) on Kubernetes.
 
@@ -59,6 +59,7 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `podDisruptionBudget.minAvailable` | Minimum pods available during disruptions | `null` |
 | `podDisruptionBudget.maxUnavailable` | Maximum pods unavailable during disruptions | `1` |
 | `podDisruptionBudget.unhealthyPodEvictionPolicy` | Policy for evicting unhealthy pods | `""` |
+| `topologySpreadConstraints` | Topology spread constraints for the operator pods | `[]` |
 | `metrics.enabled` | Enable the metrics endpoint | `true` |
 | `metrics.port` | Metrics endpoint port | `8443` |
 | `networkPolicy.enabled` | Enable creation of a NetworkPolicy for the operator pod | `false` |

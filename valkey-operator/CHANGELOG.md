@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.5
+
+### Added
+
+- Add optional `topologySpreadConstraints` support for the valkey-operator Deployment.
+
 ## 0.2.4
 
 ### Added
