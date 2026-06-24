@@ -135,7 +135,7 @@ spec:
   volumes:
     - name: valkey-users-secret
       secret:
-        secretName: {{ .Values.auth.usersExistingSecret }}
+        secretName: {{ tpl .Values.auth.usersExistingSecret . }}
     {{- if .Values.tls.enabled }}
     - name: valkey-tls
       secret:

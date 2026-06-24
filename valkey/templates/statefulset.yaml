@@ -221,7 +221,7 @@ spec:
                   {{- if .Values.auth.usersExistingSecret }}
                   {{- $defaultUser := index .Values.auth.aclUsers "default" | default dict }}
                   {{- $passwordKey := $defaultUser.passwordKey | default "default" }}
-                  name: {{ .Values.auth.usersExistingSecret }}
+                  name: {{ tpl .Values.auth.usersExistingSecret . }}
                   key: {{ $passwordKey }}
                   {{- else }}
                   name: {{ include "valkey.fullname" . }}-auth
@@ -281,7 +281,7 @@ spec:
         {{- if .Values.auth.usersExistingSecret }}
         - name: valkey-users-secret
           secret:
-            secretName: {{ .Values.auth.usersExistingSecret }}
+            secretName: {{ tpl .Values.auth.usersExistingSecret . }}
             defaultMode: 0400
         {{- end }}
         {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
