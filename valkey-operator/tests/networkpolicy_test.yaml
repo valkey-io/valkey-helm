@@ -41,6 +41,36 @@ tests:
           path: spec.egress
           count: 3
 
+  - it: should scope the Valkey egress to managed pods cluster-wide when no watchNamespaces
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/managed-by"]
+          value: valkey-operator
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+
+  - it: should combine namespace and pod selectors for the Valkey egress when watching namespaces
+    set:
+      networkPolicy.enabled: true
+      manager.watchNamespaces:
+        - ns-a
+        - ns-b
+    asserts:
+      - equal:
+          path: spec.egress[2].to[0].namespaceSelector.matchExpressions[0].key
+          value: kubernetes.io/metadata.name
+      - equal:
+          path: spec.egress[2].to[0].namespaceSelector.matchExpressions[0].values
+          value:
+            - ns-a
+            - ns-b
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/managed-by"]
+          value: valkey-operator
+
   - it: should omit default egress when defaultEgressRules is false
     set:
       networkPolicy.enabled: true
