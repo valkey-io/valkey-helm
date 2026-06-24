@@ -87,7 +87,7 @@ securityContext:
 nodeSelector: {}
 
 # Termination grace period for pods (seconds)
-terminationGracePeriodSeconds: 10
+#terminationGracePeriodSeconds: 10
 
 # tolerations:
 #   - key: "node-role.kubernetes.io/control-plane"

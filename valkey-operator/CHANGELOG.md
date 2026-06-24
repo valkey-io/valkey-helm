@@ -12,6 +12,14 @@
   - Tunable via `networkPolicy.defaultEgressRules` (default `true`), `valkeyPort` (`6379`), `apiServerPort` (`6443`), and `dnsNamespace` (`kube-system`).
   - Supports `ingress`, `egress` (merged with the defaults), `labels`, and `annotations`; `policyTypes` is derived from the rules in effect.
 
+### Changed
+
+- terminationGracePeriodSeconds is omitted from configuration by default and uses kubernetes default (30s) unless overridden.
+
+### Fixed
+
+- Added configurability for terminationGracePeriodSeconds.
+- Added configurability for serving metrics securely.
 
 ## 0.2.1
 
