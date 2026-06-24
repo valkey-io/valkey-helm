@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-### Added
+### 0.2.2
+
+- Add namespace field in PodDisruptionBudget
+
+### 0.2.1
 
 - Add optional PodDisruptionBudget support for the valkey-operator Deployment.
 
