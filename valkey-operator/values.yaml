@@ -111,7 +111,6 @@ podLabels: {}
 # Labels to add to all resources
 commonLabels: {}
 
-# TODO: metrics auth RBAC (metrics-auth-role, metrics-reader-role)
 # TODO: prometheus ServiceMonitor
 # TODO: networkPolicy
 # TODO: aggregated ClusterRoles (admin/editor/viewer)
@@ -135,6 +134,25 @@ metrics:
   enabled: true
   # Port for the metrics endpoint
   port: 8443
+  # Serve metrics over HTTPS with authn/authz, protecting the endpoint with
+  # TokenReviews and SubjectAccessReviews (passes --metrics-secure=true).
+  # Requires rbac.create to create the metrics-auth ClusterRole and binding.
+  # Defaults to false to preserve the existing insecure HTTP behavior; scrapers
+  # must then be authorized via the metrics-reader ClusterRole.
+  secure: false
+  reader:
+    # Optionally bind a scraper ServiceAccount to the metrics-reader ClusterRole
+    # so it can read the /metrics endpoint. Disabled by default; most setups
+    # bind their scraper manually (see README). Requires rbac.create.
+    binding:
+      # Create the ClusterRoleBinding for the scraper ServiceAccount.
+      create: false
+      # Name of the scraper ServiceAccount to authorize. Supports templating,
+      # e.g. "{{ .Release.Name }}-prometheus". Required when create is true.
+      serviceAccountName: ""
+      # Namespace of the scraper ServiceAccount. Supports templating.
+      # Defaults to the release namespace when empty.
+      namespace: ""
   service:
     # Service type for the metrics service
     type: ClusterIP

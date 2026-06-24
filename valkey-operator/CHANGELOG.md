@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+### Added
+-Add metrics auth RBAC (metrics-auth-role, metrics-reader-role) support to the valkey-operator chart
+ 
 
 ### Added
 
