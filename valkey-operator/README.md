@@ -1,6 +1,6 @@
 # valkey-operator
 
-![Version: 0.2.1](https://img.shields.io/badge/Version-0.2.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
+![Version: 0.2.2](https://img.shields.io/badge/Version-0.2.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
 
 A Helm chart for deploying the [Valkey Operator](https://github.com/valkey-io/valkey-operator) on Kubernetes.
 
@@ -61,10 +61,51 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `podDisruptionBudget.unhealthyPodEvictionPolicy` | Policy for evicting unhealthy pods | `""` |
 | `metrics.enabled` | Enable the metrics endpoint | `true` |
 | `metrics.port` | Metrics endpoint port | `8443` |
+| `networkPolicy.enabled` | Enable creation of a NetworkPolicy for the operator pod | `false` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `128Mi` |
 | `resources.requests.cpu` | CPU request | `10m` |
 | `resources.requests.memory` | Memory request | `64Mi` |
+
+### Network policy
+
+In clusters that default-deny traffic, you can attach a NetworkPolicy to the operator pod by setting `networkPolicy.enabled: true`. It is disabled by default, so the default behavior is unchanged. This naming mirrors the [valkey chart](../valkey) (`enabled`, `extraIngress`, `extraEgress`) for a consistent experience across both charts.
+
+Once enabled, the chart automatically adds the egress the operator needs to function — DNS, the Kubernetes API server, and the managed Valkey pods on the Valkey port (`6379`) — so locking down egress doesn't break reconciliation. The Valkey egress rule targets the namespaces in `manager.watchNamespaces`; when that list is empty (watch all namespaces) it allows the Valkey port to every namespace. The `policyTypes` field is derived automatically from the rules in effect, and optional `labels` and `annotations` are added to the resource.
+
+You can tune or disable this behavior:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `networkPolicy.enabled` | `false` | Enable creation of a NetworkPolicy for the operator pod. |
+| `networkPolicy.defaultEgressRules` | `true` | Inject the operator's required egress. Set `false` to manage all egress yourself. |
+| `networkPolicy.valkeyPort` | `6379` | Port the operator uses to reach Valkey pods. |
+| `networkPolicy.apiServerPort` | `6443` | Kubernetes API server port. |
+| `networkPolicy.dnsNamespace` | `kube-system` | Namespace running kube-dns / CoreDNS. |
+| `networkPolicy.extraIngress` | `[]` | Additional ingress rules appended verbatim to the policy (templated with `tpl`). |
+| `networkPolicy.extraEgress` | `[]` | Additional egress rules merged with the default operator egress (templated with `tpl`). |
+| `networkPolicy.labels` | `{}` | Extra labels to add to the NetworkPolicy. |
+| `networkPolicy.annotations` | `{}` | Extra annotations to add to the NetworkPolicy. |
+
+The operator pod exposes the metrics port (`8443` when `metrics.enabled`) and a health probe port (`8081`). The example below allows Prometheus to scrape metrics from a `monitoring` namespace; the operator egress rules are added for you:
+
+```yaml
+networkPolicy:
+  enabled: true
+  labels: {}
+  annotations: {}
+  extraIngress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8443
+  # Any extra egress here is merged with the default operator egress rules.
+  extraEgress: []
+```
+
 
 ## Source Code
 
