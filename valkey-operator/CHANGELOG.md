@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.3
+
+### Added
+
+- Support templated values in `manager.watchNamespaces` for NetworkPolicy egress rules.
+
 ## 0.2.2
 
 ### Added
