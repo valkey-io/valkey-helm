@@ -60,6 +60,7 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `podDisruptionBudget.maxUnavailable` | Maximum pods unavailable during disruptions | `1` |
 | `podDisruptionBudget.unhealthyPodEvictionPolicy` | Policy for evicting unhealthy pods | `""` |
 | `metrics.enabled` | Enable the metrics endpoint | `true` |
+| `metrics.secure` | Expose metrics endpoint over TLS | `false` |
 | `metrics.port` | Metrics endpoint port | `8443` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `128Mi` |

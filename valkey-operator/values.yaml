@@ -133,6 +133,8 @@ podDisruptionBudget:
 metrics:
   # Enable the metrics endpoint
   enabled: true
+  # Expose metrics over TLS
+  secure: false
   # Port for the metrics endpoint
   port: 8443
   service:
