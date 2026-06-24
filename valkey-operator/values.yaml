@@ -130,36 +130,45 @@ podDisruptionBudget:
   unhealthyPodEvictionPolicy: ""
 
 # Network policy to control traffic to/from the operator pod.
-# Nothing is rendered unless this is set. As soon as you opt in (set any field
-# under networkPolicy), the operator's required egress is added automatically:
-# DNS, the Kubernetes API server, and managed Valkey pods on the Valkey port.
-# This keeps the operator working when egress is locked down. policyTypes are
-# derived from the rules in effect (ingress you provide, and/or egress).
+# Disabled by default. When enabled, the operator's required egress is added
+# automatically: DNS, the Kubernetes API server, and managed Valkey pods on the
+# Valkey port. This keeps the operator working when egress is locked down.
+# policyTypes are derived from the rules in effect (extraIngress you provide,
+# and/or egress).
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
 #
 # The default Valkey egress rule targets the namespaces in manager.watchNamespaces;
 # when that list is empty (watch all namespaces) it allows the Valkey port to every
-# namespace. Tunables:
-#   defaultEgressRules: true   # set false to manage all egress yourself
-#   valkeyPort: 6379           # port the operator uses to reach Valkey pods
-#   apiServerPort: 6443        # Kubernetes API server port
-#   dnsNamespace: kube-system  # namespace running kube-dns / CoreDNS
-#
-# Example (allow Prometheus to scrape metrics; operator egress is added for you):
-#   networkPolicy:
-#     labels: {}
-#     annotations: {}
-#     ingress:
-#       - from:
-#           - namespaceSelector:
-#               matchLabels:
-#                 kubernetes.io/metadata.name: monitoring
-#         ports:
-#           - protocol: TCP
-#             port: 8443
-#     # Any extra egress here is merged with the default operator egress rules.
-#     egress: []
-networkPolicy: {}
+# namespace.
+networkPolicy:
+  # Enable creation of a NetworkPolicy for the operator pod
+  enabled: false
+  # Inject the operator's required egress (DNS, API server, managed Valkey pods).
+  # Set false to manage all egress yourself via extraEgress.
+  defaultEgressRules: true
+  # Port the operator uses to reach Valkey pods
+  valkeyPort: 6379
+  # Kubernetes API server port
+  apiServerPort: 6443
+  # Namespace running kube-dns / CoreDNS
+  dnsNamespace: kube-system
+  # Extra labels to add to the NetworkPolicy
+  labels: {}
+  # Extra annotations to add to the NetworkPolicy
+  annotations: {}
+  # Additional ingress rules appended verbatim to the policy (templated with tpl)
+  extraIngress: []
+  # Additional egress rules merged with the default operator egress (templated with tpl)
+  extraEgress: []
+  # Example (allow Prometheus to scrape metrics; operator egress is added for you):
+  #   extraIngress:
+  #     - from:
+  #         - namespaceSelector:
+  #             matchLabels:
+  #               kubernetes.io/metadata.name: monitoring
+  #       ports:
+  #         - protocol: TCP
+  #           port: 8443
 
 
 

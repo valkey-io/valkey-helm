@@ -1,3 +1,4 @@
+{{- if .Values.networkPolicy.enabled }}
 {{- with .Values.networkPolicy }}
 {{- $useDefaults := true }}
 {{- if hasKey . "defaultEgressRules" }}
@@ -7,7 +8,7 @@
 {{- $apiServerPort := .apiServerPort | default 6443 }}
 {{- $dnsNamespace := .dnsNamespace | default "kube-system" }}
 {{- $watch := $.Values.manager.watchNamespaces }}
-{{- $hasEgress := or .egress $useDefaults }}
+{{- $hasEgress := or .extraEgress $useDefaults }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -27,13 +28,13 @@ spec:
     matchLabels:
       {{- include "valkey-operator.selectorLabels" $ | nindent 6 }}
   policyTypes:
-  {{- if .ingress }}
+  {{- if .extraIngress }}
     - Ingress
   {{- end }}
   {{- if $hasEgress }}
     - Egress
   {{- end }}
-  {{- with .ingress }}
+  {{- with .extraIngress }}
   ingress:
     {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
@@ -72,8 +73,9 @@ spec:
         - protocol: TCP
           port: {{ $valkeyPort }}
     {{- end }}
-    {{- with .egress }}
+    {{- with .extraEgress }}
     {{- tpl (toYaml .) $ | nindent 4 }}
     {{- end }}
   {{- end }}
+{{- end }}
 {{- end }}
