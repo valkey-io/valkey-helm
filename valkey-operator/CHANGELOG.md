@@ -11,7 +11,6 @@
 ### Fixed
 
 - Added configurability for terminationGracePeriodSeconds.
-- Added configurability for serving metrics securely.
 
 ## 0.2.4
 
