@@ -2,15 +2,7 @@
 
 ## Unreleased
 
-## 0.2.2
-
-### Added
-
-- New value `networkPolicy` to attach a NetworkPolicy to the operator pod.
-  - Nothing is rendered unless set, preserving existing behavior.
-  - Once opted in, the operator's required egress (DNS, Kubernetes API server, and managed Valkey pods on the Valkey port) is injected automatically so reconciliation keeps working under egress lockdown. The Valkey rule targets `manager.watchNamespaces` (all namespaces when empty).
-  - Tunable via `networkPolicy.defaultEgressRules` (default `true`), `valkeyPort` (`6379`), `apiServerPort` (`6443`), and `dnsNamespace` (`kube-system`).
-  - Supports `ingress`, `egress` (merged with the defaults), `labels`, and `annotations`; `policyTypes` is derived from the rules in effect.
+## 0.2.5
 
 ### Changed
 
@@ -20,6 +12,28 @@
 
 - Added configurability for terminationGracePeriodSeconds.
 - Added configurability for serving metrics securely.
+
+## 0.2.4
+
+### Added
+
+- Support templated values in `manager.watchNamespaces` for NetworkPolicy egress rules.
+
+## 0.2.3
+
+### Fixed
+
+- Add namespace field in PodDisruptionBudget
+
+## 0.2.2
+
+### Added
+
+- New value `networkPolicy` to attach a NetworkPolicy to the operator pod.
+  - Nothing is rendered unless set, preserving existing behavior.
+  - Once opted in, the operator's required egress (DNS, Kubernetes API server, and managed Valkey pods on the Valkey port) is injected automatically so reconciliation keeps working under egress lockdown. The Valkey rule targets `manager.watchNamespaces` (all namespaces when empty).
+  - Tunable via `networkPolicy.defaultEgressRules` (default `true`), `valkeyPort` (`6379`), `apiServerPort` (`6443`), and `dnsNamespace` (`kube-system`).
+  - Supports `ingress`, `egress` (merged with the defaults), `labels`, and `annotations`; `policyTypes` is derived from the rules in effect.
 
 ## 0.2.1
 
