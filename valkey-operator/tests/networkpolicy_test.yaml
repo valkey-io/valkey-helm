@@ -71,6 +71,20 @@ tests:
           path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/managed-by"]
           value: valkey-operator
 
+  - it: should support templated watchNamespaces values
+    set:
+      foo: bar
+      manager.watchNamespaces:
+        - "namespace-{{ .Values.foo }}"
+        - static-ns
+      networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[2].to[0].namespaceSelector.matchExpressions[0].values
+          value:
+            - namespace-bar
+            - static-ns
+
   - it: should omit default egress when defaultEgressRules is false
     set:
       networkPolicy.enabled: true

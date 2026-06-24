@@ -67,7 +67,7 @@ spec:
                 operator: In
                 values:
                   {{- range $watch }}
-                  - {{ . }}
+                  - {{ tpl . $ }}
                   {{- end }}
           {{- else }}
           namespaceSelector: {}
