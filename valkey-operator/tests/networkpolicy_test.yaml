@@ -1,0 +1,133 @@
+suite: operator network policy configuration
+templates:
+  - templates/netpolicy.yaml
+tests:
+  - it: should not render anything when disabled by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render a NetworkPolicy when enabled
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: apiVersion
+          value: networking.k8s.io/v1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-operator
+
+  - it: should select the operator pods
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey-operator
+
+  - it: should inject default egress rules when enabled
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+      - lengthEqual:
+          path: spec.egress
+          count: 3
+
+  - it: should scope the Valkey egress to managed pods cluster-wide when no watchNamespaces
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/managed-by"]
+          value: valkey-operator
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+
+  - it: should combine namespace and pod selectors for the Valkey egress when watching namespaces
+    set:
+      networkPolicy.enabled: true
+      manager.watchNamespaces:
+        - ns-a
+        - ns-b
+    asserts:
+      - equal:
+          path: spec.egress[2].to[0].namespaceSelector.matchExpressions[0].key
+          value: kubernetes.io/metadata.name
+      - equal:
+          path: spec.egress[2].to[0].namespaceSelector.matchExpressions[0].values
+          value:
+            - ns-a
+            - ns-b
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/managed-by"]
+          value: valkey-operator
+
+  - it: should omit default egress when defaultEgressRules is false
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.defaultEgressRules: false
+    asserts:
+      - isNull:
+          path: spec.egress
+
+  - it: should append extraIngress rules and set the Ingress policyType
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.extraIngress:
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: monitoring
+          ports:
+            - protocol: TCP
+              port: 8443
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - lengthEqual:
+          path: spec.ingress
+          count: 1
+
+  - it: should merge extraEgress with the default egress rules
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.extraEgress:
+        - to:
+            - ipBlock:
+                cidr: 10.0.0.0/8
+          ports:
+            - protocol: TCP
+              port: 443
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 4
+
+  - it: should keep extraEgress when default egress is disabled
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.defaultEgressRules: false
+      networkPolicy.extraEgress:
+        - to:
+            - ipBlock:
+                cidr: 10.0.0.0/8
+          ports:
+            - protocol: TCP
+              port: 443
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+      - lengthEqual:
+          path: spec.egress
+          count: 1

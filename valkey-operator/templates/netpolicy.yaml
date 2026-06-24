@@ -1,0 +1,88 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- with .Values.networkPolicy }}
+{{- $useDefaults := true }}
+{{- if hasKey . "defaultEgressRules" }}
+{{- $useDefaults = .defaultEgressRules }}
+{{- end }}
+{{- $valkeyPort := .valkeyPort | default 6379 }}
+{{- $apiServerPort := .apiServerPort | default 6443 }}
+{{- $dnsNamespace := .dnsNamespace | default "kube-system" }}
+{{- $watch := $.Values.manager.watchNamespaces }}
+{{- $hasEgress := or .extraEgress $useDefaults }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "valkey-operator.fullname" $ }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "valkey-operator.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "valkey-operator.selectorLabels" $ | nindent 6 }}
+  policyTypes:
+  {{- if .extraIngress }}
+    - Ingress
+  {{- end }}
+  {{- if $hasEgress }}
+    - Egress
+  {{- end }}
+  {{- with .extraIngress }}
+  ingress:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- if $hasEgress }}
+  egress:
+    {{- if $useDefaults }}
+    # DNS resolution (kube-dns / CoreDNS)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $dnsNamespace }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Kubernetes API server
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: {{ $apiServerPort }}
+    # Managed Valkey pods on the Valkey port
+    - to:
+        - {{- if $watch }}
+          namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- range $watch }}
+                  - {{ . }}
+                  {{- end }}
+          {{- else }}
+          namespaceSelector: {}
+          {{- end }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/managed-by: valkey-operator
+              app.kubernetes.io/name: valkey
+      ports:
+        - protocol: TCP
+          port: {{ $valkeyPort }}
+    {{- end }}
+    {{- with .extraEgress }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
