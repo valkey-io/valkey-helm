@@ -130,7 +130,7 @@ spec:
             - name: {{ $key }}
               value: "{{ $val }}"
             {{- end }}
-            - name: VALKEY_LOGLEVEL
+            - name: VALKEY_LOG_LEVEL
               value: "{{ .Values.valkeyLogLevel }}"
           ports:
             - name: tcp
