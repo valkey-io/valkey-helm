@@ -3,6 +3,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ include "valkey-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "valkey-operator.labels" . | nindent 4 }}
 spec:
