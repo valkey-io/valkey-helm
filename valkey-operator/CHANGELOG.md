@@ -12,6 +12,13 @@
   - Tunable via `networkPolicy.defaultEgressRules` (default `true`), `valkeyPort` (`6379`), `apiServerPort` (`6443`), and `dnsNamespace` (`kube-system`).
   - Supports `ingress`, `egress` (merged with the defaults), `labels`, and `annotations`; `policyTypes` is derived from the rules in effect.
 
+
+## 0.2.1
+
+### Added
+
+- Add optional PodDisruptionBudget support for the valkey-operator Deployment.
+
 ## 0.2.0
 
 ### Added
