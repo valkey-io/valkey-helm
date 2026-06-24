@@ -66,6 +66,17 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `metrics.reader.binding.create` | Bind a scraper ServiceAccount to the `metrics-reader` ClusterRole. Requires `rbac.create`, `metrics.enabled`, and `metrics.secure` | `false` |
 | `metrics.reader.binding.serviceAccountName` | Name of the scraper ServiceAccount to authorize. Supports templating; required when `binding.create` is `true` | `""` |
 | `metrics.reader.binding.namespace` | Namespace of the scraper ServiceAccount. Supports templating; defaults to the release namespace when empty | `""` |
+| `metrics.serviceMonitor.enabled` | Create a Prometheus ServiceMonitor for the metrics endpoint (requires the Prometheus Operator CRDs) | `false` |
+| `metrics.serviceMonitor.namespace` | Namespace for the ServiceMonitor | `""` (release namespace) |
+| `metrics.serviceMonitor.labels` | Additional labels for the ServiceMonitor | `{}` |
+| `metrics.serviceMonitor.annotations` | Annotations for the ServiceMonitor | `{}` |
+| `metrics.serviceMonitor.interval` | Scrape interval | `""` |
+| `metrics.serviceMonitor.scrapeTimeout` | Scrape timeout | `""` |
+| `metrics.serviceMonitor.scheme` | HTTP scheme used for scraping | `""` |
+| `metrics.serviceMonitor.tlsConfig` | TLS configuration used when scraping | `{}` |
+| `metrics.serviceMonitor.honorLabels` | Keep labels from the scraped target on collision | `false` |
+| `metrics.serviceMonitor.relabelings` | relabelings applied before scraping | `[]` |
+| `metrics.serviceMonitor.metricRelabelings` | metricRelabelings applied before ingestion | `[]` |
 | `networkPolicy.enabled` | Enable creation of a NetworkPolicy for the operator pod | `false` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `128Mi` |

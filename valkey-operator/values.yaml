@@ -124,8 +124,6 @@ podLabels: {}
 # Labels to add to all resources
 commonLabels: {}
 
-# TODO: prometheus ServiceMonitor
-
 # PodDisruptionBudget configuration
 # Helps keep enough operator replicas available during voluntary disruptions
 podDisruptionBudget:
@@ -180,8 +178,6 @@ networkPolicy:
   #         - protocol: TCP
   #           port: 8443
 
-
-
 metrics:
   # Enable the metrics endpoint
   enabled: true
@@ -216,3 +212,28 @@ metrics:
     annotations: {}
     # Labels for the metrics service
     labels: {}
+  # Prometheus ServiceMonitor for the operator metrics endpoint
+  # Requires the Prometheus Operator CRDs (monitoring.coreos.com) to be installed
+  serviceMonitor:
+    # Enable the ServiceMonitor
+    enabled: false
+    # Namespace for the ServiceMonitor (defaults to the release namespace)
+    namespace: ""
+    # Additional labels for the ServiceMonitor (e.g. to match the Prometheus serviceMonitorSelector)
+    labels: {}
+    # Annotations for the ServiceMonitor
+    annotations: {}
+    # Scrape interval (defaults to the Prometheus global interval when empty)
+    interval: ""
+    # Scrape timeout (defaults to the Prometheus global timeout when empty)
+    scrapeTimeout: ""
+    # HTTP scheme used for scraping (defaults to http when empty)
+    scheme: ""
+    # TLS configuration used when scraping the endpoint
+    tlsConfig: {}
+    # Keep labels from the scraped target on collision with server-side labels
+    honorLabels: false
+    # relabelings applied to samples before scraping
+    relabelings: []
+    # metricRelabelings applied to samples before ingestion
+    metricRelabelings: []
