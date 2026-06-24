@@ -60,7 +60,8 @@ spec:
           port: {{ $apiServerPort }}
     # Managed Valkey pods on the Valkey port
     - to:
-        - {{ if $watch }}namespaceSelector:
+        - {{- if $watch }}
+          namespaceSelector:
             matchExpressions:
               - key: kubernetes.io/metadata.name
                 operator: In
@@ -68,7 +69,10 @@ spec:
                   {{- range $watch }}
                   - {{ . }}
                   {{- end }}
-          {{ end }}podSelector:
+          {{- else }}
+          namespaceSelector: {}
+          {{- end }}
+          podSelector:
             matchLabels:
               app.kubernetes.io/managed-by: valkey-operator
               app.kubernetes.io/name: valkey
