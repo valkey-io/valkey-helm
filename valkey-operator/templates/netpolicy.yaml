@@ -61,11 +61,14 @@ spec:
     # Managed Valkey pods on the Valkey port
     - to:
         {{- if $watch }}
-        {{- range $watch }}
         - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ . }}
-        {{- end }}
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- range $watch }}
+                  - {{ . }}
+                  {{- end }}
         {{- else }}
         - namespaceSelector: {}
         {{- end }}
