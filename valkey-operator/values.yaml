@@ -38,7 +38,8 @@ serviceAccount:
   automount: true
 
 rbac:
-  # Create ClusterRole and ClusterRoleBinding for the operator
+  # Create the operator ClusterRole/ClusterRoleBinding and the aggregated
+  # admin/editor/viewer ClusterRoles for the Valkey CRDs
   create: true
 
 manager:
@@ -122,7 +123,6 @@ commonLabels: {}
 
 # TODO: metrics auth RBAC (metrics-auth-role, metrics-reader-role)
 # TODO: prometheus ServiceMonitor
-# TODO: aggregated ClusterRoles (admin/editor/viewer)
 
 # PodDisruptionBudget configuration
 # Helps keep enough operator replicas available during voluntary disruptions

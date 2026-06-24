@@ -1,6 +1,6 @@
 # valkey-operator
 
-![Version: 0.2.5](https://img.shields.io/badge/Version-0.2.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
+![Version: 0.2.6](https://img.shields.io/badge/Version-0.2.6-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
 
 A Helm chart for deploying the [Valkey Operator](https://github.com/valkey-io/valkey-operator) on Kubernetes.
 
@@ -52,7 +52,7 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `image.tag` | Operator image tag | `""` (uses `.Chart.AppVersion`) |
 | `replicaCount` | Number of operator replicas | `1` |
 | `serviceAccount.create` | Create a ServiceAccount | `true` |
-| `rbac.create` | Create ClusterRole and ClusterRoleBinding | `true` |
+| `rbac.create` | Create the operator ClusterRole/ClusterRoleBinding and the aggregated admin/editor/viewer ClusterRoles | `true` |
 | `manager.leaderElection.enabled` | Enable leader election | `true` |
 | `manager.watchNamespaces` | Restrict cache to these namespaces (cluster-wide if empty) | `[]` |
 | `podDisruptionBudget.enabled` | Enable PodDisruptionBudget | `false` |
@@ -107,6 +107,21 @@ networkPolicy:
   extraEgress: []
 ```
 
+### Aggregated ClusterRoles
+
+When `rbac.create` is enabled (the default), the chart also ships three aggregated
+ClusterRoles for the `valkeyclusters` and `valkeynodes` custom resources, following the
+[kubebuilder convention](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#aggregated-clusterroles):
+
+| Role | Aggregation label | Access |
+|---|---|---|
+| `*-valkey-admin` | `rbac.authorization.k8s.io/aggregate-to-admin` | Full management of the CRs (read-only on status) |
+| `*-valkey-editor` | `rbac.authorization.k8s.io/aggregate-to-edit` | Create/update/delete the CRs (read-only on status) |
+| `*-valkey-viewer` | `rbac.authorization.k8s.io/aggregate-to-view` | Read-only access to the CRs and status |
+
+These roll up into the built-in `admin`, `edit`, and `view` ClusterRoles, so cluster
+admins can grant tenants access to the Valkey CRDs without handing out the operator's own
+controller permissions.
 
 ## Source Code
 

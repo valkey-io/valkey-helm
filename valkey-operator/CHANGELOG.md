@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.6
+
+### Added
+
+- Add aggregated admin/editor/viewer ClusterRoles for the Valkey CRDs (gated by `rbac.create`).
+
 ## 0.2.5
 
 ### Added

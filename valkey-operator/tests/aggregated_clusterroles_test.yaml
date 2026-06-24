@@ -1,0 +1,132 @@
+suite: operator aggregated clusterroles
+templates:
+  - templates/valkey-admin-role.yaml
+  - templates/valkey-editor-role.yaml
+  - templates/valkey-viewer-role.yaml
+tests:
+  - it: should not render admin role when rbac.create is false
+    template: templates/valkey-admin-role.yaml
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render editor role when rbac.create is false
+    template: templates/valkey-editor-role.yaml
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render viewer role when rbac.create is false
+    template: templates/valkey-viewer-role.yaml
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render admin role with aggregate-to-admin label and full management verbs
+    template: templates/valkey-admin-role.yaml
+    set:
+      rbac.create: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-operator-valkey-admin
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-admin"]
+          value: "true"
+      - equal:
+          path: rules[0].resources
+          value:
+            - valkeyclusters
+            - valkeynodes
+      - contains:
+          path: rules[0].verbs
+          content: deletecollection
+      - equal:
+          path: rules[1].resources
+          value:
+            - valkeyclusters/status
+            - valkeynodes/status
+      - equal:
+          path: rules[1].verbs
+          value:
+            - get
+      - isNotNull:
+          path: metadata.labels["helm.sh/chart"]
+
+  - it: should render editor role with aggregate-to-edit label and read/write verbs
+    template: templates/valkey-editor-role.yaml
+    set:
+      rbac.create: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-operator-valkey-editor
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-edit"]
+          value: "true"
+      - equal:
+          path: rules[0].verbs
+          value:
+            - create
+            - delete
+            - get
+            - list
+            - patch
+            - update
+            - watch
+      - notContains:
+          path: rules[0].verbs
+          content: deletecollection
+      - equal:
+          path: rules[1].verbs
+          value:
+            - get
+
+  - it: should render viewer role with aggregate-to-view label and read-only verbs
+    template: templates/valkey-viewer-role.yaml
+    set:
+      rbac.create: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-operator-valkey-viewer
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-view"]
+          value: "true"
+      - equal:
+          path: rules[0].verbs
+          value:
+            - get
+            - list
+            - watch
+      - notContains:
+          path: rules[0].verbs
+          content: create
+
+  - it: should respect fullnameOverride in the admin role name
+    template: templates/valkey-admin-role.yaml
+    set:
+      rbac.create: true
+      fullnameOverride: my-custom-operator
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-custom-operator-valkey-admin
