@@ -28,7 +28,9 @@ spec:
     spec:
       {{- include "valkey-operator.imagePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "valkey-operator.serviceAccountName" . }}
-      terminationGracePeriodSeconds: 10
+      {{- if hasKey .Values "terminationGracePeriodSeconds" }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}

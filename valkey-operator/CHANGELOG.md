@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.2.5
+
+### Changed
+
+- terminationGracePeriodSeconds is omitted from configuration by default and uses kubernetes default (30s) unless overridden.
+
+### Fixed
+
+- Added configurability for terminationGracePeriodSeconds.
+- Added configurability for serving metrics securely.
+
 ## 0.2.4
 
 ### Added
