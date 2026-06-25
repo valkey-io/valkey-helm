@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add optional Prometheus ServiceMonitor support for the valkey-operator metrics endpoint.
+
 ## 0.2.4
 
 ### Added
