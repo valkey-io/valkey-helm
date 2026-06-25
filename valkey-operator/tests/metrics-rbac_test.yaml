@@ -2,9 +2,11 @@ suite: operator metrics auth RBAC
 templates:
   - templates/metrics-rbac.yaml
 tests:
-  - it: should render the metrics RBAC objects when rbac.create is true
+  - it: should render the metrics RBAC objects when rbac.create and secure metrics are enabled
     set:
       rbac.create: true
+      metrics.enabled: true
+      metrics.secure: true
     asserts:
       - hasDocuments:
           count: 3
@@ -12,11 +14,32 @@ tests:
   - it: should omit the metrics RBAC objects when rbac.create is false
     set:
       rbac.create: false
+      metrics.secure: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should omit the metrics RBAC objects when metrics.secure is false
+    set:
+      rbac.create: true
+      metrics.enabled: true
+      metrics.secure: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should omit the metrics RBAC objects when metrics.enabled is false
+    set:
+      rbac.create: true
+      metrics.enabled: false
+      metrics.secure: true
     asserts:
       - hasDocuments:
           count: 0
 
   - it: should create the metrics-auth ClusterRole with TokenReview and SubjectAccessReview rules
+    set:
+      metrics.secure: true
     documentIndex: 0
     asserts:
       - isKind:
@@ -44,6 +67,8 @@ tests:
               - create
 
   - it: should bind the metrics-auth ClusterRole to the operator ServiceAccount
+    set:
+      metrics.secure: true
     documentIndex: 1
     asserts:
       - isKind:
@@ -65,6 +90,8 @@ tests:
             namespace: NAMESPACE
 
   - it: should create the metrics-reader ClusterRole granting get on /metrics
+    set:
+      metrics.secure: true
     documentIndex: 2
     asserts:
       - isKind:
@@ -81,6 +108,8 @@ tests:
               - get
 
   - it: should include standard labels on the metrics-auth ClusterRole
+    set:
+      metrics.secure: true
     documentIndex: 0
     asserts:
       - equal:
@@ -96,12 +125,15 @@ tests:
           path: metadata.labels["helm.sh/chart"]
 
   - it: should not create the metrics-reader binding by default
+    set:
+      metrics.secure: true
     asserts:
       - hasDocuments:
           count: 3
 
   - it: should not create the metrics-reader binding when serviceAccountName is empty
     set:
+      metrics.secure: true
       metrics.reader.binding.create: true
       metrics.reader.binding.serviceAccountName: ""
     asserts:
@@ -110,6 +142,7 @@ tests:
 
   - it: should create the metrics-reader binding when enabled with a scraper SA
     set:
+      metrics.secure: true
       metrics.reader.binding.create: true
       metrics.reader.binding.serviceAccountName: prometheus
     documentIndex: 3
@@ -137,6 +170,7 @@ tests:
 
   - it: should template the scraper SA name and namespace
     set:
+      metrics.secure: true
       metrics.reader.binding.create: true
       metrics.reader.binding.serviceAccountName: "{{ .Release.Name }}-prometheus"
       metrics.reader.binding.namespace: "monitoring-{{ .Release.Name }}"
@@ -152,6 +186,7 @@ tests:
   - it: should not create the metrics-reader binding when rbac.create is false
     set:
       rbac.create: false
+      metrics.secure: true
       metrics.reader.binding.create: true
       metrics.reader.binding.serviceAccountName: prometheus
     asserts:
