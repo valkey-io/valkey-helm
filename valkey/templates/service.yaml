@@ -5,10 +5,8 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/component: primary
-  {{- with .Values.service.annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- include "renderTplValues" (dict "value" .Values.service.annotations "indent" 4 "root" $ ) }}
 spec:
   type: {{ .Values.service.type }}
   {{- if .Values.service.clusterIP }}

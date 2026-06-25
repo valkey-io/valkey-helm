@@ -7,9 +7,7 @@ metadata:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/part-of: valkey
     app.kubernetes.io/component: service-monitor
-    {{- with .Values.metrics.serviceMonitor.extraLabels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
+    {{- include "renderTplValues" (dict "value" .Values.metrics.serviceMonitor.extraLabels "indent" 4 "root" $ ) }}
   {{- with .Values.metrics.serviceMonitor.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -26,18 +24,12 @@ spec:
       {{- with .Values.metrics.serviceMonitor.honorLabels }}
       honorLabels: {{ . }}
       {{- end }}
-      {{- with .Values.metrics.serviceMonitor.relabelings }}
       relabelings:
-        {{- toYaml . | nindent 6 }}
-      {{- end }}
-      {{- with .Values.metrics.serviceMonitor.metricRelabelings }}
+        {{- include "renderTplValues" (dict "value" .Values.metrics.serviceMonitor.relabelings "indent" 6 "root" $ ) }}
       metricRelabelings:
-        {{- toYaml . | nindent 6 }}
-      {{- end }}
-  {{- with .Values.metrics.serviceMonitor.podTargetLabels }}
+        {{- include "renderTplValues" (dict "value" .Values.metrics.serviceMonitor.metricRelabelings "indent" 6 "root" $ ) }}
   podTargetLabels:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- include "renderTplValues" (dict "value" .Values.metrics.serviceMonitor.podTargetLabels "indent" 4 "root" $ ) }}
   {{- with .Values.metrics.serviceMonitor.sampleLimit }}
   sampleLimit: {{ . }}
   {{- end }}

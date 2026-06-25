@@ -6,10 +6,8 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/component: read
-  {{- with .Values.replica.service.annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- include "renderTplValues" (dict "value" .Values.replica.service.annotations "indent" 4 "root" $ ) }}
 spec:
   type: {{ .Values.replica.service.type }}
   {{- if .Values.replica.service.clusterIP }}
