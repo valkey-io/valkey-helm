@@ -59,6 +59,25 @@ tests:
             secret:
               secretName: my-secret
 
+  - it: should render existing secret test pod with templated usersExistingSecret
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret-{{ .Release.Name }}"
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Pod
+      - contains:
+          path: spec.volumes
+          content:
+            name: valkey-users-secret
+            secret:
+              secretName: my-secret-RELEASE-NAME
+
   - it: should not render test pods with aclConfig only
     set:
       auth.enabled: true

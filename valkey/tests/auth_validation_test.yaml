@@ -91,6 +91,21 @@ tests:
       - isKind:
           of: Deployment
 
+  - it: should succeed with templated usersExistingSecret
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret-{{ .Release.Name }}"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+        readonly:
+          permissions: "~* +@read"
+          passwordKey: "readonly-pwd"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+
   - it: should succeed with mixed inline and existing secret passwords
     set:
       auth.enabled: true
