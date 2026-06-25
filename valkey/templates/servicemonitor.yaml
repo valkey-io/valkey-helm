@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/part-of: valkey
     app.kubernetes.io/component: service-monitor
     {{- with .Values.metrics.serviceMonitor.extraLabels }}
-    {{- toYaml . | nindent 4 }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
     {{- end }}
   {{- with .Values.metrics.serviceMonitor.annotations }}
   annotations:
