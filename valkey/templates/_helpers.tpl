@@ -68,20 +68,20 @@ Create the name of the service account to use
 Returns the Valkey container image
 */}}
 {{- define "valkey.image" -}}
-{{- include "common.image" (dict "image" (dict "registry" .Values.image.registry "repository" .Values.image.repository "tag" (.Values.image.tag | default .Chart.AppVersion)) "global" .Values.global) }}
+{{- include "valkey.common.image" (dict "image" (dict "registry" .Values.image.registry "repository" .Values.image.repository "tag" (.Values.image.tag | default .Chart.AppVersion)) "global" .Values.global) }}
 {{- end -}}
 
 {{/*
 Returns the Valkey exporter container image
 */}}
 {{- define "valkey.metrics.exporter.image" -}}
-{{- include "common.image" (dict "image" .Values.metrics.exporter.image "global" .Values.global) }}
+{{- include "valkey.common.image" (dict "image" .Values.metrics.exporter.image "global" .Values.global) }}
 {{- end -}}
 
 {{/*
 The common image function that renders the container image
 */}}
-{{- define "common.image" -}}
+{{- define "valkey.common.image" -}}
 {{- $registryName := .image.registry }}
 {{- $repositoryName := .image.repository }}
 {{- $tag := .image.tag }}
@@ -187,4 +187,3 @@ Validate replica authentication configuration
   {{- end }}
 {{- end }}
 {{- end -}}
-
