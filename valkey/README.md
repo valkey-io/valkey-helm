@@ -318,7 +318,15 @@ tls:
 | metrics.serviceMonitor.scrapeTimeout | string | `""` |  |
 | metrics.serviceMonitor.targetLimit | bool | `false` |  |
 | nameOverride | string | `""` |  |
-| networkPolicy | object | `{}` |  |
+| networkPolicy.enabled | bool | `false` | Enable creation of a NetworkPolicy for the Valkey pods |
+| networkPolicy.allowExternal | bool | `true` | Allow ingress on the Valkey port from any source. When false, ingress is restricted to client-labeled pods, other Valkey pods, and ingressNSMatchLabels |
+| networkPolicy.allowExternalEgress | bool | `true` | Allow unrestricted egress. When false, egress is limited to DNS and intra-cluster communication on the Valkey port |
+| networkPolicy.ingressNSMatchLabels | object | `{}` | Labels selecting namespaces allowed to connect when allowExternal is false |
+| networkPolicy.ingressNSPodMatchLabels | object | `{}` | Labels selecting pods within the matched namespaces |
+| networkPolicy.extraIngress | list | `[]` | Additional ingress rules appended verbatim to the policy |
+| networkPolicy.extraEgress | list | `[]` | Additional egress rules appended verbatim to the policy |
+| networkPolicy.labels | object | `{}` | Extra labels to add to the NetworkPolicy |
+| networkPolicy.annotations | object | `{}` | Extra annotations to add to the NetworkPolicy |
 | nodeSelector | object | `{}` |  |
 | podAnnotations | object | `{}` |  |
 | podLabels | object | `{}` |  |
