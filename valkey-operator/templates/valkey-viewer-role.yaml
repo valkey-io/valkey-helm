@@ -1,0 +1,29 @@
+{{- if .Values.rbac.create -}}
+# Aggregated ClusterRole granting read-only access to the Valkey CRDs.
+# Rolls up into the built-in "view" ClusterRole so users can inspect
+# valkeyclusters/valkeynodes (including status) without any write permissions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "valkey-operator.fullname" . }}-valkey-viewer
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    {{- include "valkey-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - valkey.io
+  resources:
+  - valkeyclusters
+  - valkeynodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - valkey.io
+  resources:
+  - valkeyclusters/status
+  - valkeynodes/status
+  verbs:
+  - get
+{{- end }}
