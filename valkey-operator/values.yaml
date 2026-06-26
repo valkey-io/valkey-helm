@@ -38,7 +38,8 @@ serviceAccount:
   automount: true
 
 rbac:
-  # Create ClusterRole and ClusterRoleBinding for the operator
+  # Create the operator ClusterRole/ClusterRoleBinding and the aggregated
+  # admin/editor/viewer ClusterRoles for the Valkey CRDs
   create: true
 
 manager:
@@ -104,6 +105,15 @@ tolerations: []
 #                 - arm64
 affinity: {}
 
+# topologySpreadConstraints:
+#   - maxSkew: 1
+#     topologyKey: topology.kubernetes.io/zone
+#     whenUnsatisfiable: DoNotSchedule
+#     labelSelector:
+#       matchLabels:
+#         app.kubernetes.io/name: valkey-operator
+topologySpreadConstraints: []
+
 # Annotations for pods
 podAnnotations: {}
 # Labels for pods
@@ -112,8 +122,6 @@ podLabels: {}
 commonLabels: {}
 
 # TODO: prometheus ServiceMonitor
-# TODO: aggregated ClusterRoles (admin/editor/viewer)
-# TODO: topologySpreadConstraints
 
 # PodDisruptionBudget configuration
 # Helps keep enough operator replicas available during voluntary disruptions
