@@ -62,6 +62,7 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `topologySpreadConstraints` | Topology spread constraints for the operator pods | `[]` |
 | `metrics.enabled` | Enable the metrics endpoint | `true` |
 | `metrics.port` | Metrics endpoint port | `8443` |
+| `networkPolicy.enabled` | Enable creation of a NetworkPolicy for the operator pod | `false` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `128Mi` |
 | `resources.requests.cpu` | CPU request | `10m` |
@@ -106,6 +107,21 @@ networkPolicy:
   extraEgress: []
 ```
 
+### Aggregated ClusterRoles
+
+When `rbac.create` is enabled (the default), the chart also ships three aggregated
+ClusterRoles for the `valkeyclusters` and `valkeynodes` custom resources, following the
+[kubebuilder convention](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#aggregated-clusterroles):
+
+| Role | Aggregation label | Access |
+|---|---|---|
+| `*-valkey-admin` | `rbac.authorization.k8s.io/aggregate-to-admin` | Full management of the CRs (read-only on status) |
+| `*-valkey-editor` | `rbac.authorization.k8s.io/aggregate-to-edit` | Create/update/delete the CRs (read-only on status) |
+| `*-valkey-viewer` | `rbac.authorization.k8s.io/aggregate-to-view` | Read-only access to the CRs and status |
+
+These roll up into the built-in `admin`, `edit`, and `view` ClusterRoles, so cluster
+admins can grant tenants access to the Valkey CRDs without handing out the operator's own
+controller permissions.
 
 ## Source Code
 
