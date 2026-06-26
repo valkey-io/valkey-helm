@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.7
+
+### Added
+- Add metrics auth RBAC (metrics-auth-role, metrics-reader-role) support to the valkey-operator chart. The metrics RBAC is only rendered when `metrics.enabled` and `metrics.secure` are both true, since the operator only issues TokenReviews/SubjectAccessReviews under secure serving. This avoids leaving orphaned cluster-scoped RBAC when metrics are disabled or served insecurely.
+
 ## 0.2.6
 
 ### Added
