@@ -1,0 +1,10 @@
+Valkey HA has been deployed!
+
+1. Check sentinel config:
+   kubectl exec {{ include "valkey.fullname" . }}-0 -n {{ .Release.Namespace }} -c sentinel -- cat /data/sentinel.conf
+
+2. Connect to Valkey:
+   kubectl run valkey-client --rm -it --image={{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }} -- valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}
+
+3. Check cluster status:
+   kubectl get pods -l app.kubernetes.io/name={{ include "valkey.name" . }}

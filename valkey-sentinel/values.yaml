@@ -1,0 +1,331 @@
+## @param kubeVersion Override Kubernetes version
+##
+kubeVersion: ""
+
+## @param apiVersions Override Kubernetes API versions reported by .Capabilities
+##
+apiVersions: []
+
+## @param nameOverride String to partially override common.names.fullname
+##
+nameOverride: ""
+
+## @param fullnameOverride String to fully override common.names.fullname
+##
+fullnameOverride: ""
+
+## @param namespaceOverride String to fully override common.names.namespace
+##
+namespaceOverride: ""
+
+## @param commonLabels Labels to add to all deployed objects
+##
+commonLabels: {}
+
+## @param commonAnnotations Annotations to add to all deployed objects
+##
+commonAnnotations: {}
+
+## @param secretAnnotations Annotations to add to secret
+##
+secretAnnotations: {}
+
+## @param clusterDomain Kubernetes cluster domain name
+##
+clusterDomain: cluster.local
+
+## @param useHostnames Use hostnames instead of IPs for Sentinel and replication
+## CRITICAL: Set to true to use DNS-based HA
+##
+useHostnames: true
+
+## @param nameResolutionThreshold Failure threshold for internal hostnames resolution
+##
+nameResolutionThreshold: 5
+
+## @param nameResolutionTimeout Timeout seconds between probes for internal hostnames resolution
+##
+nameResolutionTimeout: 5
+
+## Valkey image configuration
+##
+image:
+  registry: docker.io
+  repository: valkey/valkey
+  tag: "8.0.1"
+  ## @param image.pullPolicy Valkey image pull policy
+  ##
+  pullPolicy: IfNotPresent
+  
+  ## @param image.pullSecrets Valkey image pull secrets
+  ## Optionally, specify an array of imagePullSecrets.
+  ## Secrets must be manually created in the namespace.
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+  ## Example:
+  ## pullSecrets:
+  ##   - myRegistryKeySecretName
+  ##
+  pullSecrets: []
+  
+  ## @param image.debug Enable debug mode
+  ##
+  debug: false
+
+## @param replicaCount Number of Valkey replicas
+##
+replicaCount: 3
+
+## Service Account
+##
+serviceAccount:
+  ## @param serviceAccount.create Specifies whether a ServiceAccount should be created
+  ##
+  create: true
+  ## @param serviceAccount.name The name of the ServiceAccount to use
+  ##
+  name: ""
+
+## Valkey Authentication
+##
+auth:
+  ## @param auth.enabled Enable password authentication
+  ##
+  enabled: false
+  
+  ## @param auth.password Valkey password
+  ##
+  password: ""
+  
+  ## @param auth.existingSecret The name of an existing secret with Valkey credentials
+  ## NOTE: When it's set, the previous `auth.password` parameter is ignored
+  ##
+  existingSecret: ""
+  
+  ## @param auth.existingSecretPasswordKey Password key to be retrieved from existing secret
+  ## NOTE: ignored unless `auth.existingSecret` parameter is set
+  ##
+  existingSecretPasswordKey: ""
+
+## Valkey Common Configuration
+## @param commonConfiguration Common configuration to be added into the ConfigMap
+##
+commonConfiguration: |-
+  # Enable AOF https://valkey.io/docs/topics/persistence.html
+  appendonly yes
+  # Disable RDB persistence, AOF persistence already enabled.
+  save ""
+
+## @param existingConfigmap The name of an existing ConfigMap with your custom configuration for Valkey nodes
+##
+existingConfigmap: ""
+
+## Valkey Service Configuration
+##
+service:
+  ## @param service.type Valkey service type
+  ##
+  type: ClusterIP
+  
+  ## @param service.port Valkey service port
+  ##
+  port: 6379
+  
+  ## @param service.externalTrafficPolicy Valkey service external traffic policy
+  ##
+  # externalTrafficPolicy: Cluster
+  
+  ## @param service.extraPorts Extra ports to expose (normally used with the `sidecar` value)
+  ##
+  extraPorts: []
+  
+  ## @param service.internalTrafficPolicy Valkey service internal traffic policy (requires Kubernetes v1.22 or greater to be usable)
+  ## ref: https://kubernetes.io/docs/concepts/services-networking/service-traffic-policy/
+  ##
+  internalTrafficPolicy: Cluster
+  
+  ## @param service.clusterIP Valkey service Cluster IP
+  ##
+  clusterIP: ""
+  
+  ## @param service.loadBalancerIP Valkey service Load Balancer IP
+  ## ref: https://kubernetes.io/docs/concepts/services-networking/service/#internal-load-balancer
+  ##
+  loadBalancerIP: ""
+  
+  ## @param service.loadBalancerClass Service Load Balancer class if service type is `LoadBalancer` (optional, cloud specific)
+  ## ref: https://kubernetes.io/docs/concepts/services-networking/service/#type-loadbalancer
+  ##
+  loadBalancerClass: ""
+  
+  ## @param service.loadBalancerSourceRanges Valkey service Load Balancer sources
+  ## https://kubernetes.io/docs/tasks/access-application-cluster/configure-cloud-provider-firewall/#restrict-access-for-loadbalancer-service
+  ## Example:
+  ## loadBalancerSourceRanges:
+  ##   - 10.10.10.0/24
+  ##
+  loadBalancerSourceRanges: []
+  
+  ## @param service.externalIPs Valkey service External IPs
+  ## https://kubernetes.io/docs/concepts/services-networking/service/#external-ips
+  ## Example:
+  ## externalIPs:
+  ##   - 10.10.10.1
+  ##   - 201.22.30.1
+  ##
+  externalIPs: []
+  
+  ## @param service.annotations Additional custom annotations for Valkey service
+  ##
+  annotations: {}
+
+## Sentinel configuration
+##
+sentinel:
+  ## @param sentinel.enabled Enable Sentinel
+  ##
+  enabled: true
+  
+  ## @param sentinel.port Sentinel port
+  ##
+  port: 26379
+  
+  ## @param sentinel.quorum Sentinel quorum
+  ##
+  quorum: 2
+  
+  ## @param sentinel.masterSet Sentinel master set name
+  ##
+  masterSet: valkeyha
+  
+  ## @param sentinel.downAfterMilliseconds Sentinel down after milliseconds
+  ##
+  downAfterMilliseconds: 5000
+  
+  ## @param sentinel.failoverTimeout Sentinel failover timeout
+  ##
+  failoverTimeout: 10000
+  
+  ## @param sentinel.parallelSyncs Sentinel parallel syncs
+  ##
+  parallelSyncs: 1
+
+## Valkey Persistence
+##
+persistence:
+  ## @param persistence.enabled Enable persistence
+  ##
+  enabled: true
+  
+  ## @param persistence.storageClass PVC Storage Class for Valkey data volume
+  ##
+  storageClass: "default"
+  
+  ## @param persistence.size PVC Storage Request for Valkey data volume
+  ##
+  size: 8Gi
+  
+  ## @param persistence.existingClaim Use a existing PVC which must be created manually before bound
+  ##
+  existingClaim: ""
+
+## Valkey replica configuration
+##
+replica:
+  ## @param replica.configuration Configuration for Valkey replicas nodes
+  ##
+  configuration: ""
+  
+  ## @param replica.disableCommands Array with Valkey commands to disable on replicas nodes
+  ## Commands will be completely disabled by renaming each to an empty string.
+  ## ref: https://valkey.io/topics/security#disabling-of-specific-commands
+  ##
+  disableCommands:
+    - FLUSHDB
+    - FLUSHALL
+  
+  ## @param replica.command Override default container command (useful when using custom images)
+  ##
+  command: []
+  
+  ## @param replica.args Override default container args (useful when using custom images)
+  ##
+  args: []
+  
+  ## @param replica.enableServiceLinks Whether information about services should be injected into pod's environment variable
+  ##
+  enableServiceLinks: true
+  
+  ## @param replica.preExecCmds Additional commands to run prior to starting Valkey replicas
+  ##
+  preExecCmds: []
+  
+  ## @param replica.extraFlags Array with additional command line flags for Valkey replicas
+  ## Example:
+  ## extraFlags:
+  ##  - "--maxmemory-policy volatile-ttl"
+  ##  - "--repl-backlog-size 1024mb"
+  ##
+  extraFlags: []
+  
+  ## @param replica.extraEnvVars Array with extra environment variables to add to Valkey replicas nodes
+  ## Example:
+  ## extraEnvVars:
+  ##   - name: FOO
+  ##     value: "bar"
+  ##
+  extraEnvVars: []
+  
+  ## @param replica.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for Valkey replicas nodes
+  ##
+  extraEnvVarsCM: ""
+
+## Resource limits and requests
+##
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+## Liveness probe
+##
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 20
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 5
+
+## Readiness probe
+##
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 20
+  periodSeconds: 5
+  timeoutSeconds: 1
+  failureThreshold: 5
+
+## Pod Security Context
+##
+podSecurityContext:
+  fsGroup: 1000
+
+## Container Security Context
+##
+containerSecurityContext:
+  runAsUser: 1000
+  runAsNonRoot: true
+
+nodeSelector: {}
+
+
+tolerations: []
+
+
+affinity: {}
+
+## @param valkeyConfig Additional Valkey configuration (will be merged with commonConfiguration)
+##
+valkeyConfig: ""

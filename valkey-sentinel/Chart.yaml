@@ -1,0 +1,18 @@
+apiVersion: v2
+name: valkey
+description: Production-grade Valkey HA with Sentinel using DNS-based discovery
+type: application
+version: 1.0.0
+appVersion: "8.0.1"
+keywords:
+  - valkey
+  - redis
+  - keyvalue
+  - database
+  - sentinel
+home: https://valkey.io
+sources:
+  - https://github.com/mboncalo/valkey
+maintainers:
+  - name: MB
+    email: mboncalo@gmail.com
