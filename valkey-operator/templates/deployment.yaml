@@ -48,7 +48,7 @@ spec:
         - --health-probe-bind-address=:8081
         {{- if .Values.metrics.enabled }}
         - --metrics-bind-address=:{{ .Values.metrics.port }}
-        - --metrics-secure=false
+        - --metrics-secure={{ .Values.metrics.secure }}
         {{- else }}
         - --metrics-bind-address=0
         {{- end }}
@@ -97,5 +97,9 @@ spec:
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
