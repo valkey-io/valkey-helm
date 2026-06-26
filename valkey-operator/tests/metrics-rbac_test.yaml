@@ -131,14 +131,14 @@ tests:
       - hasDocuments:
           count: 3
 
-  - it: should not create the metrics-reader binding when serviceAccountName is empty
+  - it: should fail when binding.create is true but serviceAccountName is empty
     set:
       metrics.secure: true
       metrics.reader.binding.create: true
       metrics.reader.binding.serviceAccountName: ""
     asserts:
-      - hasDocuments:
-          count: 3
+      - failedTemplate:
+          errorMessage: metrics.reader.binding.serviceAccountName is required when metrics.reader.binding.create is true
 
   - it: should create the metrics-reader binding when enabled with a scraper SA
     set:

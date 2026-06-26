@@ -45,7 +45,10 @@ rules:
   - /metrics
   verbs:
   - get
-{{- if and .Values.metrics.reader.binding.create .Values.metrics.reader.binding.serviceAccountName }}
+{{- if .Values.metrics.reader.binding.create }}
+{{- if not .Values.metrics.reader.binding.serviceAccountName }}
+{{- fail "metrics.reader.binding.serviceAccountName is required when metrics.reader.binding.create is true" }}
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
