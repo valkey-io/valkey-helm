@@ -1,6 +1,5 @@
 # valkey-operator
-![Version: 0.2.7](https://img.shields.io/badge/Version-0.2.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
-
+![Version: 0.2.7](https://img.shields.io/badge/Version-0.2.7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
 
 A Helm chart for deploying the [Valkey Operator](https://github.com/valkey-io/valkey-operator) on Kubernetes.
 
@@ -62,6 +61,10 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `topologySpreadConstraints` | Topology spread constraints for the operator pods | `[]` |
 | `metrics.enabled` | Enable the metrics endpoint | `true` |
 | `metrics.port` | Metrics endpoint port | `8443` |
+| `metrics.secure` | Serve metrics over HTTPS with authn/authz (passes `--metrics-secure=true`); renders the metrics RBAC. Requires `rbac.create` and `metrics.enabled` | `false` |
+| `metrics.reader.binding.create` | Bind a scraper ServiceAccount to the `metrics-reader` ClusterRole. Requires `rbac.create`, `metrics.enabled`, and `metrics.secure` | `false` |
+| `metrics.reader.binding.serviceAccountName` | Name of the scraper ServiceAccount to authorize. Supports templating; required when `binding.create` is `true` | `""` |
+| `metrics.reader.binding.namespace` | Namespace of the scraper ServiceAccount. Supports templating; defaults to the release namespace when empty | `""` |
 | `networkPolicy.enabled` | Enable creation of a NetworkPolicy for the operator pod | `false` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `128Mi` |
@@ -122,6 +125,37 @@ ClusterRoles for the `valkeyclusters` and `valkeynodes` custom resources, follow
 These roll up into the built-in `admin`, `edit`, and `view` ClusterRoles, so cluster
 admins can grant tenants access to the Valkey CRDs without handing out the operator's own
 controller permissions.
+
+## Metrics and RBAC
+
+By default the operator serves its controller-runtime metrics over plain HTTP. Set
+`metrics.secure: true` to serve them over HTTPS with authentication and authorization,
+following the [kubebuilder secure-metrics convention](https://book.kubebuilder.io/reference/metrics.html).
+When secure serving is enabled (and `rbac.create` is `true`), the chart renders:
+
+- a `*-metrics-auth` ClusterRole + ClusterRoleBinding granting the operator ServiceAccount
+  `create` on `tokenreviews.authentication.k8s.io` and `subjectaccessreviews.authorization.k8s.io`,
+  so it can authenticate and authorize incoming scrape requests; and
+- a `*-metrics-reader` ClusterRole granting `get` on the `/metrics` non-resource URL.
+
+A scraper must present a token whose ServiceAccount is bound to `metrics-reader`. You can
+bind it yourself, or let the chart do it by opting in:
+
+```yaml
+metrics:
+  secure: true
+  reader:
+    binding:
+      create: true
+      # Supports templating, e.g. "{{ .Release.Name }}-prometheus"
+      serviceAccountName: prometheus
+      # Defaults to the release namespace when empty
+      namespace: monitoring
+```
+
+`serviceAccountName` is required when `binding.create` is `true`; rendering fails otherwise.
+Both `metrics.secure` and `metrics.reader.binding.create` default to `false`, so existing
+installs keep serving metrics over insecure HTTP unless you opt in.
 
 ## Source Code
 
