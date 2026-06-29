@@ -1,0 +1,144 @@
+{{- if .Values.haproxy.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "valkey.fullname" . }}-haproxy
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: haproxy
+spec:
+  replicas: {{ .Values.haproxy.replicas }}
+  selector:
+    matchLabels:
+      {{- include "valkey.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: haproxy
+  template:
+    metadata:
+      labels:
+        {{- include "valkey.selectorLabels" . | nindent 8 }}
+        {{- if .Values.haproxy.enabled }}
+        app.kubernetes.io/component: haproxy
+        {{- end }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+        checksum/config: {{ include (print $.Template.BasePath "/haproxy-configmap.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+      {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
+      {{- with .Values.haproxy.extraInitContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: haproxy
+          {{- if .Values.haproxy.image.registry }}
+          image: "{{ .Values.haproxy.image.registry }}/{{ .Values.haproxy.image.repository }}:{{ .Values.haproxy.image.tag }}"
+          {{- else }}
+          image: "{{ .Values.haproxy.image.repository }}:{{ .Values.haproxy.image.tag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.haproxy.image.pullPolicy }}
+          ports:
+            - name: valkey-write
+              containerPort: 6379
+              protocol: TCP
+            - name: valkey-read
+              containerPort: 6380
+              protocol: TCP
+          volumeMounts:
+            - name: haproxy-config
+              mountPath: /usr/local/etc/haproxy/haproxy.cfg
+              subPath: haproxy.cfg
+            - name: haproxy-socket
+              mountPath: /var/run/haproxy
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- with .Values.haproxy.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.haproxy.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.haproxy.securityContext | nindent 12 }}
+        {{- if .Values.replica.sentinel.enabled }}
+        - name: sentinel-watcher
+          {{- if .Values.haproxy.sentinelWatcher.image.registry }}
+          image: "{{ .Values.haproxy.sentinelWatcher.image.registry }}/{{ .Values.haproxy.sentinelWatcher.image.repository }}:{{ tpl .Values.haproxy.sentinelWatcher.image.tag $ }}"
+          {{- else }}
+          image: "{{ .Values.haproxy.sentinelWatcher.image.repository }}:{{ tpl .Values.haproxy.sentinelWatcher.image.tag $ }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.haproxy.sentinelWatcher.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              apk add --no-cache socat
+              exec sh /scripts/sentinel-watcher.sh
+          volumeMounts:
+            - name: haproxy-config
+              mountPath: /scripts/sentinel-watcher.sh
+              subPath: sentinel-watcher.sh
+            - name: haproxy-socket
+              mountPath: /var/run/haproxy
+            {{- if .Values.auth.enabled }}
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- else }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- with .Values.haproxy.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.haproxy.sentinelWatcher.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.haproxy.sentinelWatcher.securityContext | nindent 12 }}
+        {{- end }}
+
+      volumes:
+        - name: haproxy-config
+          configMap:
+            name: {{ include "valkey.fullname" . }}-haproxy
+            defaultMode: 0755
+        - name: haproxy-socket
+          emptyDir: {}
+        {{- if and .Values.replica.sentinel.enabled .Values.auth.enabled }}
+        {{- if .Values.auth.usersExistingSecret }}
+        - name: valkey-users-secret
+          secret:
+            secretName: {{ .Values.auth.usersExistingSecret }}
+        {{- else }}
+        - name: valkey-auth-secret
+          secret:
+            secretName: {{ include "valkey.fullname" . }}-auth
+        {{- end }}
+        {{- end }}
+        {{- if .Values.tls.enabled }}
+        - name: {{ include "valkey.fullname" . }}-tls
+          secret:
+            secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            defaultMode: 0400
+        {{- end }}
+        {{- with .Values.haproxy.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

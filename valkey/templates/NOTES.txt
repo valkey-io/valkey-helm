@@ -61,6 +61,36 @@ WRITE Operations (Master only):
 2) Local access:
   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }} 6379:{{ .Values.service.port }}
   $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} SET key value
+
+{{- if .Values.replica.sentinel.enabled }}
+================================================================================
+🛡️ SENTINEL MODE (High Availability)
+================================================================================
+
+Sentinel is ENABLED for automatic failover:
+- {{ .Values.replica.sentinel.replicas }} Sentinel instance(s) monitoring the cluster
+- Master Set Name: {{ .Values.replica.sentinel.masterSet }}
+- Quorum: {{ .Values.replica.sentinel.quorum }}
+
+Sentinel Service:
+  Service: {{ include "valkey.fullname" . }}-sentinel
+  Type:    {{ .Values.replica.sentinel.service.type }}
+  Port:    {{ .Values.replica.sentinel.service.port }}
+
+Query Sentinel for current master:
+  $ kubectl -n {{ .Release.Namespace }} exec -it {{ include "valkey.fullname" . }}-sentinel-0 -- \
+      valkey-cli -p {{ .Values.replica.sentinel.port }}{{ if .Values.tls.enabled }} --tls{{- end }} \
+      SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }}
+
+Connecting via Sentinel (in-cluster):
+  $ valkey-cli -h {{ include "valkey.fullname" . }}-sentinel -p {{ .Values.replica.sentinel.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} \
+      SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }}
+
+Direct Sentinel Pod Access:
+{{- range $i := until (int .Values.replica.sentinel.replicas) }}
+  Sentinel-{{ $i }}: {{ include "valkey.fullname" $ }}-sentinel-{{ $i }}.{{ include "valkey.fullname" $ }}-sentinel-headless.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
+{{- end }}
+{{- end }}
 {{- else }}
 ================================================================================
 📦 STANDALONE MODE

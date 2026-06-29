@@ -1,0 +1,218 @@
+suite: sentinel configuration
+templates:
+  - templates/sentinel-statefulset.yaml
+  - templates/sentinel-service.yaml
+  - templates/sentinel-headless.yaml
+  - templates/sentinel-configmap.yaml
+tests:
+  - it: should not create sentinel resources when sentinel is disabled (default)
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create sentinel resources when replica mode is disabled
+    set:
+      replica.enabled: false
+      replica.sentinel.enabled: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail when sentinel enabled but replica mode disabled
+    set:
+      replica.enabled: false
+      replica.sentinel.enabled: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create sentinel StatefulSet when both replica and sentinel are enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel
+      - equal:
+          path: spec.replicas
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 26379
+
+  - it: should create sentinel Service when sentinel is enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+    template: templates/sentinel-service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel
+      - equal:
+          path: spec.ports[0].port
+          value: 26379
+
+  - it: should create sentinel headless Service when sentinel is enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+    template: templates/sentinel-headless.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel-headless
+      - equal:
+          path: spec.clusterIP
+          value: None
+
+  - it: should create sentinel ConfigMap when sentinel is enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel-scripts
+      - exists:
+          path: data["sentinel-init.sh"]
+
+  - it: should use custom sentinel replicas count
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.replicas: 5
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 5
+
+  - it: should use custom sentinel port
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.port: 36379
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 36379
+
+  - it: should include volumeClaimTemplates when persistence is enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.persistence.enabled: true
+      replica.sentinel.persistence.size: "200Mi"
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "200Mi"
+
+  - it: should use emptyDir when persistence is disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.persistence.enabled: false
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: sentinel-data
+            emptyDir: {}
+
+  - it: should set correct service type and nodePort
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.service.type: NodePort
+      replica.sentinel.service.nodePort: 30379
+    template: templates/sentinel-service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: NodePort
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30379
+
+  - it: should include sentinel component label
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: sentinel
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: sentinel
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: sentinel
+
+  - it: should apply resources when configured
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 256Mi
