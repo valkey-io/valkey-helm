@@ -1,4 +1,4 @@
-{{- if not .Values.replica.enabled }}
+{{- if and (not .Values.replica.enabled) (not .Values.cluster.enabled) }}
 {{- $fullname := include "valkey.fullname" . }}
 {{- $storage := .Values.dataStorage }}
 {{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}

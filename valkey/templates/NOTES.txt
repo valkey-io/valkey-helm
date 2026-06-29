@@ -10,7 +10,42 @@ Namespace:    {{ .Release.Namespace }}
 Chart:        {{ .Chart.Name }} {{ .Chart.Version }}
 App version:  {{ .Chart.AppVersion }}
 
-{{- if .Values.replica.enabled }}
+{{- if .Values.cluster.enabled }}
+================================================================================
+🔗 CLUSTER MODE (Sharding + HA)
+================================================================================
+
+Your Valkey deployment is running in CLUSTER mode:
+- Masters (shards): {{ .Values.cluster.masters }}
+- Replicas per master: {{ .Values.cluster.replicasPerMaster }}
+- Total nodes: {{ mul (int .Values.cluster.masters) (add1 (int .Values.cluster.replicasPerMaster)) }}
+
+Client Service: {{ include "valkey.cluster.fullname" . }}
+  Type: {{ .Values.cluster.service.type }}
+  Port: {{ .Values.cluster.service.port }}
+
+Headless Service (internal): {{ include "valkey.cluster.headlessServiceName" . }}
+
+IMPORTANT: Use the -c flag for cluster-aware clients:
+
+1) In-cluster access:
+   $ valkey-cli -c -h {{ include "valkey.cluster.fullname" . }} -p {{ .Values.cluster.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }} SET key value
+
+2) Local access via kubectl port-forward:
+   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.cluster.fullname" . }} 6379:{{ .Values.cluster.service.port }}
+   $ valkey-cli -c -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }} SET key value
+
+Direct Pod Access:
+{{- $totalNodes := mul (int .Values.cluster.masters) (add1 (int .Values.cluster.replicasPerMaster)) }}
+{{- range $i := until (int $totalNodes) }}
+  {{ include "valkey.cluster.fullname" $ }}-{{ $i }}.{{ include "valkey.cluster.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
+{{- end }}
+
+Cluster Status:
+  $ valkey-cli -c -h {{ include "valkey.cluster.fullname" . }} -p {{ .Values.cluster.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }} CLUSTER INFO
+  $ valkey-cli -c -h {{ include "valkey.cluster.fullname" . }} -p {{ .Values.cluster.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }} CLUSTER NODES
+
+{{- else if .Values.replica.enabled }}
 ================================================================================
 🔄 REPLICATION MODE
 ================================================================================
@@ -18,6 +53,23 @@ App version:  {{ .Chart.AppVersion }}
 Your Valkey deployment is running in REPLICATION mode:
 - 1 Master  ({{ include "valkey.fullname" . }}-0)
 - {{ .Values.replica.replicas }} Replica(s)
+
+{{- if .Values.sentinel.enabled }}
+
+🛡️ SENTINEL MODE (High Availability)
+
+  Sentinel instances: {{ .Values.sentinel.replicas }}
+  Sentinel service:   {{ include "valkey.sentinel.fullname" . }}:{{ .Values.sentinel.service.port }}
+  Master group name:  {{ .Values.sentinel.masterGroupName }}
+  Quorum:             {{ .Values.sentinel.quorum }}
+
+  Automatic failover is ENABLED. The master pod may change during failover.
+  The primary service ({{ include "valkey.fullname" . }}) automatically routes to the current master.
+
+  For Sentinel-aware clients:
+    sentinel_hosts = ["{{ include "valkey.sentinel.fullname" . }}:{{ .Values.sentinel.service.port }}"]
+    master_name = "{{ .Values.sentinel.masterGroupName }}"
+{{- end }}
 
 {{- if .Values.replica.service.enabled }}
 
@@ -99,13 +151,25 @@ Port:         {{ .Values.service.port }}
 {{ end }}
 
 ✅ Quick test
+{{- if .Values.cluster.enabled }}
+$ valkey-cli -c -h {{ include "valkey.cluster.fullname" . }} -p {{ .Values.cluster.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
+{{- else }}
 $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
+{{- end }}
 valkey> SET foo bar
 valkey> GET foo
 "bar"
 
 💾 Persistence
-{{- if .Values.replica.enabled }}
+{{- if .Values.cluster.enabled }}
+- Persistence is ENABLED (required for cluster mode). Each node has its own volume.
+- Size: {{ .Values.cluster.persistence.size }}
+{{- if .Values.cluster.persistence.storageClass }}
+- Storage class: {{ .Values.cluster.persistence.storageClass }}
+{{- end }}
+- To see PVCs:
+  $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }}
+{{- else if .Values.replica.enabled }}
 - Persistence is ENABLED (required for replication mode). Each instance has its own volume.
 - Size: {{ .Values.replica.persistence.size }}
 {{- if .Values.replica.persistence.storageClass }}

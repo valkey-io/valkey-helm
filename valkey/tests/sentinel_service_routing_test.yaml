@@ -1,0 +1,38 @@
+suite: sentinel service routing
+templates:
+  - templates/service.yaml
+  - templates/init_config.yaml
+tests:
+  - it: should use pod-name selector when sentinel disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: false
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-valkey-0
+
+  - it: should use valkey-role label when sentinel enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: spec.selector["valkey-role"]
+          value: master
+      - notExists:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+
+  - it: should not have any extra selector in standalone mode
+    set:
+      replica.enabled: false
+    template: templates/service.yaml
+    asserts:
+      - notExists:
+          path: spec.selector["valkey-role"]
+      - notExists:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]

@@ -1,0 +1,261 @@
+suite: sentinel statefulset configuration
+templates:
+  - templates/sentinel-statefulset.yaml
+  - templates/sentinel-configmap.yaml
+  - templates/init_config.yaml
+tests:
+  - it: should not render when sentinel is disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: false
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when replica is disabled
+    set:
+      replica.enabled: false
+      sentinel.enabled: false
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail when sentinel enabled but replica disabled
+    set:
+      replica.enabled: false
+      sentinel.enabled: true
+    template: templates/init_config.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Sentinel mode requires replication to be enabled.*"
+
+  - it: should fail when sentinel replicas less than 3
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.replicas: 1
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: ".*"
+
+  - it: should fail when quorum greater than replicas
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.replicas: 3
+      sentinel.quorum: 5
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Sentinel quorum.*cannot be greater than.*"
+
+  - it: should render sentinel statefulset when enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should use custom replica count
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.replicas: 5
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 5
+
+  - it: should use sentinel headless service name
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-valkey-sentinel-headless
+
+  - it: should have sentinel component label
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: sentinel
+
+  - it: should run sentinel command
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["valkey-server"]
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["/data/conf/sentinel.conf", "--sentinel"]
+
+  - it: should expose sentinel port
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 26379
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: tcp-sentinel
+
+  - it: should use emptyDir when persistence disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.persistence.enabled: false
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: sentinel-data
+            emptyDir: {}
+
+  - it: should use volumeClaimTemplate when persistence enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.persistence.enabled: true
+      sentinel.persistence.size: "200Mi"
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: sentinel-data
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "200Mi"
+
+  - it: should apply custom resources to sentinel container
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 128Mi
+
+  - it: should apply sentinel workload annotations
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.workloadAnnotations:
+        custom.annotation: "test-value"
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["custom.annotation"]
+          value: "test-value"
+
+  - it: should apply sentinel pod annotations
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.podAnnotations:
+        prometheus.io/scrape: "true"
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+
+  - it: should apply sentinel node selector
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.nodeSelector:
+        disktype: ssd
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector.disktype
+          value: ssd
+
+  - it: should mount TLS volumes when TLS enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      tls.enabled: true
+      tls.existingSecret: my-tls-secret
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: RELEASE-NAME-valkey-tls
+            secret:
+              secretName: my-tls-secret
+              defaultMode: 256
+
+  - it: should mount auth secrets when auth enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "secretpass"
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-auth-secret
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 256
