@@ -188,3 +188,56 @@ Validate replica authentication configuration
 {{- end }}
 {{- end -}}
 
+{{/*
+Validate cluster configuration
+*/}}
+{{- define "valkey.validateClusterConfig" -}}
+{{- if .Values.cluster.enabled }}
+  {{- if .Values.replica.enabled }}
+    {{- fail "cluster.enabled and replica.enabled are mutually exclusive. Please enable only one mode." }}
+  {{- end }}
+  {{- if lt (int .Values.cluster.shards) 3 }}
+    {{- fail "Cluster mode requires at least 3 shards (cluster.shards >= 3) for proper cluster operation." }}
+  {{- end }}
+  {{- if not .Values.cluster.persistence.size }}
+    {{- fail "Cluster mode requires persistent storage. Please set cluster.persistence.size (e.g., '5Gi')" }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Validate cluster authentication configuration
+*/}}
+{{- define "valkey.validateClusterAuth" -}}
+{{- if and .Values.cluster.enabled .Values.auth.enabled }}
+  {{- if not (hasKey .Values.auth.aclUsers .Values.cluster.replicationUser) }}
+    {{- fail (printf "Cluster replication user '%s' (cluster.replicationUser) must be defined in auth.aclUsers. The chart requires this to retrieve the password for cluster authentication." .Values.cluster.replicationUser) }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Calculate total number of nodes in the cluster
+*/}}
+{{- define "valkey.clusterNodeCount" -}}
+{{- $shards := int .Values.cluster.shards -}}
+{{- $replicasPerShard := int .Values.cluster.replicasPerShard -}}
+{{- mul $shards (add 1 $replicasPerShard) -}}
+{{- end -}}
+
+{{/*
+Generate list of cluster nodes for VALKEY_NODES environment variable
+*/}}
+{{- define "valkey.clusterNodes" -}}
+{{- $fullname := include "valkey.fullname" . -}}
+{{- $headlessSvc := include "valkey.headlessServiceName" . -}}
+{{- $namespace := .Release.Namespace -}}
+{{- $clusterDomain := .Values.clusterDomain -}}
+{{- $nodeCount := include "valkey.clusterNodeCount" . | int -}}
+{{- $nodes := list -}}
+{{- range $i := until $nodeCount -}}
+{{- $nodes = append $nodes (printf "%s-%d.%s.%s.svc.%s" $fullname $i $headlessSvc $namespace $clusterDomain) -}}
+{{- end -}}
+{{- join " " $nodes -}}
+{{- end -}}
+
