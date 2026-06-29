@@ -87,6 +87,9 @@ securityContext:
 #   kubernetes.io/os: linux
 nodeSelector: {}
 
+# Termination grace period for pods (seconds)
+terminationGracePeriodSeconds:
+
 # tolerations:
 #   - key: "node-role.kubernetes.io/control-plane"
 #     operator: "Exists"
