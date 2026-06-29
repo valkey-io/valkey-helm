@@ -188,3 +188,13 @@ Validate replica authentication configuration
 {{- end }}
 {{- end -}}
 
+{{/*
+Which caFile to use
+*/}}
+{{- define "valkey.caFile" -}}
+{{- if .Values.tls.alternativeClientCa }}
+{{- .Values.tls.alternativeClientCa }}
+{{- else }}
+{{- printf "/tls/%s" .Values.tls.caPublicKey }}
+{{- end }}
+{{- end -}}
