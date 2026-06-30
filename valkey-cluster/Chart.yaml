@@ -1,0 +1,14 @@
+apiVersion: v2
+name: valkey-cluster
+description: A Helm chart for Kubernetes
+type: application
+version: v0.9.3-cluster-mode
+appVersion: "9.0.1"
+home: https://valkey.io/valkey-helm/
+sources:
+  - https://github.com/valkey-io/valkey-helm.git
+  - https://valkey.io
+maintainers:
+  - name: raven
+    url: https://github.com/mk-raven
+icon: https://dyltqmyl993wv.cloudfront.net/assets/stacks/valkey/img/valkey-stack-220x234.png

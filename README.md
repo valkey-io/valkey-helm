@@ -18,6 +18,39 @@ helm install valkey valkey/valkey
 This chart bootstraps a [Valkey](https://valkey.io) deployment using the Helm package manager.
 
 ---
+## Deployment Options
+
+### Standalone Mode
+The chart deploys Valkey in standalone mode.
+
+### Cluster Mode
+To deploy Valkey in cluster mode for availability and scalability, use the following options:
+
+#### Using Local Chart Files
+To deploy the cluster mode using the local chart files:
+
+```bash
+# Navigate to the directory containing the chart
+cd ./valkey-helm
+
+# Install the chart from local files
+helm install valkey-cluster ./valkey-cluster
+```
+
+#### Configuration
+You can customize the installation by providing values:
+
+```bash
+helm install valkey-cluster ./valkey-cluster -f my-values.yaml
+```
+
+Cluster mode features:
+- Automatic deployment of 3 master nodes and 3 replica nodes (minimum 6 nodes)
+- Master-replica replication for data redundancy
+- Automatic failover if a master node becomes unavailable
+- Data sharding across multiple master nodes
+
+---
 
 ## Prerequisites
 
