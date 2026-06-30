@@ -24,7 +24,9 @@ spec:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
   volumeClaimTemplates:
-  - metadata:
+  - apiVersion: v1	
+    kind: PersistentVolumeClaim
+    metadata:
       name: valkey-data
     spec:
       accessModes: {{ toYaml .Values.replica.persistence.accessModes | nindent 8 }}
