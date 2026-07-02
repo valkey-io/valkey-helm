@@ -2,9 +2,24 @@
 
 ## Unreleased
 
+## 0.3.0
+
+### Added
+
+- Add `podSecurityContext` field to ValkeyCluster and ValkeyNode CRDs
+- Add `metrics.exporter.securityContext` field to ValkeyCluster CRD to override the SecurityContext applied to the exporter sidecar
+
+### Changed
+
+- Valkey Operator version defaults to v0.3.0. See the [v0.3.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.3.0) for the upstream changes.
+- `spec.shards` is now required on ValkeyCluster resources; manifests that omit it will be rejected after the CRD upgrade
+
+> **Note:** CRDs are not upgraded automatically by Helm. See [UPGRADE.md](UPGRADE.md) for manual steps required before upgrading to this version.
+
 ## 0.2.7
 
 ### Added
+
 - Add metrics auth RBAC (metrics-auth-role, metrics-reader-role) support to the valkey-operator chart. The metrics RBAC is only rendered when `metrics.enabled` and `metrics.secure` are both true, since the operator only issues TokenReviews/SubjectAccessReviews under secure serving. This avoids leaving orphaned cluster-scoped RBAC when metrics are disabled or served insecurely.
 
 ## 0.2.6
