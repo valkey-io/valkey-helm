@@ -16,6 +16,16 @@
 
 > **Note:** CRDs are not upgraded automatically by Helm. See [UPGRADE.md](UPGRADE.md) for manual steps required before upgrading to this version.
 
+## 0.2.8
+
+### Changed
+
+- terminationGracePeriodSeconds is omitted from configuration by default and uses kubernetes default (30s) unless overridden.
+
+### Fixed
+
+- Added configurability for terminationGracePeriodSeconds.
+
 ## 0.2.7
 
 ### Added
