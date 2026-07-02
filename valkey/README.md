@@ -12,7 +12,7 @@ A Helm chart for Kubernetes
 | ---- | --- |
 | raven | [https://github.com/mk-raven] |
 | sgissi | [https://github.com/sgissi] |
-
+| Bloodraven21 | [https://github.com/Bloodraven21] |
 ## Source Code
 
 * <https://github.com/valkey-io/valkey-helm.git>
