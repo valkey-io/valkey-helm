@@ -11,4 +11,8 @@ sources:
 maintainers:
   - name: raven
     url: https://github.com/mk-raven
+  - name: sgissi
+    url: https://github.com/sgissi
+  - name: Bloodraven21
+    url: https://github.com/Bloodraven21    
 icon: https://dyltqmyl993wv.cloudfront.net/assets/stacks/valkey/img/valkey-stack-220x234.png

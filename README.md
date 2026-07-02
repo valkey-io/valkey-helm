@@ -32,6 +32,8 @@ This chart bootstraps a [Valkey](https://valkey.io) deployment using the Helm pa
 | -------- | ------------- |
 | mk-raven | maikebit at gmail.com |
 | sgissi   | silvio at gissilabs.com |
+| jdheyburn   | joseph.heyburn at braze.com |
+| Bloodraven21   | ishanij10115 at gmail.com |
 
 ---
 
