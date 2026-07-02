@@ -406,6 +406,25 @@ entries:
   valkey-operator:
   - apiVersion: v2
     appVersion: v0.2.0
+    created: "2026-07-02T13:30:31.194133812Z"
+    description: A Helm chart for the Valkey Operator
+    digest: 1ddaffa6e609defa009c13690b2e5039cc3ae555fd2b8affda88a3ced8a4e23a
+    home: https://valkey.io/valkey-helm/
+    icon: https://dyltqmyl993wv.cloudfront.net/assets/stacks/valkey/img/valkey-stack-220x234.png
+    kubeVersion: '>=1.20.0-0'
+    maintainers:
+    - name: daanvinken
+      url: https://github.com/daanvinken
+    name: valkey-operator
+    sources:
+    - https://github.com/valkey-io/valkey-operator.git
+    - https://valkey.io
+    type: application
+    urls:
+    - https://github.com/valkey-io/valkey-helm/releases/download/valkey-operator-0.2.8/valkey-operator-0.2.8.tgz
+    version: 0.2.8
+  - apiVersion: v2
+    appVersion: v0.2.0
     created: "2026-06-26T13:53:10.593977695Z"
     description: A Helm chart for the Valkey Operator
     digest: 8f44cc81326e648248b8a451e75adcff8b0df94db92e74d4323b3baa9600d09c
@@ -594,4 +613,4 @@ entries:
     urls:
     - https://github.com/valkey-io/valkey-helm/releases/download/valkey-operator-0.1.0/valkey-operator-0.1.0.tgz
     version: 0.1.0
-generated: "2026-06-26T13:53:10.594085833Z"
+generated: "2026-07-02T13:30:31.194245873Z"
