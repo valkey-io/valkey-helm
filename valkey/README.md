@@ -6,9 +6,6 @@ A Helm chart for Kubernetes
 
 **Homepage:** <https://valkey.io/valkey-helm/>
 
-
-
-
 ## Maintainers
 
 | Name | Url |
@@ -22,16 +19,6 @@ A Helm chart for Kubernetes
 * <https://valkey.io>
 
 ## Deployment Modes
-
-> **IMPORTANT**
-> ## Cluster Mode
-> This chart does not support Valkey cluster mode and will not do so in the future. Cluster mode introduces topology and operational complexity (slot management, inter-node communication, resharding) that is out of scope for this chart.
->
-> A dedicated Helm chart for cluster mode deployments is in active development under the valkey-operator project. Deploying Valkey in cluster mode requires the [valkey-operator](https://github.com/valkey-io/valkey-operator) to be installed on the cluster first. The cluster chart is built on top of the operator and will not function without it.
->
-> Development is tracked openly. If you want to follow progress or get involved, the team holds regular community syncs documented in the [valkey-operator weekly meeting wiki](https://github.com/valkey-io/valkey-operator/wiki/Weekly-meeting).
->
-> If you need cluster mode today, follow the valkey-operator repository for updates and release announcements.
 
 ### Standalone Mode (Default)
 
@@ -52,6 +39,15 @@ Deploy Valkey with master-replica architecture for read scaling and data redunda
 ```bash
 helm install valkey valkey/valkey --set replica.enabled=true --set replica.persistence.size=5Gi
 ```
+> **IMPORTANT**
+> ## Cluster Mode
+>
+> This chart does not and will not support **Valkey cluster** mode. Managing a clustered topology is fundamentally different from standalone or replicated deployments, and the operational requirements go well beyond what this chart is designed to handle.
+>
+> For cluster mode, a separate chart is being developed that uses the valkey-operator to deploy and manage clusters. The operator must be installed first.
+>
+> To follow progress or get involved, see the [weekly meeting wiki](https://github.com/valkey-io/valkey-operator/wiki/Weekly-meeting). 
+
 
 **Services:**
 
