@@ -188,3 +188,41 @@ Validate replica authentication configuration
 {{- end }}
 {{- end -}}
 
+{{/*
+Render the Valkey server container health probes (startupProbe, livenessProbe,
+readinessProbe). Each probe is gated on its own `enabled` flag. When a probe's
+`customProbe` map is set it replaces the default handler and timing entirely;
+otherwise the default valkey-cli ping exec handler (TLS-aware) is emitted with
+whichever timing fields are set on that probe. The command is built as an
+argument list and invokes valkey-cli directly (no shell), with the TLS flags
+appended only when `tls.enabled` is set. Returns nothing when no probe is
+enabled, so callers should guard with `with`.
+*/}}
+{{- define "valkey.healthProbes" -}}
+{{- $cmd := list "valkey-cli" -}}
+{{- if $.Values.tls.enabled -}}
+{{- $cmd = concat $cmd (list "--cacert" (printf "/tls/%s" $.Values.tls.caPublicKey) "--tls") -}}
+{{- end -}}
+{{- $cmd = append $cmd "ping" -}}
+{{- $probes := dict -}}
+{{- range $name := (list "startupProbe" "livenessProbe" "readinessProbe") -}}
+{{- $probe := index $.Values $name -}}
+{{- if $probe -}}
+{{- if $probe.enabled -}}
+{{- if $probe.customProbe -}}
+{{- $probes = set $probes $name $probe.customProbe -}}
+{{- else -}}
+{{- $rendered := dict "exec" (dict "command" $cmd) -}}
+{{- range $field := (list "initialDelaySeconds" "periodSeconds" "timeoutSeconds" "failureThreshold" "successThreshold") -}}
+{{- if hasKey $probe $field -}}{{- $rendered = set $rendered $field (index $probe $field) -}}{{- end -}}
+{{- end -}}
+{{- $probes = set $probes $name $rendered -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $probes -}}
+{{- toYaml $probes -}}
+{{- end -}}
+{{- end -}}
+
