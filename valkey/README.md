@@ -40,6 +40,16 @@ Deploy Valkey with master-replica architecture for read scaling and data redunda
 helm install valkey valkey/valkey --set replica.enabled=true --set replica.persistence.size=5Gi
 ```
 
+**IMPORTANT**
+
+## Cluster Mode
+
+This chart does not and will not support **Valkey cluster** mode. Managing a clustered topology is fundamentally different from standalone or replicated deployments, and the operational requirements go well beyond what this chart is designed to handle.
+
+For cluster mode, a separate chart is being developed that uses the valkey-operator to deploy and manage clusters. The operator must be installed first.
+
+To follow progress or get involved, see the [weekly meeting wiki](https://github.com/valkey-io/valkey-operator/wiki/Weekly-meeting). 
+
 **Services:**
 
 * `valkey`: Master/write service
