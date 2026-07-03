@@ -6,12 +6,12 @@ To verify the operator is running:
 
 To create a ValkeyCluster:
 
-  cat <<EOF | kubectl apply -f -
-  apiVersion: valkey.io/v1alpha1
-  kind: ValkeyCluster
-  metadata:
-    name: my-cluster
-  spec:
-    shards: 3
-    replicas: 1
-  EOF
+kubectl apply -f - <<EOF
+apiVersion: valkey.io/v1alpha1
+kind: ValkeyCluster
+metadata:
+  name: my-cluster
+spec:
+  shards: 3
+  replicas: 1
+EOF

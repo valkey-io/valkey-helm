@@ -12,7 +12,7 @@ A Helm chart for Kubernetes
 | ---- | --- |
 | raven | [https://github.com/mk-raven] |
 | sgissi | [https://github.com/sgissi] |
-
+| Bloodraven21 | [https://github.com/Bloodraven21] |
 ## Source Code
 
 * <https://github.com/valkey-io/valkey-helm.git>
@@ -331,6 +331,7 @@ tls:
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |
 | priorityClassName | string | `""` |  |
+| runtimeClassName | string | `""` | RuntimeClassName for the pods (e.g. `gvisor`, `kata-containers`); empty uses the cluster default runtime |
 | replica.enabled | bool | `false` |  |
 | replica.replicas | int | `2` |  |
 | replica.replicationUser | string | `"default"` |  |

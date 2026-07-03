@@ -28,7 +28,9 @@ spec:
     spec:
       {{- include "valkey-operator.imagePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "valkey-operator.serviceAccountName" . }}
-      terminationGracePeriodSeconds: 10
+      {{- if hasKey .Values "terminationGracePeriodSeconds" }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -46,9 +48,12 @@ spec:
         - --health-probe-bind-address=:8081
         {{- if .Values.metrics.enabled }}
         - --metrics-bind-address=:{{ .Values.metrics.port }}
-        - --metrics-secure=false
+        - --metrics-secure={{ .Values.metrics.secure }}
         {{- else }}
         - --metrics-bind-address=0
+        {{- end }}
+        {{- range .Values.manager.watchNamespaces }}
+        - --watch-namespace={{ tpl . $ }}
         {{- end }}
         {{- with .Values.manager.args }}
         {{- toYaml . | nindent 8 }}
@@ -92,5 +97,9 @@ spec:
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}

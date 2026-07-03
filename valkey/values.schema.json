@@ -399,6 +399,8 @@
         },
         "probes": {
             "$ref": "#/$defs/probesBlock"
+        "runtimeClassName": {
+            "type": "string"
         },
         "replica": {
             "type": "object",
