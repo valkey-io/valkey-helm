@@ -117,6 +117,11 @@ affinity: {}
 #         app.kubernetes.io/name: valkey-operator
 topologySpreadConstraints: []
 
+# priorityClassName for the operator pods
+# Assign a PriorityClass to protect the operator from eviction under resource pressure
+# priorityClassName: system-cluster-critical
+priorityClassName: ""
+
 # Annotations for pods
 podAnnotations: {}
 # Labels for pods

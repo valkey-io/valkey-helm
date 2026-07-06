@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.3.2
+
+### Added
+
+- Add optional `priorityClassName` field to the valkey-operator Deployment so the operator pods can be assigned a PriorityClass and protected from eviction under resource pressure.
 
 ## 0.3.1
 
