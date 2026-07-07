@@ -55,6 +55,9 @@ podSecurityContext:
 # Priority class name for pod scheduling (leave empty to use cluster's default)
 priorityClassName: ""
 
+# Runtime class name for pod scheduling (leave empty to use cluster's default)
+runtimeClassName: ""
+
 # Security context for the Valkey containers
 securityContext:
   allowPrivilegeEscalation: false

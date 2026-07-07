@@ -331,6 +331,7 @@ tls:
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |
 | priorityClassName | string | `""` |  |
+| runtimeClassName | string | `""` |  |
 | replica.enabled | bool | `false` |  |
 | replica.replicas | int | `2` |  |
 | replica.replicationUser | string | `"default"` |  |
