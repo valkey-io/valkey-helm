@@ -167,11 +167,39 @@ assert_eq() {
     fi
 }
 
-# Pick any chart pod so mode-specific checks can inspect live container /
-# label state. The first matching pod is fine — all pods in a release
-# share the same mesh participation shape.
+# Pick a WORKLOAD pod (Deployment/StatefulSet) so mode-specific checks can
+# inspect live container / label state. Any one is fine — all workload pods
+# in a release share the same mesh participation shape.
+#
+# The label selector alone is NOT enough: a completed cluster-init Job pod
+# carries the same app.kubernetes.io/instance label and lingers past
+# `helm uninstall` (Helm hook + ttlSecondsAfterFinished), so a bare
+# `.items[0]` can return that Job pod instead — and if it came from a
+# sidecar-mode release it still has an istio-proxy, tripping the ambient
+# assertions. `.items[0]` ordering is by name, so whether the Job pod wins
+# depends on the Deployment's pod-template-hash sorting before/after
+# "cluster-init" — i.e. it's luck that flips on any pod-template change.
+#
+# Discriminate structurally in JSONPath instead of by name: workload pods
+# are owned by a StatefulSet (cluster/replica) or a ReplicaSet (standalone
+# Deployment); the cluster-init pod is owned by a Job. Filter to pods whose
+# controller owner is NOT a Job, then take the first match.
+#
+# Index the single controller owner explicitly as `[0]`, NOT `[*]`: a pod
+# has exactly one controller ownerReference, so `[0].kind` says precisely
+# "the owner's kind" and is always a scalar comparison. `[*].kind != "Job"`
+# compares a LIST against a scalar and only works by accident because that
+# list happens to hold one element — a second owner would resurface the
+# "can only compare one element at a time" error (the same one that rules
+# out filtering on a repeated field like `containers[*].ports[*].name`,
+# which a sidecar or the tcp-bus port inflates past one element).
+#
+# The filter result can't be indexed inline (`[?()]` yields a value list,
+# not an array). The discrimination is entirely in the JSONPath; cut only
+# picks one of N equivalent workload pods.
 pod=$(kctl get pod -l "app.kubernetes.io/instance=${RELEASE}" \
-    -o jsonpath='{.items[0].metadata.name}')
+    -o jsonpath='{.items[?(.metadata.ownerReferences[0].kind != "Job")].metadata.name}' \
+    | cut -d' ' -f1)
 
 # Chart-owned Istio resources should be present iff istio is enabled.
 # PeerAuthentication is mode-neutral (enforced by Envoy in sidecar, ztunnel
