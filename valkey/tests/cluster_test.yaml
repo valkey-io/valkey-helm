@@ -452,7 +452,26 @@ tests:
           value: "0"
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
-          value: "before-hook-creation"
+          # hook-succeeded deletes the finished Job (and its pod) promptly
+          # so a completed cluster-init pod can't linger past uninstall and
+          # get matched by app.kubernetes.io/instance selectors in the next
+          # release.
+          value: "before-hook-creation,hook-succeeded"
+
+  # Regression: a finished cluster-init pod that survives `helm uninstall`
+  # leaks into the namespace and, if it came from a sidecar-mode release,
+  # still carries an istio-proxy — which trips ambient-mode assertions on
+  # whatever release lands next. hook-succeeded must be in the delete
+  # policy so the Job self-deletes on completion.
+  - it: Job delete policy must include hook-succeeded (no lingering pod)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          pattern: "hook-succeeded"
 
   - it: Job should have backoffLimit of 6
     set:

@@ -418,8 +418,8 @@ scenario_ambient_authz_blocks_cross_release_meet() {
     if ! install_ambient_cluster valkey-amb-b; then
         fail "${name}" "install of valkey-amb-b failed"; cleanup_ambient_pair; return
     fi
-    kctl wait --for=condition=complete job/valkey-amb-a-cluster-init --timeout=300s >/dev/null
-    kctl wait --for=condition=complete job/valkey-amb-b-cluster-init --timeout=300s >/dev/null
+    wait_for_cluster_init valkey-amb-a-cluster-init
+    wait_for_cluster_init valkey-amb-b-cluster-init
 
     local a_before b_before
     a_before=$(count_cluster_nodes_ambient valkey-amb-a)
@@ -589,7 +589,7 @@ scenario_ambient_prometheus_scrape() {
             --wait --timeout=300s >/dev/null; then
         fail "${name}" "helm install failed"; return
     fi
-    kctl wait --for=condition=complete "job/${RELEASE}-cluster-init" --timeout=300s >/dev/null
+    wait_for_cluster_init
 
     # An ambient-enrolled curl pod simulates an in-mesh Prometheus.
     local scraper="scrape-${RELEASE}-$$"
@@ -669,7 +669,7 @@ scenario_rollout_restart_orderly_failover() {
         fail "${name}" "helm install failed"
         return
     fi
-    kctl wait --for=condition=complete "job/${RELEASE}-cluster-init" --timeout=300s >/dev/null
+    wait_for_cluster_init
 
     # Gossip convergence lags job completion: the init Job returns "done"
     # once `cluster create` is ACK'd, but `cluster_state:ok` requires every
@@ -847,7 +847,7 @@ scenario_nodes_conf_ip_refresh() {
         fail "${name}" "helm install failed"
         return
     fi
-    kctl wait --for=condition=complete "job/${RELEASE}-cluster-init" --timeout=300s >/dev/null
+    wait_for_cluster_init
 
     # Wait for gossip convergence — same rationale as the rollout
     # scenario: the init Job returning doesn't mean every node has seen

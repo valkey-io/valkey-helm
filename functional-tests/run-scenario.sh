@@ -136,7 +136,8 @@ log "Waiting for workload to be ready"
 if is_on "${SHARD}"; then
     kctl rollout status "statefulset/${RELEASE}" --timeout=300s
     # The cluster-init Job is a post-install hook; wait for it to complete.
-    kctl wait --for=condition=complete "job/${RELEASE}-cluster-init" --timeout=300s
+    # It may already be gone (hook-succeeded delete policy) — that's success.
+    wait_for_cluster_init
 elif is_on "${REP}"; then
     kctl rollout status "statefulset/${RELEASE}" --timeout=300s
 else

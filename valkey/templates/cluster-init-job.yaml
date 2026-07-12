@@ -11,7 +11,15 @@ metadata:
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "0"
-    "helm.sh/hook-delete-policy": before-hook-creation
+    # before-hook-creation: wipe a prior run before re-creating on upgrade.
+    # hook-succeeded: delete the Job (and its pod) as soon as it completes,
+    # so a finished cluster-init pod can't linger in the namespace — a
+    # leftover pod is matched by app.kubernetes.io/instance selectors and,
+    # if it came from a sidecar-mode release, still carries an istio-proxy
+    # that trips ambient-mode assertions on the next release. ttl below is
+    # the backstop for the failure case (hook-succeeded only fires on
+    # success).
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 6
   ttlSecondsAfterFinished: {{ .Values.cluster.initJob.ttlSecondsAfterFinished }}

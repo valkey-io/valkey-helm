@@ -56,6 +56,30 @@ wait_for_testbench() {
     kctl wait --for=condition=Ready "pod/${pod}" --timeout=180s
 }
 
+# Wait for the cluster-init hook Job to have completed.
+#
+# The Job carries helm.sh/hook-delete-policy including hook-succeeded, so
+# Helm deletes it the instant it completes — and because post-install
+# hooks run synchronously, `helm install` has already returned by the
+# time we get here. That means the Job is very often ALREADY GONE, which
+# is itself proof of success: a FAILED hook makes `helm install` exit
+# non-zero, so the scenario would have aborted before reaching this call.
+# Therefore: if the Job is absent, treat it as completed; if it's still
+# present (delete not yet propagated), wait for the condition.
+#
+# $1: job name (defaults to ${RELEASE}-cluster-init)
+wait_for_cluster_init() {
+    local job=${1:-${RELEASE}-cluster-init}
+    if ! kctl get "job/${job}" >/dev/null 2>&1; then
+        # Already deleted by hook-succeeded ⇒ it completed.
+        return 0
+    fi
+    # Still present — wait for completion, but tolerate it vanishing
+    # mid-wait (Helm/TTL deleting it) as success.
+    kctl wait --for=condition=complete "job/${job}" --timeout=300s >/dev/null 2>&1 \
+        || ! kctl get "job/${job}" >/dev/null 2>&1
+}
+
 istio_installed() {
     kubectl --context="${KUBE_CONTEXT}" get namespace "${ISTIO_NAMESPACE}" >/dev/null 2>&1
 }
