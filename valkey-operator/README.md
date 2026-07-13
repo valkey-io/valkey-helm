@@ -60,6 +60,7 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `podDisruptionBudget.maxUnavailable` | Maximum pods unavailable during disruptions | `1` |
 | `podDisruptionBudget.unhealthyPodEvictionPolicy` | Policy for evicting unhealthy pods | `""` |
 | `topologySpreadConstraints` | Topology spread constraints for the operator pods | `[]` |
+| `priorityClassName` | PriorityClass to assign to the operator pods | `""` |
 | `metrics.enabled` | Enable the metrics endpoint | `true` |
 | `metrics.port` | Metrics endpoint port | `8443` |
 | `metrics.secure` | Serve metrics over HTTPS with authn/authz (passes `--metrics-secure=true`); renders the metrics RBAC. Requires `rbac.create` and `metrics.enabled` | `false` |
