@@ -647,6 +647,16 @@ scenario_ambient_prometheus_scrape() {
 #   - and the pod role stays the same after restart (the restarted pod
 #     re-joins as primary because its nodes.conf persisted), so the role-flip
 #     assertion catches it.
+#
+# ISOLATION — shutdownOnSigterm="" is set deliberately. The chart now defaults
+# cluster.shutdownOnSigterm=failover, which produces the SAME role flips on
+# SIGTERM. If we left it on, a completely broken preStop hook would still make
+# this test pass (shutdown-on-sigterm would do the handover instead), so the
+# role-flip assertion would no longer have teeth against a preStop regression.
+# Disabling the native layer here scopes the signal to preStop ALONE — mirror
+# image of scenario_shutdown_on_sigterm_failover, which disables preStop to
+# scope its signal to shutdown-on-sigterm alone. Their coexistence at defaults
+# is covered separately by scenario_failover_layers_coexist.
 # ---------------------------------------------------------------------------
 scenario_rollout_restart_orderly_failover() {
     local name="rollout restart performs orderly CLUSTER FAILOVER (no client-visible gap)"
@@ -658,13 +668,14 @@ scenario_rollout_restart_orderly_failover() {
     # and the whole rollout ~2-3min, so with a 15s default timeout the
     # observed role-flip signal could be produced either by preStop OR by
     # auto-failover of an in-flight primary. Bumping to 180s guarantees any
-    # observed flip is the work of preStop.
+    # observed flip is the work of preStop (shutdown-on-sigterm disabled below).
     if ! hctl install "${RELEASE}" "${CHART_DIR}" \
             --set=cluster.enabled=true \
             --set=cluster.persistence.size=100Mi \
             --set=cluster.shards=3 \
             --set=cluster.replicasPerShard=1 \
             --set=cluster.nodeTimeout=180000 \
+            --set-string=cluster.shutdownOnSigterm= \
             --wait --timeout=300s >/dev/null; then
         fail "${name}" "helm install failed"
         return
@@ -987,6 +998,178 @@ scenario_shutdown_on_sigterm_failover() {
 }
 
 # ---------------------------------------------------------------------------
+# Scenario: preStopFailover and shutdown-on-sigterm must COEXIST with no
+# adverse interaction — the real production default (both enabled).
+#
+# The two layers act on the same graceful-termination path, in sequence:
+#   1. kubelet runs the preStop hook FIRST, blocking SIGTERM. On a primary it
+#      drives CLUSTER FAILOVER from a replica and polls until it observes
+#      ITSELF demoted to replica, then exits.
+#   2. kubelet then sends SIGTERM. shutdown-on-sigterm=failover fires, but the
+#      pod is ALREADY a replica by then, so its handover is a no-op and it
+#      exits cleanly.
+# They are sequential, not concurrent, and the second is designed to no-op
+# after the first. The failure modes this guards against are what "adverse
+# interaction" would actually look like:
+#   * double promotion / split-brain — more than one primary claiming a
+#     shard's slots ⇒ masters != 3 after the rollout;
+#   * a fight between the two handoffs leaving the cluster wedged ⇒
+#     cluster_state != ok, or the rollout never converging;
+#   * either handover dropping an in-flight write ⇒ canary lost.
+# So this is the two isolation tests' counterpart: they each prove ONE layer
+# works alone; this proves turning BOTH on (the shipped default) is safe.
+#
+# Unlike scenario_rollout_restart_orderly_failover, this does NOT pin a high
+# nodeTimeout or count role flips — it isn't attributing the handover to a
+# specific layer, it's asserting the end state is healthy no matter which
+# layer(s) acted. Everything runs at chart defaults on purpose.
+# ---------------------------------------------------------------------------
+scenario_failover_layers_coexist() {
+    local name="preStopFailover + shutdown-on-sigterm coexist without adverse interaction"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    # Both layers at their DEFAULTS: preStopFailover.enabled=true and
+    # shutdownOnSigterm=failover. This is exactly what a user gets out of the
+    # box — no failover-related overrides at all.
+    if ! hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=cluster.enabled=true \
+            --set=cluster.persistence.size=100Mi \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=1 \
+            --wait --timeout=300s >/dev/null; then
+        fail "${name}" "helm install failed"
+        return
+    fi
+    wait_for_cluster_init
+
+    # Confirm BOTH layers are actually in effect — otherwise this degenerates
+    # into a duplicate of one of the single-layer tests without anyone noticing.
+    local lifecycle sos
+    lifecycle=$(kctl get statefulset "${RELEASE}" \
+        -o jsonpath='{.spec.template.spec.containers[0].lifecycle.preStop.exec.command}')
+    if [[ ${lifecycle} != *prestop.sh* ]]; then
+        fail "${name}" "preStop hook not rendered (${lifecycle:-<none>}) — cannot test coexistence"
+        cleanup_release; return
+    fi
+    sos=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+        valkey-cli config get shutdown-on-sigterm 2>/dev/null \
+        | tr -d '\r' | awk 'NR==2{print}')
+    if [[ ${sos} != failover ]]; then
+        fail "${name}" "shutdown-on-sigterm=${sos:-<unset>} (want failover) — cannot test coexistence"
+        cleanup_release; return
+    fi
+
+    # Wait for gossip convergence before writing the canary.
+    local s
+    for _ in $(seq 1 60); do
+        s=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+            valkey-cli cluster info 2>/dev/null \
+            | awk -F: '/^cluster_state:/{print $2}' | tr -d '\r\n' || true)
+        [[ ${s} == ok ]] && break
+        sleep 2
+    done
+    if [[ ${s} != ok ]]; then
+        fail "${name}" "cluster_state=${s:-<unavailable>} after install (want ok)"
+        cleanup_release; return
+    fi
+
+    # Baseline shape: 3 masters + 3 slaves.
+    local masters_before slaves_before i role
+    masters_before=0; slaves_before=0
+    for i in 0 1 2 3 4 5; do
+        role=$(kctl exec "${RELEASE}-${i}" -c "${RELEASE}" -- \
+            valkey-cli info replication 2>/dev/null \
+            | awk -F: '/^role:/{print $2}' | tr -d '\r\n' || true)
+        case "${role}" in
+            master) masters_before=$(( masters_before + 1 )) ;;
+            slave|replica) slaves_before=$(( slaves_before + 1 )) ;;
+        esac
+    done
+    if [[ ${masters_before} != 3 || ${slaves_before} != 3 ]]; then
+        fail "${name}" "baseline wrong: masters=${masters_before} slaves=${slaves_before} (want 3+3)"
+        cleanup_release; return
+    fi
+
+    # Canary through a cluster-aware client (follows MOVED). Shell
+    # metacharacters for the usual quoting-coverage reason.
+    local canary_key="coexist-canary-$$"
+    local canary_val='both-layers-ok $x "q" \b`t`'
+    if ! kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+            valkey-cli -c set "${canary_key}" "${canary_val}" >/dev/null 2>&1; then
+        fail "${name}" "initial SET failed"
+        cleanup_release; return
+    fi
+
+    # Full rollout with BOTH layers live. Every primary pod's shutdown fires
+    # preStop (blocking SIGTERM) THEN shutdown-on-sigterm — the exact sequence
+    # where a mishandled interaction would show up.
+    log "triggering rollout restart with both failover layers enabled"
+    kctl rollout restart "statefulset/${RELEASE}" >/dev/null
+    if ! kctl rollout status "statefulset/${RELEASE}" --timeout=600s >/dev/null; then
+        fail "${name}" "rollout never converged — possible deadlock between the two layers"
+        cleanup_release; return
+    fi
+
+    # Post-rollout must re-converge to a HEALTHY, correctly-shaped cluster.
+    local state
+    for _ in $(seq 1 30); do
+        state=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+            valkey-cli cluster info 2>/dev/null \
+            | awk -F: '/^cluster_state:/{print $2}' | tr -d '\r\n' || true)
+        [[ ${state} == ok ]] && break
+        sleep 2
+    done
+    if [[ ${state} != ok ]]; then
+        fail "${name}" "cluster_state=${state:-<unavailable>} after rollout (want ok)"
+        cleanup_release; return
+    fi
+
+    # The load-bearing anti-split-brain assertion: EXACTLY 3 masters and 3
+    # slaves. Double promotion (both layers each promoting a different replica
+    # for the same shard) would surface as masters>3 or a slot owned twice.
+    local masters_after slaves_after
+    masters_after=0; slaves_after=0
+    for i in 0 1 2 3 4 5; do
+        role=$(kctl exec "${RELEASE}-${i}" -c "${RELEASE}" -- \
+            valkey-cli info replication 2>/dev/null \
+            | awk -F: '/^role:/{print $2}' | tr -d '\r\n' || true)
+        case "${role}" in
+            master) masters_after=$(( masters_after + 1 )) ;;
+            slave|replica) slaves_after=$(( slaves_after + 1 )) ;;
+        esac
+    done
+    if [[ ${masters_after} != 3 || ${slaves_after} != 3 ]]; then
+        fail "${name}" "post-rollout shape wrong: masters=${masters_after} slaves=${slaves_after} (want 3+3 — >3 masters would indicate double-promotion/split-brain)"
+        cleanup_release; return
+    fi
+
+    # Every slot must be covered exactly once — a subtler split-brain check
+    # than the role count (catches a slot claimed by two primaries).
+    local slots_ok
+    slots_ok=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+        valkey-cli cluster info 2>/dev/null \
+        | awk -F: '/^cluster_slots_ok:/{print $2}' | tr -d '\r\n' || true)
+    if [[ ${slots_ok} != 16384 ]]; then
+        fail "${name}" "cluster_slots_ok=${slots_ok:-<unavailable>} after rollout (want 16384)"
+        cleanup_release; return
+    fi
+
+    # Canary survives the double-layered handover.
+    local got
+    got=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+        valkey-cli -c get "${canary_key}" 2>/dev/null || true)
+    if [[ ${got} != "${canary_val}" ]]; then
+        fail "${name}" "canary lost with both layers enabled: got='${got}' want='${canary_val}'"
+        cleanup_release; return
+    fi
+    log "both layers enabled: cluster ok, 3+3 shape, all slots covered, canary intact"
+
+    cleanup_release
+    pass "${name}"
+}
+
+# ---------------------------------------------------------------------------
 # Scenario: cluster bus dials by IP, even with cluster-preferred-endpoint-type
 # =hostname. After a rolling restart, a pod whose nodes.conf has only stale
 # peer IPs becomes a stranded minority partition — every gossip attempt
@@ -1246,6 +1429,7 @@ scenario_two_clusters_isolated                   || true
 scenario_isolation_off_lets_merge_happen         || true
 scenario_rollout_restart_orderly_failover        || true
 scenario_shutdown_on_sigterm_failover            || true
+scenario_failover_layers_coexist                 || true
 scenario_nodes_conf_ip_refresh                   || true
 scenario_probe_loading_policy                    || true
 scenario_ambient_authz_blocks_cross_release_meet || true
