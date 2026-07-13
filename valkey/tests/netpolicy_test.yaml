@@ -1,0 +1,49 @@
+suite: network policy configuration
+templates:
+  - templates/netpolicy.yaml
+tests:
+  - it: should render nothing when networkPolicy is empty
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # Default-deny ingress is expressed as an empty list; the chart must keep
+  # that distinct from "never declared" — otherwise the opt-in is lost.
+  - it: should render a default-deny ingress policy when ingress is an empty list
+    set:
+      networkPolicy:
+        ingress: []
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+      - equal:
+          path: spec.ingress
+          value: []
+      - notExists:
+          path: spec.egress
+
+  - it: should render both ingress and egress when both declared
+    set:
+      networkPolicy:
+        ingress:
+          - from:
+              - podSelector: {}
+        egress:
+          - to:
+              - podSelector: {}
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+            - Egress
+      - isNotEmpty:
+          path: spec.ingress
+      - isNotEmpty:
+          path: spec.egress

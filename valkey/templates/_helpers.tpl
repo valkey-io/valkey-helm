@@ -82,19 +82,17 @@ Returns the Valkey exporter container image
 The common image function that renders the container image
 */}}
 {{- define "common.image" -}}
-{{- $registryName := .image.registry }}
-{{- $repositoryName := .image.repository }}
-{{- $tag := .image.tag }}
-{{- if .global }}
-  {{- if .global.imageRegistry }}
-    {{- $registryName = .global.imageRegistry }}
-  {{- end }}
-{{- end }}
-{{- if $registryName }}
-{{- printf "%s/%s:%s" $registryName $repositoryName $tag }}
-{{- else }}
-{{- printf "%s:%s" $repositoryName $tag }}
-{{ end }}
+{{- $registryName := .image.registry -}}
+{{- $repositoryName := .image.repository -}}
+{{- $tag := .image.tag -}}
+{{- if and .global .global.imageRegistry -}}
+{{- $registryName = .global.imageRegistry -}}
+{{- end -}}
+{{- if $registryName -}}
+{{- printf "%s/%s:%s" $registryName $repositoryName $tag -}}
+{{- else -}}
+{{- printf "%s:%s" $repositoryName $tag -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -187,4 +185,250 @@ Validate replica authentication configuration
   {{- end }}
 {{- end }}
 {{- end -}}
+
+{{/*
+Validate cluster configuration
+*/}}
+{{- define "valkey.validateClusterConfig" -}}
+{{- if .Values.cluster.enabled }}
+  {{- if .Values.replica.enabled }}
+    {{- fail "cluster.enabled and replica.enabled are mutually exclusive. Please enable only one mode." }}
+  {{- end }}
+  {{- if lt (int .Values.cluster.shards) 3 }}
+    {{- fail "Cluster mode requires at least 3 shards (cluster.shards >= 3) for proper cluster operation." }}
+  {{- end }}
+  {{- if not .Values.cluster.persistence.size }}
+    {{- fail "Cluster mode requires persistent storage. Please set cluster.persistence.size (e.g., '5Gi')" }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Validate cluster authentication configuration
+*/}}
+{{- define "valkey.validateClusterAuth" -}}
+{{- if and .Values.cluster.enabled .Values.auth.enabled }}
+  {{- if not (hasKey .Values.auth.aclUsers .Values.cluster.replicationUser) }}
+    {{- fail (printf "Cluster replication user '%s' (cluster.replicationUser) must be defined in auth.aclUsers. The chart requires this to retrieve the password for cluster authentication." .Values.cluster.replicationUser) }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Calculate total number of nodes in the cluster
+*/}}
+{{- define "valkey.clusterNodeCount" -}}
+{{- $shards := int .Values.cluster.shards -}}
+{{- $replicasPerShard := int .Values.cluster.replicasPerShard -}}
+{{- mul $shards (add 1 $replicasPerShard) -}}
+{{- end -}}
+
+{{/*
+Istio pod labels. Emits the labels that tell Istio exactly how to capture
+this pod's traffic, so the chart works whether or not the namespace carries
+`istio-injection=enabled` or `istio.io/dataplane-mode=ambient` — and, just
+as importantly, so that toggling `istio.mode` on a dual-mode cluster moves
+pods between data planes cleanly.
+
+Sidecar mode:
+  sidecar.istio.io/inject: "true"   — force Envoy injection even if the
+                                       namespace lacks the injection label.
+  istio.io/dataplane-mode: none     — veto ambient capture, so a cluster
+                                       that ALSO runs ambient (e.g. during
+                                       a sidecar→ambient migration) does
+                                       not double-redirect this pod.
+
+Ambient mode:
+  istio.io/dataplane-mode: ambient  — ztunnel captures this pod's traffic.
+  sidecar.istio.io/inject: "false"  — veto Envoy injection even if the
+                                       namespace has the injection label,
+                                       so the pod isn't simultaneously
+                                       sidecar'd (which double-redirects
+                                       and silently breaks mTLS, surfacing
+                                       as "Connection reset by peer" on
+                                       every request).
+
+Either mode by itself is enough; emitting both (per mode) makes pod-level
+intent the source of truth and eliminates the cluster-configuration
+dependency that's easy to miss at install time.
+
+When istio.enabled is false this helper emits nothing so the user remains
+free to pick their own opt-in/out via podLabels (see the istio=off
+functional-tests path).
+*/}}
+{{- define "valkey.istioPodLabels" -}}
+{{- if .Values.istio.enabled -}}
+{{- if eq (.Values.istio.mode | default "sidecar") "ambient" -}}
+istio.io/dataplane-mode: ambient
+sidecar.istio.io/inject: "false"
+{{- else -}}
+sidecar.istio.io/inject: "true"
+istio.io/dataplane-mode: none
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Compute the merged pod labels map: selector + common + chart-computed mesh
+labels + user podLabels (user wins on collision). Emits the merged dict as
+YAML so the rendered output has no duplicate keys, even when a user sets
+e.g. `sidecar.istio.io/inject=false` via podLabels alongside
+`istio.enabled=true`.
+*/}}
+{{- define "valkey.podLabels" -}}
+{{- $selector := fromYaml (include "valkey.selectorLabels" .) -}}
+{{- $common   := .Values.commonLabels | default dict -}}
+{{- $mesh     := fromYaml (include "valkey.istioPodLabels" .) | default dict -}}
+{{- $user     := .Values.podLabels   | default dict -}}
+{{- toYaml (mergeOverwrite $selector $common $mesh $user) -}}
+{{- end -}}
+
+{{/*
+Job-pod labels: same merge as valkey.podLabels with one extra layer for
+`cluster.initJob.podLabels` applied last (so it wins). Lets operators
+veto a globally-injected metrics/observability sidecar on the cluster-
+init Job — which is a short-lived, exit-on-success batch task — without
+having to disable the same injector for the long-running data pods.
+mergeOverwrite handles the deep-merge and the no-duplicate-keys
+guarantee just like the data-pod helper.
+*/}}
+{{- define "valkey.initJobPodLabels" -}}
+{{- $selector := fromYaml (include "valkey.selectorLabels" .) -}}
+{{- $common   := .Values.commonLabels | default dict -}}
+{{- $mesh     := fromYaml (include "valkey.istioPodLabels" .) | default dict -}}
+{{- $user     := .Values.podLabels    | default dict -}}
+{{- $jobUser  := (.Values.cluster.initJob).podLabels | default dict -}}
+{{- toYaml (mergeOverwrite $selector $common $mesh $user $jobUser) -}}
+{{- end -}}
+
+{{/*
+Job-pod annotations: same shape as the global .Values.podAnnotations,
+with `cluster.initJob.podAnnotations` merged on top so it wins on
+collision. Same opt-out rationale as valkey.initJobPodLabels — some
+sidecar injectors read annotations rather than labels.
+
+Emits nothing when the merged map is empty so the Job's metadata block
+collapses cleanly (Helm/`with` semantics expect an absent key, not an
+empty mapping, to skip).
+*/}}
+{{- define "valkey.initJobPodAnnotations" -}}
+{{- $global := .Values.podAnnotations | default dict -}}
+{{- $job    := (.Values.cluster.initJob).podAnnotations | default dict -}}
+{{- $merged := mergeOverwrite (deepCopy $global) $job -}}
+{{- if $merged -}}
+{{- toYaml $merged -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Probe shell command. Returns the "sh -c" argument that pings valkey-server
+locally; the set of replies that count as healthy is parameterised.
+
+Args (passed as a dict):
+  ctx           — the parent context (.) so we can read .Values.tls
+  acceptLoading — whether to treat 'LOADING' as healthy
+
+Replies to PING are one of:
+  PONG          — fully up, dataset loaded
+  NOAUTH …      — up, requires auth (treat as proof of liveness — the
+                  server is fully serving, we just lack credentials)
+  LOADING …     — TCP listener is up but the dataset is being read from
+                  RDB/AOF; the server cannot serve traffic yet
+
+The three probes have different jobs and therefore different LOADING
+policies:
+
+  startupProbe (acceptLoading=false): the gate that holds liveness and
+    readiness off until the pod is actually serving. If startupProbe
+    accepted LOADING it would pass the moment the TCP listener opens,
+    kubelet would switch to liveness/readiness immediately, and the
+    gate would do nothing useful. Operators with multi-GB RDBs bump
+    `startupProbe.failureThreshold` to extend the load window — the
+    canonical Kubernetes pattern for slow loaders.
+
+  livenessProbe (acceptLoading=true): runs only AFTER startupProbe
+    passes. After that point, LOADING almost always means a full-resync
+    from primary is in progress (replica fell behind, replication
+    backlog overflowed, etc.). Killing the pod here loses the in-flight
+    download work and forces yet another full resync, perpetuating the
+    very condition the kill was supposed to escape. A pod stuck loading
+    forever is rare and harmless compared to the kill-loop, so accept
+    LOADING and let the load complete.
+
+  readinessProbe (acceptLoading=false): decides whether the pod is in
+    the Service endpoint set. A LOADING pod can't serve traffic, so it
+    must be removed from the rotation until it's truly ready. This
+    leaves the pod 'Running 0/1' during full-resync — exactly right.
+*/}}
+{{- define "valkey.probeShellCommand" -}}
+{{- $ctx := .ctx -}}
+{{- $pingCmd := "valkey-cli ping" -}}
+{{- if $ctx.Values.tls.enabled -}}
+{{- $pingCmd = printf "valkey-cli --tls --cacert /tls/%s ping" $ctx.Values.tls.caPublicKey -}}
+{{- end -}}
+{{- $accepted := "PONG|NOAUTH" -}}
+{{- if .acceptLoading -}}
+{{- $accepted = "PONG|NOAUTH|LOADING" -}}
+{{- end -}}
+{{- printf "%s 2>&1 | grep -qE '%s'" $pingCmd $accepted -}}
+{{- end -}}
+
+{{/*
+The valkey ServiceAccount name as an Istio SPIFFE principal.
+Used by the AuthorizationPolicy to pin the cluster-bus port to same-release
+pods cryptographically rather than by pod-selector IP.
+*/}}
+{{- define "valkey.istioPrincipal" -}}
+{{- $trustDomain := .Values.istio.trustDomain | default "cluster.local" -}}
+{{- printf "%s/ns/%s/sa/%s" $trustDomain .Release.Namespace (include "valkey.serviceAccountName" .) -}}
+{{- end -}}
+
+{{/*
+Validate istio configuration. Runs regardless of istio.enabled so a typo in
+istio.mode (e.g. `mode: ambiet` buried in a GitOps values file) surfaces at
+template time instead of silently rendering the sidecar-only code paths.
+*/}}
+{{- define "valkey.validateIstioConfig" -}}
+{{- if hasKey .Values.istio "mode" }}
+  {{- if not (or (eq .Values.istio.mode "sidecar") (eq .Values.istio.mode "ambient")) }}
+    {{- fail (printf "istio.mode must be 'sidecar' or 'ambient', got: %s" .Values.istio.mode) }}
+  {{- end }}
+{{- end }}
+{{- /*
+Guard against the silent-no-protection footgun for the cluster bus port:
+when istio is enabled in ambient mode AND cluster mode is on, dropping BOTH
+the NetworkPolicy (skipped for ambient) AND the AuthorizationPolicy leaves
+the bus port open to any pod that can route to it. The feature's whole
+point is cross-release isolation; failing closed is the only safe default.
+Users who genuinely want the bus port unprotected can set
+`cluster.isolation.enabled=true` (NetworkPolicy path still runs in sidecar
+mode, but in ambient it's dropped) and explicitly acknowledge by setting
+`istio.authorizationPolicy.enabled=true`; the chart refuses to let BOTH be
+false when both layers have been chosen-off.
+*/}}
+{{- if and .Values.istio.enabled (eq .Values.istio.mode "ambient") .Values.cluster.enabled }}
+  {{- if not .Values.istio.authorizationPolicy.enabled }}
+    {{- fail "istio.authorizationPolicy.enabled=false in ambient mode + cluster mode leaves the cluster-bus port unprotected: the NetworkPolicy is skipped for ambient (it would block HBONE), and disabling the AuthorizationPolicy removes the only remaining cross-release isolation layer. Re-enable istio.authorizationPolicy.enabled, or switch to istio.mode=sidecar if you intend to rely on the NetworkPolicy." }}
+  {{- end }}
+{{- end }}
+{{- /*
+Guard against the shared-ServiceAccount footgun. The AuthorizationPolicy
+uses the SPIFFE principal `<trust-domain>/ns/<ns>/sa/<sa>` to scope the bus
+port to same-release pods. If two releases in the same namespace share a SA
+(e.g. both use `serviceAccount.create=false` with the namespace default, or
+both explicitly set the same `serviceAccount.name`), their APs encode the
+SAME principal — cross-release MEET passes the identity check and the
+clusters silently merge. The chart cannot detect other releases at template
+time, but it can surface the risk: refuse the obviously-unsafe case
+(`serviceAccount.create=false` with no explicit name, i.e. the shared
+`default` SA) whenever the AP is rendered. Users who deliberately share
+a named SA across releases can still do so; they just have to type it.
+*/}}
+{{- if and .Values.istio.enabled .Values.istio.authorizationPolicy.enabled .Values.cluster.enabled }}
+  {{- if and (not .Values.serviceAccount.create) (not .Values.serviceAccount.name) }}
+    {{- fail "istio.authorizationPolicy gives cross-release cluster-bus isolation by scoping the bus port to a SPIFFE principal built from the pod's ServiceAccount. With serviceAccount.create=false AND serviceAccount.name empty, the chart falls back to the namespace's 'default' ServiceAccount — which every other release using the same fallback ALSO maps to, so the AuthorizationPolicy cannot distinguish them and cross-release CLUSTER MEET succeeds. Either set serviceAccount.create=true (per-release SA) or serviceAccount.name=<distinct-name>." }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
 

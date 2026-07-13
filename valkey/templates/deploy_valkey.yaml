@@ -1,8 +1,9 @@
-{{- if not .Values.replica.enabled }}
+{{- if not (or .Values.replica.enabled .Values.cluster.enabled) }}
 {{- $fullname := include "valkey.fullname" . }}
 {{- $storage := .Values.dataStorage }}
 {{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
 {{- include "valkey.validateAuthConfig" . }}
+{{- include "valkey.validateIstioConfig" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,13 +24,14 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "valkey.selectorLabels" . | nindent 8 }}
-        {{- with .Values.commonLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- /*
+        Single merged label set: selector + commonLabels + chart-computed
+        mesh labels + user podLabels (user wins on collision). Keeps the
+        rendered YAML free of duplicate keys when e.g. a user sets
+        sidecar.istio.io/inject=false via podLabels alongside
+        istio.enabled=true.
+        */}}
+        {{- include "valkey.podLabels" . | nindent 8 }}
       annotations:
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
@@ -71,10 +73,6 @@ spec:
             - name: valkey-config
               mountPath: /usr/local/etc/valkey/valkey.conf
               subPath: valkey.conf
-            {{- end }}
-            {{- if .Values.extraSecretValkeyConfigs }}
-            - name: extravalkeyconfigs-volume
-              mountPath: /extravalkeyconfigs
             {{- end }}
             {{- if .Values.auth.enabled }}
             - name: valkey-acl
@@ -119,20 +117,26 @@ spec:
             - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          {{- $strictCmd := include "valkey.probeShellCommand" (dict "ctx" . "acceptLoading" false) }}
+          {{- $loadCmd   := include "valkey.probeShellCommand" (dict "ctx" . "acceptLoading" true)  }}
           startupProbe:
             exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
-              {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
-              {{- end }}
+              command: [ "sh", "-c", {{ $strictCmd | quote }} ]
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
           livenessProbe:
             exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
-              {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
-              {{- end }}
+              command: [ "sh", "-c", {{ $loadCmd | quote }} ]
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          readinessProbe:
+            exec:
+              command: [ "sh", "-c", {{ $strictCmd | quote }} ]
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
@@ -201,18 +205,21 @@ spec:
             - name: REDIS_ALIAS
               value: {{ include "valkey.fullname" . }}
             {{- if .Values.auth.enabled }}
+            {{- $defaultUser := get (.Values.auth.aclUsers | default dict) "default" | default dict }}
+            {{- $hasInlineDefaultPassword := hasKey $defaultUser "password" }}
+            {{- if .Values.auth.usersExistingSecret }}
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  {{- if .Values.auth.usersExistingSecret }}
-                  {{- $defaultUser := index .Values.auth.aclUsers "default" | default dict }}
-                  {{- $passwordKey := $defaultUser.passwordKey | default "default" }}
                   name: {{ tpl .Values.auth.usersExistingSecret . }}
-                  key: {{ $passwordKey }}
-                  {{- else }}
+                  key: {{ $defaultUser.passwordKey | default "default" }}
+            {{- else if $hasInlineDefaultPassword }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
                   name: {{ include "valkey.fullname" . }}-auth
                   key: default-password
-                  {{- end }}
+            {{- end }}
             {{- end }}
             {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
             - name: {{ $key }}

@@ -1,5 +1,24 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "probeTuning": {
+            "type": "object",
+            "properties": {
+                "periodSeconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "timeoutSeconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "failureThreshold": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        }
+    },
     "type": "object",
     "properties": {
         "affinity": {
@@ -19,6 +38,106 @@
                 },
                 "usersExistingSecret": {
                     "type": "string"
+                }
+            }
+        },
+        "cluster": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "shards": {
+                    "type": "integer"
+                },
+                "replicasPerShard": {
+                    "type": "integer"
+                },
+                "replicationUser": {
+                    "type": "string"
+                },
+                "nodeTimeout": {
+                    "type": "integer"
+                },
+                "requireFullCoverage": {
+                    "type": "boolean"
+                },
+                "allowReadsWhenDown": {
+                    "type": "boolean"
+                },
+                "shutdownOnSigterm": {
+                    "type": "string"
+                },
+                "persistence": {
+                    "type": "object",
+                    "properties": {
+                        "size": {
+                            "type": "string"
+                        },
+                        "storageClass": {
+                            "type": "string"
+                        },
+                        "accessModes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "busPort": {
+                    "type": "integer"
+                },
+                "isolation": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        }
+                    }
+                },
+                "startupProbe": {
+                    "$ref": "#/$defs/probeTuning"
+                },
+                "livenessProbe": {
+                    "$ref": "#/$defs/probeTuning"
+                },
+                "readinessProbe": {
+                    "$ref": "#/$defs/probeTuning"
+                },
+                "preStopFailover": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "timeoutSeconds": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                },
+                "terminationGracePeriodSeconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "initJob": {
+                    "type": "object",
+                    "properties": {
+                        "podLabels": {
+                            "type": "object"
+                        },
+                        "podAnnotations": {
+                            "type": "object"
+                        },
+                        "ttlSecondsAfterFinished": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                },
+                "persistentVolumeClaimRetentionPolicy": {
+                    "type": "object"
                 }
             }
         },
@@ -82,9 +201,6 @@
         "extraInitContainers": {
             "type": "array"
         },
-        "extraSecretValkeyConfigs": {
-            "type": "boolean"
-        },
         "extraValkeyConfigs": {
             "type": "array"
         },
@@ -133,6 +249,78 @@
         },
         "initResources": {
             "type": "object"
+        },
+        "istio": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "sidecar",
+                        "ambient"
+                    ]
+                },
+                "trustDomain": {
+                    "type": "string"
+                },
+                "peerAuthentication": {
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": [
+                                "STRICT",
+                                "PERMISSIVE",
+                                "DISABLE",
+                                "UNSET"
+                            ]
+                        },
+                        "labels": {
+                            "type": "object"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        }
+                    }
+                },
+                "destinationRule": {
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": [
+                                "DISABLE",
+                                "SIMPLE",
+                                "MUTUAL",
+                                "ISTIO_MUTUAL"
+                            ]
+                        },
+                        "labels": {
+                            "type": "object"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        }
+                    }
+                },
+                "authorizationPolicy": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "labels": {
+                            "type": "object"
+                        },
+                        "annotations": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
         },
         "metrics": {
             "type": "object",
@@ -364,6 +552,15 @@
         "runtimeClassName": {
             "type": "string"
         },
+        "startupProbe": {
+            "$ref": "#/$defs/probeTuning"
+        },
+        "livenessProbe": {
+            "$ref": "#/$defs/probeTuning"
+        },
+        "readinessProbe": {
+            "$ref": "#/$defs/probeTuning"
+        },
         "replica": {
             "type": "object",
             "properties": {
@@ -398,6 +595,15 @@
                 },
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"
+                },
+                "startupProbe": {
+                    "$ref": "#/$defs/probeTuning"
+                },
+                "livenessProbe": {
+                    "$ref": "#/$defs/probeTuning"
+                },
+                "readinessProbe": {
+                    "$ref": "#/$defs/probeTuning"
                 },
                 "replicas": {
                     "type": "integer"

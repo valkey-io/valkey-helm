@@ -1,0 +1,128 @@
+{{- if .Values.cluster.enabled }}
+{{- include "valkey.validateAuthConfig" . }}
+{{- include "valkey.validateClusterConfig" . }}
+{{- include "valkey.validateClusterAuth" . }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "valkey.fullname" . }}-cluster-init
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    # before-hook-creation: wipe a prior run before re-creating on upgrade.
+    # hook-succeeded: delete the Job (and its pod) as soon as it completes,
+    # so a finished cluster-init pod can't linger in the namespace — a
+    # leftover pod is matched by app.kubernetes.io/instance selectors and,
+    # if it came from a sidecar-mode release, still carries an istio-proxy
+    # that trips ambient-mode assertions on the next release. ttl below is
+    # the backstop for the failure case (hook-succeeded only fires on
+    # success).
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: {{ .Values.cluster.initJob.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- /*
+        Job-scoped label set (see valkey.initJobPodLabels helper). Same
+        layering as the data-pod helper, plus `cluster.initJob.podLabels`
+        on top so operators can opt the short-lived batch Job out of
+        global label-driven injectors (sidecar metrics agents, etc.)
+        without affecting the long-running data pods. In ambient mode
+        the dataplane-mode label is still emitted automatically so
+        ztunnel captures the Job's outbound connections; in sidecar mode
+        sidecar.istio.io/inject=true is emitted so the Job works on
+        namespaces that don't carry the injection label.
+        */}}
+        {{- include "valkey.initJobPodLabels" . | nindent 8 }}
+      {{- $annotations := include "valkey.initJobPodAnnotations" . }}
+      {{- with $annotations }}
+      annotations:
+        {{- . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
+      automountServiceAccountToken: false
+      serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+      restartPolicy: OnFailure
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
+      securityContext:
+      {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: cluster-init
+          image: {{ include "valkey.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: [ "/bin/sh", "/cluster-script/init-cluster.sh" ]
+          env:
+            - name: CLUSTER_NODE_COUNT
+              value: {{ include "valkey.clusterNodeCount" . | quote }}
+            - name: CLUSTER_REPLICAS_PER_SHARD
+              value: {{ .Values.cluster.replicasPerShard | quote }}
+          {{- with .Values.initResources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: cluster-script
+              mountPath: /cluster-script
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
+            {{- end }}
+      volumes:
+        - name: cluster-script
+          configMap:
+            name: {{ include "valkey.fullname" . }}-cluster-script
+            defaultMode: 0555
+        {{- if .Values.tls.enabled }}
+        - name: {{ include "valkey.fullname" . }}-tls
+          secret:
+            secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            defaultMode: 0400
+        {{- end }}
+        {{- if .Values.auth.enabled }}
+        {{- if .Values.auth.usersExistingSecret }}
+        - name: valkey-users-secret
+          secret:
+            secretName: {{ .Values.auth.usersExistingSecret }}
+            defaultMode: 0400
+        {{- end }}
+        {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+        - name: valkey-auth-secret
+          secret:
+            secretName: {{ include "valkey.fullname" . }}-auth
+            defaultMode: 0400
+        {{- end }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

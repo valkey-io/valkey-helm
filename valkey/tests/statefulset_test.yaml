@@ -415,6 +415,7 @@ tests:
               secretKeyRef:
                 name: my-custom-secret
                 key: my-password-key
+
   - it: should not set runtimeClassName when empty
     set:
       replica.enabled: true
@@ -439,3 +440,113 @@ tests:
       - equal:
           path: spec.template.spec.runtimeClassName
           value: "kata-containers"
+
+  # Regression: probes must accept NOAUTH as proof of liveness.
+  - it: should use a PONG|NOAUTH-tolerant probe on the valkey container
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "p"
+    template: templates/statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+      - matchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+      - matchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+
+  - it: should define a readiness probe
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  # --- Tri-state LOADING policy (see cluster_test.yaml for rationale) ---
+  - it: replicated startupProbe must reject LOADING
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: replicated livenessProbe must accept LOADING (full-resync tolerance)
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH\\|LOADING"
+
+  - it: replicated readinessProbe must reject LOADING
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: replica.startupProbe overrides should land on the startupProbe only
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.startupProbe.failureThreshold: 240
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 240
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 6
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3
+
+  # --- Istio ambient mode ---
+  - it: should add ambient dataplane-mode label when istio.mode=ambient
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: ambient
+
+  # Sidecar mode emits istio.io/dataplane-mode=none (veto ambient capture)
+  # and sidecar.istio.io/inject=true (force injection), so the chart is
+  # self-sufficient on clusters that run both data planes side-by-side.
+  - it: should set sidecar-mode mesh labels in sidecar mode
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: sidecar
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: none
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "true"

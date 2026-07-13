@@ -145,3 +145,95 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
           value: valkey
+
+  # Regression: `echo "$password"` in dash interprets \b, \t, \n, \\, etc.
+  # before writing them out. A password containing a backslash then gets a
+  # DIFFERENT sha256 than the bytes that were stored in the Secret — client
+  # auth with the real password fails WRONGPASS, since the stored ACL hash
+  # is of the mangled bytes. Must be `printf '%s'` (byte-safe).
+  - it: get_user_password must be byte-safe (no echo)
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+          password: "admin-password"
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'echo "\$password"'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "printf '%s' \"\\$password\""
+
+  # Regression: masterauth line in valkey.conf used to be unquoted, so a
+  # password with whitespace or `#` (valkey.conf comment char) would break
+  # the config parser. Must be double-quoted with backslash-escapes.
+  - it: masterauth must be written as a quoted+escaped string
+    set:
+      auth.enabled: true
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "whatever"
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "printf 'masterauth \"%s\"\\\\n' \"\\$REPL_PASSWORD_ESC\""
+      - matchRegex:
+          path: data["init.sh"]
+          # The escape pass: s/\\/\\\\/g; s/"/\\"/g
+          pattern: "REPL_PASSWORD_ESC=\\$\\(printf '%s' \"\\$REPL_PASSWORD\""
+
+  # --- nodes.conf IP refresh on cluster pod restart ---
+  # Cluster bus gossip dials by IP, even with cluster-preferred-endpoint-type=
+  # hostname. After a rolling restart pod IPs change, and a pod whose
+  # nodes.conf has only stale IPs becomes a stranded minority partition.
+  # The refresh block re-resolves each peer's announced FQDN and rewrites
+  # the IP before valkey-server starts.
+  - it: cluster mode should emit a nodes.conf IP refresh block
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "NODES_CONF=/data/nodes\\.conf"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "getent hosts \"\\$fqdn\""
+      # Atomic swap so a kill mid-rewrite can't corrupt the file.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'mv "\$TMP" "\$NODES_CONF"'
+      # No-op when nodes.conf doesn't exist (first boot).
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "first boot, nothing to refresh"
+      # 'vars' line at EOF must be passed through verbatim — it's
+      # currentEpoch / lastVoteEpoch state and corrupting it would force
+      # a fresh cluster join. The case-pattern matches an empty line
+      # OR a line starting with 'vars '.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "''\\|vars"
+
+  - it: non-cluster mode should NOT emit the nodes.conf refresh block
+    # Standalone and replicated modes have no nodes.conf — emitting the
+    # block in their init.sh would just be dead code and could log
+    # confusing "first boot" messages on every restart.
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "NODES_CONF=/data/nodes\\.conf"
+
+  - it: replicated (non-cluster) mode should NOT emit the nodes.conf refresh block
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "NODES_CONF=/data/nodes\\.conf"

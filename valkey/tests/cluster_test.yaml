@@ -1,0 +1,1568 @@
+suite: cluster configuration
+templates:
+  - templates/cluster-statefulset.yaml
+  - templates/cluster-script.yaml
+  - templates/cluster-init-job.yaml
+  - templates/service-headless.yaml
+  - templates/service.yaml
+  - templates/init_config.yaml
+tests:
+  # Validation tests
+  - it: should fail when cluster enabled but no persistence size provided
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: ""
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Cluster mode requires persistent storage.*"
+
+  - it: should fail when cluster enabled with less than 3 shards
+    set:
+      cluster.enabled: true
+      cluster.shards: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Cluster mode requires at least 3 shards.*"
+
+  - it: should fail when both cluster and replica are enabled
+    set:
+      cluster.enabled: true
+      replica.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.enabled and replica.enabled are mutually exclusive.*"
+
+  # StatefulSet tests
+  - it: should create StatefulSet when cluster is enabled
+    set:
+      cluster.enabled: true
+      cluster.shards: 3
+      cluster.replicasPerShard: 1
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 6  # 3 shards * (1 + 1 replica) = 6 nodes
+
+  - it: should create StatefulSet with 3 shards and 0 replicas (3 nodes total)
+    set:
+      cluster.enabled: true
+      cluster.shards: 3
+      cluster.replicasPerShard: 0
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should create StatefulSet with 5 shards and 2 replicas (15 nodes total)
+    set:
+      cluster.enabled: true
+      cluster.shards: 5
+      cluster.replicasPerShard: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 15  # 5 shards * (1 + 2 replicas) = 15 nodes
+
+  - it: should use Parallel pod management policy for cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: Parallel
+
+  - it: should configure PVC with correct storage settings
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "10Gi"
+      cluster.persistence.storageClass: "fast-ssd"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "10Gi"
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: "fast-ssd"
+
+  - it: should expose both tcp and tcp-bus ports in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.busPort: 16379
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: tcp
+            containerPort: 6379
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: tcp-bus
+            containerPort: 16379
+            protocol: TCP
+
+  # StatefulSet runs valkey-server directly (no background init script)
+  - it: should run valkey-server directly without background init script
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: [ "valkey-server" ]
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [ "/data/conf/valkey.conf" ]
+
+  # Cluster-script is consumed on the STS side exclusively by the preStop
+  # CLUSTER FAILOVER hook: no replicas in the shard ⇒ no failover target
+  # ⇒ no need for the script on the main container.
+  - it: should not mount cluster-script volume in StatefulSet container when no replicas
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 0
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cluster-script
+            mountPath: /cluster-script
+
+  - it: should not define cluster-script volume in StatefulSet when no replicas
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 0
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: cluster-script
+          any: true
+
+  - it: should not mount cluster-script volume when preStopFailover disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 1
+      cluster.preStopFailover.enabled: false
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cluster-script
+            mountPath: /cluster-script
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: cluster-script
+          any: true
+
+  - it: should mount cluster-script volume in StatefulSet container when replicas>=1 (default)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 1
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cluster-script
+            mountPath: /cluster-script
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: cluster-script
+            configMap:
+              name: RELEASE-NAME-valkey-cluster-script
+              defaultMode: 365  # 0555
+
+  # --- preStop CLUSTER FAILOVER hook ---
+  - it: should render preStop CLUSTER FAILOVER hook when replicas>=1 (default)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 1
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+          value: [ "/bin/sh", "/cluster-script/prestop.sh" ]
+
+  - it: should NOT render preStop hook when replicasPerShard=0
+    # Nothing to hand over to — the hook would be a no-op that just eats
+    # grace-period budget.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 0
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle
+
+  - it: should NOT render preStop hook when preStopFailover explicitly disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicasPerShard: 1
+      cluster.preStopFailover.enabled: false
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle
+
+  - it: should set terminationGracePeriodSeconds from cluster.terminationGracePeriodSeconds
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.terminationGracePeriodSeconds: 120
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 120
+
+  - it: should default terminationGracePeriodSeconds to 60 (enough for default preStop timeout of 40s + SIGTERM flush)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 60
+
+  - it: cluster-script ConfigMap should contain prestop.sh with CLUSTER FAILOVER
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-script.yaml
+    asserts:
+      - isNotNull:
+          path: data["prestop.sh"]
+      - matchRegex:
+          path: data["prestop.sh"]
+          pattern: "cluster failover"
+
+  - it: prestop.sh should inline TLS args when tls.enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: valkey-tls
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["prestop.sh"]
+          pattern: "--tls --cacert"
+
+  - it: prestop.sh should NOT inline TLS args when tls disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-script.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["prestop.sh"]
+          pattern: "--tls --cacert"
+
+  - it: prestop.sh should source REDISCLI_AUTH when auth.enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "secretpass"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["prestop.sh"]
+          pattern: "REDISCLI_AUTH"
+
+  - it: prestop.sh timeout should follow cluster.preStopFailover.timeoutSeconds
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.preStopFailover.timeoutSeconds: 25
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["prestop.sh"]
+          pattern: "TIMEOUT=25"
+
+  # Init container tests
+  - it: should have init container with cluster environment variables
+    set:
+      cluster.enabled: true
+      cluster.shards: 4
+      cluster.replicasPerShard: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CLUSTER_SHARDS
+            value: "4"
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CLUSTER_REPLICAS_PER_SHARD
+            value: "2"
+
+  # Service headless tests
+  - it: should create headless service with bus port in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.busPort: 16379
+    template: templates/service-headless.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.clusterIP
+          value: None
+      - contains:
+          path: spec.ports
+          content:
+            name: tcp
+            port: 6379
+            targetPort: tcp
+            protocol: TCP
+      - contains:
+          path: spec.ports
+          content:
+            name: tcp-bus
+            port: 16379
+            targetPort: tcp-bus
+            protocol: TCP
+
+  # Main service tests
+  - it: should not expose the bus port on the frontend service in cluster mode
+    # Bus port is pod-to-pod only; clients reach nodes via the headless service.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.busPort: 16379
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - notContains:
+          path: spec.ports
+          content:
+            name: tcp-bus
+      - notContains:
+          path: spec.ports
+          content:
+            port: 16379
+
+  # Cluster init script ConfigMap tests
+  - it: should create cluster-script ConfigMap when cluster is enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-script.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-script
+
+  - it: cluster-script ConfigMap should contain init-cluster.sh
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-script.yaml
+    asserts:
+      - isNotNull:
+          path: data["init-cluster.sh"]
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: "CLUSTER MEET"
+
+  - it: cluster-script should contain cluster create logic
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: "--cluster create"
+
+  # --- Cluster Init Job tests ---
+  - it: should create cluster-init Job when cluster is enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-init
+
+  - it: Job should have Helm hook annotations for post-install and post-upgrade
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: "post-install,post-upgrade"
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "0"
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          # hook-succeeded deletes the finished Job (and its pod) promptly
+          # so a completed cluster-init pod can't linger past uninstall and
+          # get matched by app.kubernetes.io/instance selectors in the next
+          # release.
+          value: "before-hook-creation,hook-succeeded"
+
+  # Regression: a finished cluster-init pod that survives `helm uninstall`
+  # leaks into the namespace and, if it came from a sidecar-mode release,
+  # still carries an istio-proxy — which trips ambient-mode assertions on
+  # whatever release lands next. hook-succeeded must be in the delete
+  # policy so the Job self-deletes on completion.
+  - it: Job delete policy must include hook-succeeded (no lingering pod)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          pattern: "hook-succeeded"
+
+  - it: Job should have backoffLimit of 6
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.backoffLimit
+          value: 6
+
+  - it: Job should use OnFailure restart policy
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: OnFailure
+
+  - it: Job should run init-cluster.sh from cluster-script ConfigMap
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: [ "/bin/sh", "/cluster-script/init-cluster.sh" ]
+
+  - it: Job should mount cluster-script volume
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cluster-script
+            mountPath: /cluster-script
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: cluster-script
+            configMap:
+              name: RELEASE-NAME-valkey-cluster-script
+              defaultMode: 365
+
+  - it: Job should have CLUSTER_NODE_COUNT and CLUSTER_REPLICAS_PER_SHARD env vars
+    set:
+      cluster.enabled: true
+      cluster.shards: 4
+      cluster.replicasPerShard: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLUSTER_NODE_COUNT
+            value: "12"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLUSTER_REPLICAS_PER_SHARD
+            value: "2"
+
+  - it: Job should use same image as StatefulSet
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      image.registry: "myregistry.io"
+      image.repository: "valkey/valkey"
+      image.tag: "7.0.0"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "myregistry.io/valkey/valkey:7.0.0"
+
+  - it: Job should use pod security context
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      podSecurityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1000
+
+  - it: Job should use container security context
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+
+  - it: Job should use initResources when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      initResources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 128Mi
+
+  - it: Job should use service account
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      serviceAccount.create: true
+      serviceAccount.name: "my-sa"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "my-sa"
+
+  - it: Job should not automount service account token
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: Job should include common labels
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["helm.sh/chart"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+
+  - it: Job should include pod labels and annotations when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      podLabels:
+        custom-label: my-value
+      podAnnotations:
+        custom-annotation: my-annotation
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["custom-label"]
+          value: my-value
+      - equal:
+          path: spec.template.metadata.annotations["custom-annotation"]
+          value: my-annotation
+
+  # --- cluster.initJob.podLabels / .podAnnotations override surface ---
+  # Lets operators veto a globally-injected sidecar (metrics agent, mesh
+  # proxy via namespace label, policy webhook, etc.) on the short-lived
+  # cluster-init Job without affecting the long-running data pods.
+
+  - it: Job should NOT have annotations key when none are set
+    # Important for Helm/`with` semantics: an empty mapping is not the
+    # same as an absent key; preserving the absent-key shape keeps the
+    # rendered manifest identical to its pre-feature state when no
+    # overrides are configured.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations
+
+  - it: cluster.initJob.podLabels should land on the Job pod
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podLabels:
+        my-injector/skip: "true"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["my-injector/skip"]
+          value: "true"
+
+  - it: cluster.initJob.podAnnotations should land on the Job pod
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podAnnotations:
+        sidecar-injector.example.com/skip: "true"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["sidecar-injector.example.com/skip"]
+          value: "true"
+
+  - it: cluster.initJob.podLabels should NOT leak onto the data StatefulSet
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podLabels:
+        my-injector/skip: "true"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["my-injector/skip"]
+
+  - it: cluster.initJob.podAnnotations should NOT leak onto the data StatefulSet
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podAnnotations:
+        sidecar-injector.example.com/skip: "true"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["sidecar-injector.example.com/skip"]
+
+  - it: cluster.initJob.podLabels should win over global podLabels on key collision
+    # Same key, different values. The Job-scoped layer must override the
+    # global one so an opt-out can be expressed Job-only.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      podLabels:
+        observe.example.com/inject: "true"
+      cluster.initJob.podLabels:
+        observe.example.com/inject: "false"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["observe.example.com/inject"]
+          value: "false"
+
+  - it: cluster.initJob.podAnnotations should win over global podAnnotations on key collision
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      podAnnotations:
+        sidecar.example.com/inject: "true"
+      cluster.initJob.podAnnotations:
+        sidecar.example.com/inject: "false"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["sidecar.example.com/inject"]
+          value: "false"
+
+  - it: cluster.initJob.podLabels should be able to veto chart-emitted istio sidecar inject label
+    # Real-world repro: in sidecar mode the chart emits
+    # sidecar.istio.io/inject=true on every pod. Operators may want the
+    # Job to skip injection (e.g. their own scrape-only inspector
+    # mid-rollout, or to avoid the Job-hangs-on-sidecar problem). The
+    # override must sit at the END of the merge so it can replace a
+    # chart-computed mesh label, not just a user-supplied one.
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podLabels:
+        sidecar.istio.io/inject: "false"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "false"
+
+  - it: cluster.initJob overrides do NOT veto the chart-emitted mesh label on the data StatefulSet
+    # Symmetric guard for the test above — proves the veto is Job-only,
+    # so flipping it in the Job can't accidentally take the data pods
+    # out of the mesh.
+    set:
+      istio.enabled: true
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.podLabels:
+        sidecar.istio.io/inject: "false"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "true"
+
+  - it: Job should default ttlSecondsAfterFinished to 300 (auto-cleanup window)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 300
+
+  - it: cluster.initJob.ttlSecondsAfterFinished should be configurable
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.ttlSecondsAfterFinished: 60
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 60
+
+  - it: cluster.initJob.ttlSecondsAfterFinished=0 deletes immediately on completion
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.initJob.ttlSecondsAfterFinished: 0
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 0
+
+  - it: global podLabels still flow through to the Job when initJob.podLabels does not collide
+    # Don't shadow the existing pre-feature behaviour: a user who has set
+    # only the global podLabels gets them on the Job too.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      podLabels:
+        team: platform
+      cluster.initJob.podLabels:
+        my-injector/skip: "true"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.team
+          value: platform
+      - equal:
+          path: spec.template.metadata.labels["my-injector/skip"]
+          value: "true"
+
+  - it: Job should include node selector when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      nodeSelector:
+        kubernetes.io/os: linux
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/os"]
+          value: linux
+
+  - it: Job should include tolerations when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "valkey"
+          effect: "NoSchedule"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "dedicated"
+            operator: "Equal"
+            value: "valkey"
+            effect: "NoSchedule"
+
+  - it: Job should include affinity when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-type
+                    operator: In
+                    values:
+                      - cache
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.affinity.nodeAffinity
+
+  - it: Job should include priority class name when set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      priorityClassName: "high-priority"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: "high-priority"
+
+  # --- Job TLS tests ---
+  - it: Job should mount TLS volume when TLS is enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls-secret"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: RELEASE-NAME-valkey-tls
+            secret:
+              secretName: valkey-tls-secret
+              defaultMode: 256
+
+  - it: Job should not mount TLS volume when TLS is disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: false
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
+
+  # --- Job Authentication tests ---
+  - it: Job should mount valkey-users-secret when usersExistingSecret is set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+            mountPath: /valkey-users-secret
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-users-secret
+            secret:
+              secretName: my-valkey-users
+              defaultMode: 256
+
+  - it: Job should mount valkey-auth-secret when inline passwords are used
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-auth-secret
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 256
+
+  - it: Job should mount both auth secrets when both are configured
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "fallback"
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+            mountPath: /valkey-users-secret
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
+            readOnly: true
+
+  - it: Job should not mount auth secrets when auth is disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: false
+    template: templates/cluster-init-job.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+          any: true
+
+  # --- Cluster init script password retrieval tests ---
+  - it: cluster-script should read password from valkey-users-secret when usersExistingSecret is set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/valkey-users-secret/'
+      - notMatchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/etc/valkey/users.acl'
+
+  - it: cluster-script should read password from valkey-auth-secret when inline passwords are used
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/valkey-auth-secret/default-password'
+      - notMatchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/etc/valkey/users.acl'
+
+  - it: cluster-script should use custom passwordKey when configured
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          passwordKey: "default-pwd"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/valkey-users-secret/default-pwd'
+
+  - it: cluster-script should use custom replicationUser for auth
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.replicationUser: "clusteruser"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "defaultpass"
+          permissions: "~* &* +@all"
+        clusteruser:
+          password: "clusterpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-script.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: '/valkey-auth-secret/clusteruser-password'
+
+  - it: cluster-script should NOT parse password hash from ACL file
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-script.yaml
+    asserts:
+      # Ensure we don't try to extract the hash from the ACL file
+      - notMatchRegex:
+          path: data["init-cluster.sh"]
+          pattern: 'grep.*users\.acl'
+
+  # Authentication tests (StatefulSet)
+  - it: should fail when cluster auth enabled but replication user not in aclUsers
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      cluster.replicationUser: "clusteruser"
+      auth.aclUsers:
+        default:
+          password: "test"
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Cluster replication user 'clusteruser'.*must be defined in auth.aclUsers.*"
+
+  - it: should succeed when cluster auth is properly configured
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      cluster.replicationUser: "default"
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  # TLS tests (StatefulSet)
+  - it: should configure TLS volume mount in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls-secret"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
+
+  # Init config tests (cluster mode config generation)
+  - it: should generate cluster config in init script
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.nodeTimeout: 20000
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-enabled yes"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-config-file /data/nodes.conf"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-node-timeout 20000"
+
+  - it: should configure cluster-require-full-coverage when disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.requireFullCoverage: false
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-require-full-coverage no"
+
+  - it: should configure cluster-allow-reads-when-down when enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.allowReadsWhenDown: true
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-allow-reads-when-down yes"
+
+  - it: should default cluster-node-timeout to 15000
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-node-timeout 15000"
+
+  # --- shutdown-on-sigterm (native graceful primary handover) ---
+  - it: should default shutdown-on-sigterm to failover in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "shutdown-on-sigterm failover"
+
+  - it: should pass shutdownOnSigterm through verbatim (space-separated flags)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.shutdownOnSigterm: "failover force"
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "shutdown-on-sigterm failover force"
+
+  - it: should omit shutdown-on-sigterm when set to empty string
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.shutdownOnSigterm: ""
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "shutdown-on-sigterm"
+
+  - it: should not emit shutdown-on-sigterm outside cluster mode (replica)
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "shutdown-on-sigterm"
+
+  # Cluster auth secret mount tests (StatefulSet - main container still needs ACL for Valkey server)
+  - it: should mount valkey-users-secret to main container when auth.usersExistingSecret is set
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+            mountPath: /valkey-users-secret
+            readOnly: true
+
+  - it: should mount valkey-auth-secret to main container when inline passwords are used
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          password: "testpass"
+          permissions: "~* &* +@all"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
+            readOnly: true
+
+  - it: should mount both auth secrets to main container when both are configured
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-valkey-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "fallback"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-users-secret
+            mountPath: /valkey-users-secret
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
+            readOnly: true
+
+  # Regression: probes must accept NOAUTH as proof of liveness.
+  - it: should use a PONG|NOAUTH-tolerant probe on the valkey container
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "p"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+      - matchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+      - matchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH"
+
+  - it: should define a readiness probe
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  # --- Tri-state LOADING policy ---
+  # startupProbe: rejects LOADING — must keep the gate honest so a slow
+  #   RDB load doesn't pass-through to liveness, which would then kill
+  #   the still-loading container. Operators bump
+  #   cluster.startupProbe.failureThreshold for slow loaders.
+  # livenessProbe: accepts LOADING — after startup passes, LOADING means
+  #   a full-resync from primary is in progress; killing the pod loses
+  #   the in-flight download and triggers another full resync,
+  #   perpetuating the kill-loop.
+  # readinessProbe: rejects LOADING — a LOADING pod can't serve traffic
+  #   and must drop out of the Service endpoint set until ready.
+  - it: cluster startupProbe must reject LOADING
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "LOADING"
+
+  - it: cluster livenessProbe must accept LOADING (full-resync tolerance)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "PONG\\|NOAUTH\\|LOADING"
+
+  - it: cluster readinessProbe must reject LOADING
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: "LOADING"
+
+  # Tuning knobs flow through to the rendered probe. Operators with
+  # large datasets bump cluster.startupProbe.failureThreshold to extend
+  # the load window without affecting steady-state probes.
+  - it: cluster.startupProbe overrides should land on the startupProbe
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.startupProbe.periodSeconds: 10
+      cluster.startupProbe.timeoutSeconds: 8
+      cluster.startupProbe.failureThreshold: 240
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
+          value: 8
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 240
+      # And the overrides must be probe-scoped: liveness/readiness keep
+      # their defaults.
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 6
+
+  - it: cluster.livenessProbe overrides should land on the livenessProbe only
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.livenessProbe.failureThreshold: 12
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 12
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3
+
+  # Regression: extraContainers and extraVolumes were unwired in cluster mode.
+  - it: should wire extraContainers and extraVolumes through in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      extraContainers:
+        - name: sidecar
+          image: busybox:1.36
+      extraVolumes:
+        - name: extra
+          emptyDir: {}
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers
+          content:
+            name: sidecar
+            image: busybox:1.36
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra
+            emptyDir: {}
+
+  # Regression: REDIS_PASSWORD should be wired through in cluster mode too.
+  - it: should wire REDIS_PASSWORD to the metrics exporter from the generated auth secret
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      metrics.enabled: true
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "p"
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-valkey-auth
+                key: default-password
+
+  # --- Istio ambient mode (cluster) ---
+  - it: should add ambient dataplane-mode label when istio.mode=ambient
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: ambient
+
+  - it: should NOT emit traffic.sidecar.istio.io exclude annotations in ambient mode
+    # Ambient has no pod-local Envoy; the exclude* annotations are sidecar-only
+    # and meaningless to ztunnel. ztunnel leaves the bus port unproxied by
+    # default (nothing in the AuthorizationPolicy's ALLOW set binds it).
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: ambient
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeInboundPorts"]
+      - notExists:
+          path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeOutboundPorts"]
+
+  - it: should emit traffic.sidecar.istio.io exclude annotations in sidecar mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: sidecar
+      cluster.busPort: 16379
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeInboundPorts"]
+          value: "16379"
+      - equal:
+          path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeOutboundPorts"]
+          value: "16379"
+
+  - it: should NOT emit traffic.sidecar.istio.io annotations when istio is disabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: false
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["traffic.sidecar.istio.io/excludeInboundPorts"]
+
+  - it: should emit sidecar-mode mesh labels on the cluster statefulset
+    # Sidecar mode is self-sufficient now: we pin dataplane-mode=none AND
+    # sidecar.istio.io/inject=true on the pod, so injection works whether
+    # or not the namespace is labelled, and ztunnel stays out of the way
+    # on dual-mode clusters. Regression: we used to emit neither, leaning
+    # on namespace labels exclusively.
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: true
+      istio.mode: sidecar
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+          value: none
+      - equal:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+          value: "true"
+
+  - it: should emit no mesh labels when istio is disabled (cluster)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      istio.enabled: false
+    template: templates/cluster-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["istio.io/dataplane-mode"]
+      - notExists:
+          path: spec.template.metadata.labels["sidecar.istio.io/inject"]
+
