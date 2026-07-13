@@ -120,6 +120,7 @@ cluster:
   requireFullCoverage: true   # Require all hash slots covered to accept writes
   allowReadsWhenDown: false   # Allow reads when cluster is in down state
   busPort: 16379              # Port for inter-node cluster communication
+  shutdownOnSigterm: failover # Native graceful primary handover on SIGTERM ("" to disable)
 ```
 
 ## Storage
@@ -465,6 +466,7 @@ tls:
 | cluster.requireFullCoverage | bool | `true` | Require all slots covered to accept writes |
 | cluster.allowReadsWhenDown | bool | `false` | Allow reads when cluster is down |
 | cluster.busPort | int | `16379` | Port for inter-node cluster communication |
+| cluster.shutdownOnSigterm | string | `"failover"` | Native graceful primary handover on SIGTERM (valkey.conf `shutdown-on-sigterm`); `""` to disable |
 | cluster.persistence.size | string | `""` | Required if cluster is enabled |
 | cluster.persistence.storageClass | string | `""` |  |
 | cluster.persistence.accessModes | list | `["ReadWriteOnce"]` |  |

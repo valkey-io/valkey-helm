@@ -65,6 +65,9 @@
                 "allowReadsWhenDown": {
                     "type": "boolean"
                 },
+                "shutdownOnSigterm": {
+                    "type": "string"
+                },
                 "persistence": {
                     "type": "object",
                     "properties": {

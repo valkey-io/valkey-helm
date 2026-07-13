@@ -348,6 +348,39 @@ cluster:
   # Allow cluster to serve read requests when in down state
   allowReadsWhenDown: false
 
+  # Graceful primary handover on SIGTERM, handled by Valkey itself. When a
+  # primary receives SIGTERM (rollout restart, eviction, node drain), the
+  # `failover` flag makes it hand its slots to an up-to-date replica before
+  # the process exits, so the shard already has a new primary by the time it
+  # stops — no cluster-node-timeout gap, no client-visible write blackhole.
+  #
+  # Scope: this is a SIGTERM handler INSIDE valkey-server, so it covers the
+  # graceful path only. An ungraceful kill — force-delete (--grace-period=0),
+  # OOM kill, node crash, power loss — delivers SIGKILL or no signal, which no
+  # in-process handler can catch; recovery there falls to cluster-node-timeout
+  # auto-failover (see cluster.nodeTimeout). Neither this nor preStopFailover
+  # can change that.
+  #
+  # On the graceful path it is the server-side complement to
+  # cluster.preStopFailover below — two independent layers, either of which
+  # completes the handover on its own:
+  #
+  #   * preStopFailover runs in the preStop hook, BEFORE kubelet sends
+  #     SIGTERM, and drives CLUSTER FAILOVER from the replica side. It needs
+  #     the cluster-script ConfigMap mounted and is best-effort (any error
+  #     path falls through to plain SIGTERM).
+  #   * shutdownOnSigterm is native valkey.conf — no extra volume, no script —
+  #     and fires when SIGTERM is delivered. It is the backstop that still
+  #     works when preStopFailover is disabled, its ConfigMap is not mounted,
+  #     or its script errors out before handing off.
+  #
+  # Value is passed verbatim to the `shutdown-on-sigterm` directive, so it
+  # accepts Valkey's space-separated shutdown flags (e.g. "failover",
+  # "failover force", "nosave now"). Empty string omits the directive so the
+  # server keeps its built-in default (save RDB, briefly wait for replicas).
+  # Only rendered in cluster mode — `failover` is a Valkey Cluster concept.
+  shutdownOnSigterm: "failover"
+
   # Persistence configuration (required for cluster mode)
   persistence:
     # Size of the PVC for each node (required when cluster.enabled is true)

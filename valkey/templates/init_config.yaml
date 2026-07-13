@@ -245,6 +245,12 @@ data:
       {{- if .Values.cluster.allowReadsWhenDown }}
       echo "cluster-allow-reads-when-down yes"
       {{- end }}
+      {{- with .Values.cluster.shutdownOnSigterm }}
+      # Native graceful primary handover on SIGTERM (see cluster.shutdownOnSigterm
+      # in values.yaml). Complements the preStop CLUSTER FAILOVER hook and still
+      # fires when that hook is skipped (force-delete) or disabled.
+      echo "shutdown-on-sigterm {{ . }}"
+      {{- end }}
       echo ""
       echo "# Cluster node announcement"
       echo "cluster-announce-hostname {{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"

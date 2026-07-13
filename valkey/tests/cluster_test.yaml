@@ -1199,6 +1199,59 @@ tests:
           path: data["init.sh"]
           pattern: "cluster-allow-reads-when-down yes"
 
+  - it: should default cluster-node-timeout to 15000
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "cluster-node-timeout 15000"
+
+  # --- shutdown-on-sigterm (native graceful primary handover) ---
+  - it: should default shutdown-on-sigterm to failover in cluster mode
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "shutdown-on-sigterm failover"
+
+  - it: should pass shutdownOnSigterm through verbatim (space-separated flags)
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.shutdownOnSigterm: "failover force"
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "shutdown-on-sigterm failover force"
+
+  - it: should omit shutdown-on-sigterm when set to empty string
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.shutdownOnSigterm: ""
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "shutdown-on-sigterm"
+
+  - it: should not emit shutdown-on-sigterm outside cluster mode (replica)
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "shutdown-on-sigterm"
+
   # Cluster auth secret mount tests (StatefulSet - main container still needs ACL for Valkey server)
   - it: should mount valkey-users-secret to main container when auth.usersExistingSecret is set
     set:

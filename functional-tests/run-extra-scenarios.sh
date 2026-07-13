@@ -806,6 +806,187 @@ scenario_rollout_restart_orderly_failover() {
 }
 
 # ---------------------------------------------------------------------------
+# Scenario: the NATIVE shutdown-on-sigterm=failover directive hands a primary's
+# slots to a replica on SIGTERM, WITHOUT the preStop hook.
+#
+# What shutdown-on-sigterm does — and does NOT do:
+#   It is a SIGTERM handler inside valkey-server: on SIGTERM it hands the
+#   primary's slots to an up-to-date replica before exiting. It covers the
+#   GRACEFUL termination path only — rollout restart, eviction, drain,
+#   `kubectl delete pod` with a normal grace period. It does NOT guard against
+#   an UNGRACEFUL kill: a force-delete (--grace-period=0) collapses the grace
+#   window so the handler can't finish, and an OOM kill / node crash / power
+#   loss deliver SIGKILL or no signal at all — nothing an in-process handler
+#   can catch. That path is covered by Valkey's own cluster-node-timeout
+#   auto-failover, a different mechanism this scenario does not exercise.
+#
+# Why a separate scenario from rollout_restart_orderly_failover:
+#   That test proves the preStop CLUSTER FAILOVER hook works. This one proves
+#   the second, independent defence layer — the server-side
+#   `shutdown-on-sigterm failover` line in valkey.conf — works ON ITS OWN.
+#   Both act on the SAME graceful SIGTERM path; shutdown-on-sigterm is the
+#   native backstop that still fires when the preStop hook cannot — when
+#   preStopFailover is disabled, its ConfigMap is not mounted, or its
+#   best-effort script hits an error path and exits without handing off.
+#
+# Isolation, so a pass can ONLY be attributed to shutdown-on-sigterm:
+#   * preStopFailover.enabled=false — the hook (and its cluster-script mount)
+#     is not even rendered, so it cannot be the cause of any handover.
+#   * nodeTimeout=180000 — cluster-node-timeout auto-failover CANNOT fire in
+#     the few seconds a single graceful pod delete takes, so an observed
+#     role flip is not the cluster promoting a replica after declaring the
+#     primary dead. The only remaining mechanism is the primary handing off
+#     as it processes SIGTERM.
+#
+# We delete ONE primary pod with the DEFAULT grace period (a normal graceful
+# SIGTERM — NOT --force, which would also bypass shutdown-on-sigterm by
+# SIGKILLing). A cluster-aware canary written before the delete must survive,
+# and the ex-primary must come back demoted to replica (proof it handed off
+# rather than being killed and restarted still-primary).
+# ---------------------------------------------------------------------------
+scenario_shutdown_on_sigterm_failover() {
+    local name="native shutdown-on-sigterm=failover hands off primary without preStop hook"
+    log "SCENARIO: ${name}"
+    cleanup_release
+
+    if ! hctl install "${RELEASE}" "${CHART_DIR}" \
+            --set=cluster.enabled=true \
+            --set=cluster.persistence.size=100Mi \
+            --set=cluster.shards=3 \
+            --set=cluster.replicasPerShard=1 \
+            --set=cluster.preStopFailover.enabled=false \
+            --set=cluster.nodeTimeout=180000 \
+            --wait --timeout=300s >/dev/null; then
+        fail "${name}" "helm install failed"
+        return
+    fi
+    wait_for_cluster_init
+
+    # Isolation assertion #1: the preStop hook must NOT be rendered. If it is,
+    # a handover below could be the hook's doing, not shutdown-on-sigterm's,
+    # and the whole scenario would be measuring the wrong thing.
+    local lifecycle
+    lifecycle=$(kctl get statefulset "${RELEASE}" \
+        -o jsonpath='{.spec.template.spec.containers[0].lifecycle}')
+    if [[ -n ${lifecycle} ]]; then
+        fail "${name}" "preStop lifecycle unexpectedly rendered (want none): ${lifecycle}"
+        cleanup_release; return
+    fi
+
+    # Isolation assertion #2: the directive is actually live on the server.
+    local sos
+    sos=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+        valkey-cli config get shutdown-on-sigterm 2>/dev/null \
+        | tr -d '\r' | awk 'NR==2{print}')
+    if [[ ${sos} != failover ]]; then
+        fail "${name}" "shutdown-on-sigterm=${sos:-<unset>} on server, want 'failover'"
+        cleanup_release; return
+    fi
+
+    # Wait for gossip convergence before writing the canary (same rationale as
+    # the rollout scenario: a premature write can land on a node that hasn't
+    # yet seen the full topology).
+    local s
+    for _ in $(seq 1 60); do
+        s=$(kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+            valkey-cli cluster info 2>/dev/null \
+            | awk -F: '/^cluster_state:/{print $2}' | tr -d '\r\n' || true)
+        [[ ${s} == ok ]] && break
+        sleep 2
+    done
+    if [[ ${s} != ok ]]; then
+        fail "${name}" "cluster_state=${s:-<unavailable>} after install (want ok)"
+        cleanup_release; return
+    fi
+
+    # Find a pod that is currently a primary; capture the whole role vector so
+    # we can prove this specific ordinal flipped afterwards.
+    role_of() {
+        kctl exec "${RELEASE}-$1" -c "${RELEASE}" -- \
+            valkey-cli info replication 2>/dev/null \
+            | awk -F: '/^role:/{print $2}' | tr -d '\r\n' || true
+    }
+    local prim="" i
+    for i in 0 1 2 3 4 5; do
+        if [[ $(role_of "${i}") == master ]]; then prim=${i}; break; fi
+    done
+    if [[ -z ${prim} ]]; then
+        fail "${name}" "no primary pod found before delete"
+        cleanup_release; return
+    fi
+
+    # Cluster-aware canary (follows MOVED). Shell metacharacters for the same
+    # quoting-coverage reason as elsewhere.
+    local canary_key="sos-canary-$$"
+    local canary_val='native-shutdown-ok $x "q" \b`t`'
+    if ! kctl exec "${RELEASE}-0" -c "${RELEASE}" -- \
+            valkey-cli -c set "${canary_key}" "${canary_val}" >/dev/null 2>&1; then
+        fail "${name}" "initial SET failed"
+        cleanup_release; return
+    fi
+
+    # Graceful delete of the chosen primary — DEFAULT grace period, so kubelet
+    # sends SIGTERM and valkey-server runs its shutdown-on-sigterm handler.
+    # This is deliberate: shutdown-on-sigterm ONLY acts on the graceful path.
+    # --force/--grace-period=0 would collapse the grace window and SIGKILL the
+    # process, bypassing the very handler under test (that ungraceful path is
+    # cluster-node-timeout's job, not this feature's). --wait=false so we can
+    # watch the handover live.
+    log "gracefully deleting primary pod ${RELEASE}-${prim} (SIGTERM path)"
+    kctl delete pod "${RELEASE}-${prim}" --wait=false >/dev/null
+
+    # The shard must acquire a new primary FAST — well inside the 180s
+    # node-timeout, which is the whole point: this is the handoff, not
+    # auto-failover. Observe from a pod we did NOT delete.
+    local observer=$(( (prim + 1) % 6 ))
+    local state masters
+    for _ in $(seq 1 20); do
+        state=$(kctl exec "${RELEASE}-${observer}" -c "${RELEASE}" -- \
+            valkey-cli cluster info 2>/dev/null \
+            | awk -F: '/^cluster_state:/{print $2}' | tr -d '\r\n' || true)
+        masters=$(kctl exec "${RELEASE}-${observer}" -c "${RELEASE}" -- \
+            valkey-cli cluster nodes 2>/dev/null | grep -c master || true)
+        [[ ${state} == ok && ${masters} == 3 ]] && break
+        sleep 3
+    done
+    if [[ ${state} != ok || ${masters} != 3 ]]; then
+        fail "${name}" "shard did not re-form: cluster_state=${state:-<unavailable>} masters=${masters} (want ok/3)"
+        cleanup_release; return
+    fi
+
+    # Ex-primary must come back demoted to replica. If shutdown-on-sigterm had
+    # NOT handed off, the pod would persist role=master in nodes.conf and
+    # rejoin still claiming the slots — so this is the load-bearing assertion.
+    if ! kctl wait --for=condition=Ready "pod/${RELEASE}-${prim}" --timeout=120s >/dev/null 2>&1; then
+        fail "${name}" "ex-primary ${RELEASE}-${prim} never became Ready again"
+        cleanup_release; return
+    fi
+    local after_role=""
+    for _ in $(seq 1 15); do
+        after_role=$(role_of "${prim}")
+        [[ ${after_role} == slave || ${after_role} == replica ]] && break
+        sleep 2
+    done
+    if [[ ${after_role} != slave && ${after_role} != replica ]]; then
+        fail "${name}" "ex-primary ${RELEASE}-${prim} role=${after_role:-<unknown>} after restart — expected demotion to replica (handoff did not happen)"
+        cleanup_release; return
+    fi
+
+    # Canary survives the handoff (via MOVED if the slot moved primaries).
+    local got
+    got=$(kctl exec "${RELEASE}-${observer}" -c "${RELEASE}" -- \
+        valkey-cli -c get "${canary_key}" 2>/dev/null || true)
+    if [[ ${got} != "${canary_val}" ]]; then
+        fail "${name}" "canary lost across handoff: got='${got}' want='${canary_val}'"
+        cleanup_release; return
+    fi
+    log "ex-primary ${RELEASE}-${prim} demoted to ${after_role}; canary intact — native handoff confirmed"
+
+    cleanup_release
+    pass "${name}"
+}
+
+# ---------------------------------------------------------------------------
 # Scenario: cluster bus dials by IP, even with cluster-preferred-endpoint-type
 # =hostname. After a rolling restart, a pod whose nodes.conf has only stale
 # peer IPs becomes a stranded minority partition — every gossip attempt
@@ -1064,6 +1245,7 @@ scenario_readiness_probe_exists                  || true
 scenario_two_clusters_isolated                   || true
 scenario_isolation_off_lets_merge_happen         || true
 scenario_rollout_restart_orderly_failover        || true
+scenario_shutdown_on_sigterm_failover            || true
 scenario_nodes_conf_ip_refresh                   || true
 scenario_probe_loading_policy                    || true
 scenario_ambient_authz_blocks_cross_release_meet || true
