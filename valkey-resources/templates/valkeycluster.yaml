@@ -5,12 +5,12 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "valkey-resources.labels" . | nindent 4 }}
-    {{- with .Values.labels }}
+    {{- with .Values.cluster.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with .Values.annotations }}
+  {{- with .Values.cluster.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- toYaml .Values.spec | nindent 2 }}
+  {{- toYaml .Values.cluster.spec | nindent 2 }}

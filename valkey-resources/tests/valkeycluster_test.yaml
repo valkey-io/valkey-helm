@@ -27,26 +27,27 @@ tests:
           path: metadata.name
           value: my-cluster
 
-  - it: drops in arbitrary ValkeyClusterSpec fields
+  - it: drops in arbitrary ValkeyClusterSpec fields via cluster.spec
     set:
-      spec:
-        shards: 5
-        replicas: 2
-        image: valkey/valkey:9.0.0
-        config:
-          maxmemory: 50mb
-        scheduling:
-          priorityClassName: high-priority
-          nodeSelector:
-            disk: ssd
-        persistence:
-          size: 10Gi
-          reclaimPolicy: Retain
-        tls:
-          certificate:
-            secretName: valkey-tls
-        exporter:
-          enabled: false
+      cluster:
+        spec:
+          shards: 5
+          replicas: 2
+          image: valkey/valkey:9.0.0
+          config:
+            maxmemory: 50mb
+          scheduling:
+            priorityClassName: high-priority
+            nodeSelector:
+              disk: ssd
+          persistence:
+            size: 10Gi
+            reclaimPolicy: Retain
+          tls:
+            certificate:
+              secretName: valkey-tls
+          exporter:
+            enabled: false
     asserts:
       - equal:
           path: spec.shards
@@ -76,17 +77,18 @@ tests:
           path: spec.exporter.enabled
           value: false
 
-  - it: applies metadata labels and annotations
+  - it: applies metadata labels and annotations under cluster
     set:
-      annotations:
-        example.com/owner: team-a
-      labels:
-        env: test
+      cluster:
+        annotations:
+          example.com/owner: team-a
+        labels:
+          env: test
+        spec:
+          shards: 3
+          replicas: 1
       commonLabels:
         team: platform
-      spec:
-        shards: 3
-        replicas: 1
     asserts:
       - equal:
           path: metadata.annotations["example.com/owner"]

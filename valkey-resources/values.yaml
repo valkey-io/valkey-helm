@@ -6,16 +6,18 @@ fullnameOverride: ""
 # Labels added to all rendered resources
 commonLabels: {}
 
-# Annotations on the ValkeyCluster object
-annotations: {}
+# ValkeyCluster resource. Nested so future CR kinds (e.g. standalone, sentinel)
+# can sit beside this as valkey / sentinel without a generic top-level "spec".
+cluster:
+  # Annotations on the ValkeyCluster object
+  annotations: {}
+  # Labels on the ValkeyCluster object (in addition to chart labels)
+  labels: {}
 
-# Labels on the ValkeyCluster object (in addition to chart labels)
-labels: {}
-
-# ValkeyCluster.spec drop-in.
-# Passed through to the CR as-is. We start thin; expand iteratively with more
-# granular values, defaults, and enable gates as the chart matures.
-# API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
-spec:
-  shards: 3
-  replicas: 1
+  # ValkeyCluster.spec drop-in.
+  # Passed through to the CR as-is. We start thin; expand iteratively with more
+  # granular values, defaults, and enable gates as the chart matures.
+  # API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
+  spec:
+    shards: 3
+    replicas: 1

@@ -23,14 +23,14 @@ helm install my-cluster valkey/valkey-resources -n valkey
 
 ## Configuration
 
-`spec` is a drop-in for `ValkeyCluster.spec` (passed through as-is). Helm owns metadata (`fullname`, labels, annotations).
+`cluster.spec` is a drop-in for `ValkeyCluster.spec` (passed through as-is). Nested under `cluster` so future CR kinds can sit beside it without a generic top-level `spec`. Helm owns metadata (`fullname`, `cluster.labels`, `cluster.annotations`).
 
 More granular values and defaults will be added iteratively. See [values.yaml](values.yaml) and the [ValkeyCluster API](https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md).
 
 | Parameter | Description | Default |
 |---|---|---|
-| `spec.shards` | Shard groups | `3` |
-| `spec.replicas` | Replicas per shard | `1` |
+| `cluster.spec.shards` | Shard groups | `3` |
+| `cluster.spec.replicas` | Replicas per shard | `1` |
 | `fullnameOverride` | ValkeyCluster name | chart fullname |
 
 One cluster per release. For more clusters, install more releases.
