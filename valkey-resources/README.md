@@ -4,8 +4,6 @@
 
 Deploys a single operator managed `ValkeyCluster`. Does not install the operator.
 
-Design notes: [DESIGN.md](DESIGN.md).
-
 ## Prerequisites
 
 * Kubernetes 1.20+
@@ -25,7 +23,7 @@ helm install my-cluster valkey/valkey-resources -n valkey
 
 ## Configuration
 
-`spec` is a drop-in for `ValkeyCluster.spec` (passed through as-is). Helm owns metadata (`fullname`, labels, annotations) and the operator check.
+`spec` is a drop-in for `ValkeyCluster.spec` (passed through as-is). Helm owns metadata (`fullname`, labels, annotations).
 
 More granular values and defaults will be added iteratively. See [values.yaml](values.yaml) and the [ValkeyCluster API](https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md).
 
