@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["spec"],
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "commonLabels": { "type": "object" },
+    "annotations": { "type": "object" },
+    "labels": { "type": "object" },
+    "spec": {
+      "type": "object",
+      "required": ["shards"],
+      "properties": {
+        "shards": { "type": "integer", "minimum": 1 },
+        "replicas": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

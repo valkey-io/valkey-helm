@@ -1,0 +1,21 @@
+# Override the default name of resources
+nameOverride: ""
+# Override the full name of resources (ValkeyCluster metadata.name)
+fullnameOverride: ""
+
+# Labels added to all rendered resources
+commonLabels: {}
+
+# Annotations on the ValkeyCluster object
+annotations: {}
+
+# Labels on the ValkeyCluster object (in addition to chart labels)
+labels: {}
+
+# ValkeyCluster.spec drop-in.
+# Passed through to the CR as-is. We start thin; expand iteratively with more
+# granular values, defaults, and enable gates as the chart matures.
+# API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
+spec:
+  shards: 3
+  replicas: 1
