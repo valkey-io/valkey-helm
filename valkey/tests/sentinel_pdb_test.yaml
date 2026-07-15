@@ -1,0 +1,66 @@
+suite: sentinel pdb configuration
+templates:
+  - templates/sentinel-pdb.yaml
+  - templates/init_config.yaml
+tests:
+  - it: should not render when sentinel disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: false
+    template: templates/sentinel-pdb.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when pdb disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.podDisruptionBudget.enabled: false
+    template: templates/sentinel-pdb.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render with default maxUnavailable
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-pdb.yaml
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+
+  - it: should use minAvailable when set
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.podDisruptionBudget.minAvailable: 2
+    template: templates/sentinel-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 2
+      - notExists:
+          path: spec.maxUnavailable
+
+  - it: should select sentinel pods
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    template: templates/sentinel-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: sentinel

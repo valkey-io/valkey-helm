@@ -1,0 +1,141 @@
+suite: cluster init config
+templates:
+  - templates/cluster-configmap.yaml
+tests:
+  - it: should not render when cluster disabled
+    set:
+      cluster.enabled: false
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render configmap with cluster scripts
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - exists:
+          path: data["cluster-init.sh"]
+      - exists:
+          path: data["cluster-bootstrap.sh"]
+
+  - it: should contain cluster-enabled in init script
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["cluster-init.sh"]
+          pattern: "cluster-enabled yes"
+
+  - it: should contain cluster-config-file in init script
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["cluster-init.sh"]
+          pattern: "cluster-config-file"
+
+  - it: should contain cluster-node-timeout in init script
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      cluster.nodeTimeout: 10000
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["cluster-init.sh"]
+          pattern: "cluster-node-timeout 10000"
+
+  - it: should contain TLS cluster replication when TLS enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: "tls-secret"
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["cluster-init.sh"]
+          pattern: "tls-replication yes"
+
+  - it: should contain port 0 and tls-port when TLS enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: "tls-secret"
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["cluster-init.sh"]
+          pattern: "port 0"
+      - matchRegex:
+          path: data["cluster-init.sh"]
+          pattern: "tls-port 6379"
+
+  - it: should contain auth setup when auth enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "testpass"
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["cluster-init.sh"]
+          pattern: "aclfile"
+
+  - it: should contain cluster-announce-hostname in init script
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["cluster-init.sh"]
+          pattern: "cluster-announce-hostname"
+
+  - it: bootstrap script should contain cluster create command
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["cluster-bootstrap.sh"]
+          pattern: "valkey-cli --cluster create"
+
+  - it: bootstrap script should use TLS flags when TLS enabled
+    set:
+      cluster.enabled: true
+      cluster.persistence.size: "5Gi"
+      tls.enabled: true
+      tls.existingSecret: "tls-secret"
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["cluster-bootstrap.sh"]
+          pattern: "--tls --cacert"
+
+  - it: bootstrap script should calculate correct total nodes
+    set:
+      cluster.enabled: true
+      cluster.masters: 5
+      cluster.replicasPerMaster: 2
+      cluster.persistence.size: "5Gi"
+    template: templates/cluster-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["cluster-bootstrap.sh"]
+          pattern: "TOTAL_NODES=15"

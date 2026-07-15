@@ -1,0 +1,55 @@
+suite: sentinel init config
+templates:
+  - templates/init_config.yaml
+tests:
+  - it: should contain sentinel query logic when sentinel enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "SENTINEL get-master-addr-by-name"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "SENTINEL_HOST="
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "Bootstrap fallback"
+
+  - it: should not contain sentinel query when sentinel disabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "SENTINEL get-master-addr-by-name"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "This pod.*is configured as MASTER"
+
+  - it: should use sentinel master group name
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.masterGroupName: "custom-master"
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "MASTER_GROUP=\"custom-master\""
+
+  - it: should include TLS flags in sentinel query when TLS enabled
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      sentinel.enabled: true
+      tls.enabled: true
+      tls.existingSecret: my-tls-secret
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "--tls --cacert /tls/ca.crt"

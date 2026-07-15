@@ -1,0 +1,188 @@
+{{- if and .Values.replica.enabled .Values.sentinel.enabled }}
+{{- include "valkey.validateSentinelConfig" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "valkey.sentinel.fullname" . }}
+  labels:
+    {{- include "valkey.sentinel.labels" . | nindent 4 }}
+  {{- with .Values.sentinel.workloadAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  serviceName: {{ include "valkey.sentinel.headlessServiceName" . }}
+  replicas: {{ .Values.sentinel.replicas }}
+  selector:
+    matchLabels:
+      {{- include "valkey.sentinel.selectorLabels" . | nindent 6 }}
+  {{- if .Values.sentinel.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: sentinel-data
+    spec:
+      accessModes: {{ toYaml .Values.sentinel.persistence.accessModes | nindent 8 }}
+      {{- if .Values.sentinel.persistence.storageClass }}
+      storageClassName: {{ .Values.sentinel.persistence.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.sentinel.persistence.size | quote }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "valkey.sentinel.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.sentinel.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+      {{- with .Values.sentinel.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+        checksum/sentinel-scripts: {{ include (print $.Template.BasePath "/sentinel-configmap.yaml") . | sha256sum | trunc 32 | quote }}
+    spec:
+      {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
+      automountServiceAccountToken: false
+      serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+      {{- if .Values.sentinel.priorityClassName }}
+      priorityClassName: {{ .Values.sentinel.priorityClassName | quote }}
+      {{- end }}
+      {{- with .Values.sentinel.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if not .Values.sentinel.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: sentinel-init
+          image: {{ include "valkey.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.sentinel.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if not .Values.sentinel.securityContext }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- end }}
+          command: [ "/scripts/sentinel-init.sh" ]
+          volumeMounts:
+            - name: sentinel-data
+              mountPath: /data
+            - name: sentinel-scripts
+              mountPath: /scripts
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
+            {{- end }}
+          {{- with .Values.initResources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      containers:
+        - name: sentinel
+          image: {{ include "valkey.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.sentinel.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if not .Values.sentinel.securityContext }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- end }}
+          command: [ "valkey-server" ]
+          args: [ "/data/conf/sentinel.conf", "--sentinel" ]
+          ports:
+            - name: tcp-sentinel
+              containerPort: {{ .Values.sentinel.port }}
+              protocol: TCP
+          startupProbe:
+            exec:
+              {{- if .Values.tls.enabled }}
+              command: [ "sh", "-c", "valkey-cli -p {{ .Values.sentinel.port }} --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              {{- else }}
+              command: [ "sh", "-c", "valkey-cli -p {{ .Values.sentinel.port }} ping" ]
+              {{- end }}
+          livenessProbe:
+            exec:
+              {{- if .Values.tls.enabled }}
+              command: [ "sh", "-c", "valkey-cli -p {{ .Values.sentinel.port }} --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
+              {{- else }}
+              command: [ "sh", "-c", "valkey-cli -p {{ .Values.sentinel.port }} ping" ]
+              {{- end }}
+          {{- with .Values.sentinel.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: sentinel-data
+              mountPath: /data
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+      volumes:
+        - name: sentinel-scripts
+          configMap:
+            name: {{ include "valkey.sentinel.fullname" . }}-scripts
+            defaultMode: 0555
+        {{- if not .Values.sentinel.persistence.enabled }}
+        - name: sentinel-data
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.tls.enabled }}
+        - name: {{ include "valkey.fullname" . }}-tls
+          secret:
+            secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            defaultMode: 0400
+        {{- end }}
+        {{- if .Values.auth.enabled }}
+        {{- if .Values.auth.usersExistingSecret }}
+        - name: valkey-users-secret
+          secret:
+            secretName: {{ .Values.auth.usersExistingSecret }}
+            defaultMode: 0400
+        {{- end }}
+        {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+        - name: valkey-auth-secret
+          secret:
+            secretName: {{ include "valkey.fullname" . }}-auth
+            defaultMode: 0400
+        {{- end }}
+        {{- end }}
+      {{- with (.Values.sentinel.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sentinel.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sentinel.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.sentinel.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

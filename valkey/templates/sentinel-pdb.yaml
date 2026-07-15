@@ -1,0 +1,17 @@
+{{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "valkey.sentinel.fullname" . }}
+  labels:
+    {{- include "valkey.sentinel.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.sentinel.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.sentinel.podDisruptionBudget.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.sentinel.podDisruptionBudget.maxUnavailable | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "valkey.sentinel.selectorLabels" . | nindent 6 }}
+{{- end }}
