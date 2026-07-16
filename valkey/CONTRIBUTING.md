@@ -76,7 +76,7 @@ No build step is required for the chart itself. To confirm your toolchain works,
 run the linter and unit tests from the repository root:
 
 ```bash
-helm lint ./valkey
+helm lint ./valkey --strict
 helm unittest ./valkey
 ```
 
@@ -120,26 +120,6 @@ Common places you will make changes within `./valkey`:
   configurable values or behavior.
 - `tests/` — `helm-unittest` test suites.
 
-### Updating chart versions when required
-
-Any change to the **`valkey`** chart requires a bump to the `version` field in
-[`valkey/Chart.yaml`](./Chart.yaml). CI enforces this via chart-testing's
-`check-version-increment` setting — a PR that modifies the chart without a
-version bump will fail.
-
-Follow [Semantic Versioning](https://semver.org/):
-
-- **Patch** (`0.10.0` → `0.10.1`) — backward-compatible bug fixes.
-- **Minor** (`0.10.0` → `0.11.0`) — backward-compatible new features.
-- **Major** (`0.10.0` → `1.0.0`) — breaking changes.
-
-The `appVersion` field tracks the version of Valkey being shipped; update it only
-when you intentionally change the bundled Valkey version.
-
-> Pure documentation-only changes that do not affect the rendered chart
-> generally do not require a version bump, but when in doubt, bump the patch
-> version.
-
 ### Following repository coding and documentation conventions
 
 - Keep templates consistent with the existing style: reuse helpers from
@@ -176,12 +156,6 @@ helm template valkey ./valkey
 just template
 ```
 
-Render with auth enabled to verify conditional paths:
-
-```bash
-just template-auth
-```
-
 CI additionally renders the chart against multiple Kubernetes versions
 (currently `1.28.15`, `1.35.3`, and `1.36.0`). You can mirror this locally:
 
@@ -196,8 +170,6 @@ for unit tests (suites live in `valkey/tests/`):
 
 ```bash
 helm unittest ./valkey
-# or
-just test
 ```
 
 If you intentionally change rendered output, you may need to update snapshots:
