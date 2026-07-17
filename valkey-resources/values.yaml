@@ -1,0 +1,38 @@
+# Override the default name of resources
+nameOverride: ""
+# Override the full name of resources (ValkeyCluster metadata.name)
+fullnameOverride: ""
+
+# Labels added to all rendered resources
+commonLabels: {}
+
+# Free-form values for use inside templated strings (see cluster.spec tpl).
+# Not rendered as a Kubernetes object by itself.
+# Example:
+#   extraValues:
+#     tlsSecret: my-tls
+#   cluster:
+#     spec:
+#       tls:
+#         certificate:
+#           secretName: "{{ .Values.extraValues.tlsSecret }}"
+extraValues: {}
+
+# ValkeyCluster resource. Nested so future CR kinds (e.g. standalone, sentinel)
+# can sit beside this as valkey / sentinel without a generic top-level "spec".
+# v0.1: one ValkeyCluster per release. Later kinds stay one logical workload
+# per release (enable at most one primary CR kind, or document if that changes).
+cluster:
+  # Annotations on the ValkeyCluster object
+  annotations: {}
+  # Labels on the ValkeyCluster object (in addition to chart labels)
+  labels: {}
+
+  # ValkeyCluster.spec drop-in (any CRD field allowed).
+  # Rendered via tpl so string values may use Helm templates, e.g.
+  #   image: "valkey/valkey:{{ .Chart.AppVersion }}"
+  #   tls.certificate.secretName: "{{ .Release.Name }}-tls"
+  # API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
+  spec:
+    shards: 3
+    replicas: 1

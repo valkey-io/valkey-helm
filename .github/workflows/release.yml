@@ -8,6 +8,7 @@ on:
     paths:
       - 'valkey/Chart.yaml'
       - 'valkey-operator/Chart.yaml'
+      - 'valkey-resources/Chart.yaml'
 
 jobs:
   check-version-change:
@@ -25,7 +26,7 @@ jobs:
         run: |
           version_changed=false
 
-          for chart in valkey valkey-operator; do
+          for chart in valkey valkey-operator valkey-resources; do
             CURRENT_VERSION=$(grep '^version:' ${chart}/Chart.yaml | awk '{print $2}')
             PREVIOUS_VERSION=$(git show HEAD~1:${chart}/Chart.yaml 2>/dev/null | grep '^version:' | awk '{print $2}')
 
