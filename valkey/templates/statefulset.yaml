@@ -138,20 +138,9 @@ spec:
             - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-          startupProbe:
-            exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "valkey-cli", "--cacert", "/tls/{{ .Values.tls.caPublicKey }}", "--tls", "ping" ]
-              {{- else }}
-              command: [ "valkey-cli", "ping" ]
-              {{- end }}
-          livenessProbe:
-            exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "valkey-cli", "--cacert", "/tls/{{ .Values.tls.caPublicKey }}", "--tls", "ping" ]
-              {{- else }}
-              command: [ "valkey-cli", "ping" ]
-              {{- end }}
+          {{- with (include "valkey.healthProbes" .) }}
+          {{- . | nindent 10 }}
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
