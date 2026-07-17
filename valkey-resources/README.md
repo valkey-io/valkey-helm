@@ -23,17 +23,33 @@ helm install my-cluster valkey/valkey-resources -n valkey
 
 ## Configuration
 
-`cluster.spec` is a drop-in for `ValkeyCluster.spec` (passed through as-is). Nested under `cluster` so future CR kinds can sit beside it without a generic top-level `spec`. Helm owns metadata (`fullname`, `cluster.labels`, `cluster.annotations`).
+`cluster.spec` is a drop-in for `ValkeyCluster.spec` (any CRD field). Nested under `cluster` so future CR kinds can sit beside it without a generic top-level `spec`.
 
-More granular values and defaults will be added iteratively. See [values.yaml](values.yaml) and the [ValkeyCluster API](https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md).
+String values in `cluster.spec`, `cluster.labels`, and `cluster.annotations` are run through Helm `tpl`, so you can reference release metadata or `extraValues`:
+
+```yaml
+extraValues:
+  tlsSecret: my-shared-tls
+
+cluster:
+  spec:
+    shards: 3
+    replicas: 1
+    tls:
+      certificate:
+        secretName: "{{ .Values.extraValues.tlsSecret }}"
+```
+
+See [values.yaml](values.yaml) and the [ValkeyCluster API](https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md).
 
 | Parameter | Description | Default |
 |---|---|---|
 | `cluster.spec.shards` | Shard groups | `3` |
 | `cluster.spec.replicas` | Replicas per shard | `1` |
+| `extraValues` | Free-form map for use inside `tpl` strings | `{}` |
 | `fullnameOverride` | ValkeyCluster name | chart fullname |
 
-One cluster per release. For more clusters, install more releases.
+**Release model:** one logical workload per Helm release. v0.1 only renders `ValkeyCluster`. When more kinds land, the chart will keep that model (enable the kinds you need for that one workload; multiple independent clusters remain multiple releases).
 
 ## Uninstall
 

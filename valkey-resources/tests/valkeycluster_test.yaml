@@ -99,3 +99,42 @@ tests:
       - equal:
           path: metadata.labels.team
           value: platform
+
+  - it: templates cluster.spec strings with tpl
+    set:
+      cluster:
+        spec:
+          shards: 3
+          replicas: 1
+          image: "valkey/valkey:{{ .Chart.AppVersion }}"
+          tls:
+            certificate:
+              secretName: "{{ .Release.Name }}-tls"
+    asserts:
+      - equal:
+          path: spec.image
+          value: valkey/valkey:v0.3.0
+      - equal:
+          path: spec.tls.certificate.secretName
+          value: RELEASE-NAME-tls
+
+  - it: templates using extraValues
+    set:
+      extraValues:
+        tlsSecret: shared-valkey-tls
+      cluster:
+        annotations:
+          note: "tls={{ .Values.extraValues.tlsSecret }}"
+        spec:
+          shards: 3
+          replicas: 0
+          tls:
+            certificate:
+              secretName: "{{ .Values.extraValues.tlsSecret }}"
+    asserts:
+      - equal:
+          path: metadata.annotations.note
+          value: tls=shared-valkey-tls
+      - equal:
+          path: spec.tls.certificate.secretName
+          value: shared-valkey-tls
