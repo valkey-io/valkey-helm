@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey-cluster.fullname" . }}-init-scripts
+  namespace: {{ include "valkey-cluster.names.namespace" . }}
+  labels:
+    {{- include "valkey-cluster.labels" . | nindent 4 }}
+data:
+  init.sh: |-
+    #!/bin/sh
+    set -eu
+
+    # Default config paths
+    VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
+
+    LOGFILE="/data/init.log"
+    DATA_DIR="/data/conf"
+
+    # Logging function
+    log() {
+      echo "$(date) $1" | tee -a "$LOGFILE"
+    }
+
+    # Clean old log if requested
+    if [ "${KEEP_OLD_LOGS:-false}" != "true" ]; then
+      rm -f "$LOGFILE"
+    fi
+
+    if [ -f "$LOGFILE" ]; then
+      log "Detected restart of this instance ($HOSTNAME)"
+    fi
+
+    log "Creating configuration in $DATA_DIR..."
+    mkdir -p "$DATA_DIR"
+    rm -f "$VALKEY_CONFIG" 
+
+ 
+    # Base valkey.conf
+    log "Generating base valkey.conf"
+    {
+      echo "port 6379"
+      echo "protected-mode no"
+      echo "bind 0.0.0.0"
+      echo "dir /data"
+    } >>"$VALKEY_CONFIG"
+
+    {{- if .Values.auth.enabled }}
+    echo "aclfile /data/conf/users.acl" >>"$VALKEY_CONFIG"
+    cat <<EOF > /data/conf/users.acl
+{{ .Values.auth.aclConfig | indent 6 }}
+    EOF
+    {{- end }}
+
+    # Append extra configs if present
+    if [ -f /usr/local/etc/valkey/valkey.conf ]; then
+      log "Appending /usr/local/etc/valkey/valkey.conf"
+      cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONFIG"
+    fi
+    if [ -d /extravalkeyconfigs ]; then
+      log "Appending files in /extravalkeyconfigs/"
+      cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
+    fi
+
+    # ------------------------------------------------------------------
+    # nodes.conf peer-IP fix-up.
+    # After a simultaneous restart, every pod gets a new IP but nodes.conf still
+    # records peers at their OLD IPs, which the cluster bus dials — so the cluster
+    # cannot reconverge (all peers show "fail?"). Each nodes.conf entry also carries
+    # the stable headless hostname (via cluster-announce-hostname). Resolve that
+    # hostname to the CURRENT IP and rewrite the address, so valkey-server starts
+    # with correct peer addresses and the bus reconnects immediately.
+    # Requires the headless Service to publishNotReadyAddresses so peers resolve
+    # during startup.
+    {{- if .Values.clusterStableAddressing.nodesConfIpFixup }}
+    NODES_CONF="/data/nodes.conf"
+    if [ -f "$NODES_CONF" ]; then
+      log "Fixing up peer IPs in $NODES_CONF from stable hostnames..."
+      TMP="${NODES_CONF}.fixup"
+      : > "$TMP"
+      while IFS= read -r line || [ -n "$line" ]; do
+        addr=$(echo "$line" | awk '{print $2}')
+        host=$(echo "$addr" | cut -s -d',' -f2 || true)
+        oldip=$(echo "$addr" | cut -s -d':' -f1 || true)
+        if [ -n "$host" ] && [ -n "$oldip" ]; then
+          newip=""
+          n=0
+          while [ -z "$newip" ] && [ "$n" -lt 10 ]; do
+            newip=$(getent hosts "$host" 2>/dev/null | awk '{print $1; exit}' || true)
+            if [ -z "$newip" ]; then n=$((n+1)); sleep 2; fi
+          done
+          if [ -n "$newip" ] && [ "$newip" != "$oldip" ]; then
+            log "  $host: $oldip -> $newip"
+            line=$(echo "$line" | sed "s|${oldip}:6379@16379|${newip}:6379@16379|")
+          fi
+        fi
+        printf '%s\n' "$line" >> "$TMP"
+      done < "$NODES_CONF"
+      mv "$TMP" "$NODES_CONF"
+      log "nodes.conf fix-up complete."
+    fi
+    {{- end }}
+

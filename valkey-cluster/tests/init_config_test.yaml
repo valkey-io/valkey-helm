@@ -1,0 +1,84 @@
+suite: init container script configuration
+templates:
+  - templates/init_config.yaml
+set:
+  fullnameOverride: ""
+  existingSecret: ""
+tests:
+  - it: should be a ConfigMap
+    asserts:
+      - isKind:
+          of: ConfigMap
+
+  - it: should contain the init.sh script
+    asserts:
+      - exists:
+          path: data["init.sh"]
+
+  - it: should use set -eu (POSIX sh compatible)
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "set -eu"
+
+  - it: should not use pipefail as a set flag (not supported in POSIX sh)
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "set -eu pipefail"
+
+  - it: should create the config directory
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "mkdir -p"
+
+  - it: should generate base valkey.conf with port and bind settings
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "port 6379"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "bind 0.0.0.0"
+
+  - it: should not configure ACL file when auth is disabled
+    set:
+      auth.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile"
+
+  - it: should write the ACL file when auth is enabled
+    set:
+      auth.enabled: true
+      auth.aclConfig: "user default on >password ~* &* +@all"
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "aclfile /data/conf/users.acl"
+
+  - it: should embed the aclConfig content when auth is enabled
+    set:
+      auth.enabled: true
+      auth.aclConfig: "user default on >mypassword ~* &* +@all"
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "user default on >mypassword"
+
+  - it: should have correct ConfigMap name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-init-scripts
+
+  - it: should include standard labels
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey-cluster
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME

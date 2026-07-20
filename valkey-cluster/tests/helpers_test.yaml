@@ -1,0 +1,119 @@
+suite: helpers and naming
+templates:
+  - templates/service.yaml
+  - templates/serviceaccount.yaml
+  - templates/deploy_valkey.yaml
+  - templates/init_config.yaml
+set:
+  fullnameOverride: ""
+  existingSecret: ""
+tests:
+  - it: fullname combines release and chart name when they differ
+    template: templates/service.yaml
+    release:
+      name: prod
+    asserts:
+      - equal:
+          path: metadata.name
+          value: prod-valkey-cluster-headless
+
+  - it: fullname collapses to release name when release already contains chart name
+    template: templates/service.yaml
+    release:
+      name: my-valkey-cluster-prod
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-valkey-cluster-prod-headless
+
+  - it: fullname is truncated to 63 characters via fullnameOverride
+    template: templates/service.yaml
+    set:
+      fullnameOverride: "this-is-a-very-long-fullname-that-definitely-exceeds-63-character-limit-for-sure"
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: "^.{1,63}-headless$"
+
+  - it: name helper respects nameOverride
+    template: templates/service.yaml
+    set:
+      nameOverride: custom-chart
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: custom-chart
+
+  - it: serviceAccountName returns fullname when serviceAccount.create is true and name is empty
+    template: templates/serviceaccount.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster
+
+  - it: serviceAccountName returns explicit serviceAccount.name when set
+    template: templates/deploy_valkey.yaml
+    set:
+      serviceAccount.name: my-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: my-sa
+
+  - it: serviceAccountName falls back to default when create is false and name is empty
+    template: templates/deploy_valkey.yaml
+    set:
+      serviceAccount.create: false
+      serviceAccount.name: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: default
+
+  - it: namespace helper defaults to release namespace
+    template: templates/service.yaml
+    release:
+      namespace: release-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: release-ns
+
+  - it: namespace helper honors .Values.namespace override
+    template: templates/service.yaml
+    release:
+      namespace: release-ns
+    set:
+      namespace: custom-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-ns
+
+  - it: standard labels include helm.sh/chart with chart-version
+    template: templates/service.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.labels["helm.sh/chart"]
+          pattern: "^valkey-cluster-[0-9]+\\.[0-9]+\\.[0-9]+$"
+
+  - it: standard labels include app.kubernetes.io/version from Chart.AppVersion
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "9.1.0"
+
+  - it: selectorLabels contain name and instance only
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: valkey-cluster
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - notExists:
+          path: spec.selector["helm.sh/chart"]
+      - notExists:
+          path: spec.selector["app.kubernetes.io/version"]

@@ -1,0 +1,136 @@
+suite: valkey.conf generation
+templates:
+  - templates/configmap.yaml
+set:
+  fullnameOverride: ""
+  existingSecret: ""
+tests:
+  - it: should be a ConfigMap
+    asserts:
+      - isKind:
+          of: ConfigMap
+
+  - it: should enable cluster mode when replicaCount is greater than 1
+    set:
+      replicaCount: 6
+    asserts:
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "cluster-enabled yes"
+
+  - it: should not enable cluster mode for single node
+    set:
+      replicaCount: 1
+    asserts:
+      - notMatchRegex:
+          path: data["valkey.conf"]
+          pattern: "cluster-enabled yes"
+
+  - it: should set cluster-config-file in cluster mode
+    set:
+      replicaCount: 6
+    asserts:
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "cluster-config-file nodes.conf"
+
+  - it: should set cluster-preferred-endpoint-type to ip
+    set:
+      replicaCount: 6
+    asserts:
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "cluster-preferred-endpoint-type ip"
+
+  - it: should include the valkey port from containerPorts
+    set:
+      replicaCount: 6
+    asserts:
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "port 6379"
+
+  - it: should respect custom containerPorts.valkey in cluster config
+    set:
+      replicaCount: 6
+      containerPorts.valkey: 6380
+    asserts:
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "port 6380"
+
+  - it: should not include auth directives when existingSecret is not set
+    asserts:
+      - notMatchRegex:
+          path: data["valkey.conf"]
+          pattern: "requirepass"
+      - notMatchRegex:
+          path: data["valkey.conf"]
+          pattern: "masterauth"
+
+  - it: should include auth directives placeholder when existingSecret is configured
+    set:
+      existingSecret: my-secret
+      existingSecretPasswordKey: password
+    asserts:
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "requirepass"
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "masterauth"
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "protected-mode yes"
+
+  - it: should include custom valkeyConfig directives
+    set:
+      valkeyConfig: "maxmemory 512mb\nmaxmemory-policy allkeys-lru"
+    asserts:
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "maxmemory 512mb"
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "maxmemory-policy allkeys-lru"
+
+  - it: should have correct ConfigMap name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-config
+
+  - it: should suppress all cluster directives for single-node deployments
+    set:
+      replicaCount: 1
+    asserts:
+      - notMatchRegex:
+          path: data["valkey.conf"]
+          pattern: "cluster-enabled"
+      - notMatchRegex:
+          path: data["valkey.conf"]
+          pattern: "cluster-config-file"
+      - notMatchRegex:
+          path: data["valkey.conf"]
+          pattern: "cluster-preferred-endpoint-type"
+
+  - it: should not add auth directives when auth.enabled is true but existingSecret is empty
+    set:
+      auth.enabled: true
+      existingSecret: ""
+    asserts:
+      - notMatchRegex:
+          path: data["valkey.conf"]
+          pattern: "requirepass"
+      - notMatchRegex:
+          path: data["valkey.conf"]
+          pattern: "masterauth"
+
+  - it: should render cluster port from custom containerPorts.valkey only in cluster mode
+    set:
+      replicaCount: 6
+      containerPorts.valkey: 7000
+    asserts:
+      - matchRegex:
+          path: data["valkey.conf"]
+          pattern: "port 7000"

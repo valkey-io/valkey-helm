@@ -1,0 +1,108 @@
+suite: headless service configuration
+templates:
+  - templates/service.yaml
+set:
+  fullnameOverride: ""
+  existingSecret: ""
+tests:
+  - it: should be a Service
+    asserts:
+      - isKind:
+          of: Service
+
+  - it: should always set clusterIP to None (headless)
+    asserts:
+      - equal:
+          path: spec.clusterIP
+          value: None
+
+  - it: should use ClusterIP service type by default
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: should name the service with -headless suffix
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-headless
+
+  - it: should respect fullnameOverride in headless service name
+    set:
+      fullnameOverride: my-valkey
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-valkey-headless
+
+  - it: should expose valkey port 6379
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            port: 6379
+            targetPort: tcp
+            protocol: TCP
+            name: tcp
+
+  - it: should expose cluster bus port 16379
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            port: 16379
+            targetPort: bus
+            protocol: TCP
+            name: bus
+
+  - it: should respect custom containerPorts
+    set:
+      containerPorts.valkey: 6380
+      containerPorts.bus: 16380
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            port: 6380
+            targetPort: tcp
+            protocol: TCP
+            name: tcp
+      - contains:
+          path: spec.ports
+          content:
+            port: 16380
+            targetPort: bus
+            protocol: TCP
+            name: bus
+
+  - it: should select pods with correct labels
+    asserts:
+      - isSubset:
+          path: spec.selector
+          content:
+            app.kubernetes.io/name: valkey-cluster
+            app.kubernetes.io/instance: RELEASE-NAME
+
+  - it: should include standard labels
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey-cluster
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+
+  - it: should remain headless even when service.type is NodePort
+    set:
+      service.type: NodePort
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+      - equal:
+          path: spec.clusterIP
+          value: None

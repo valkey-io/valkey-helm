@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "valkey-cluster.fullname" . }}-headless
+  namespace: {{ include "valkey-cluster.names.namespace" . }}
+  labels:
+    {{- include "valkey-cluster.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  clusterIP: None
+  # Publish per-pod DNS even before pods are Ready so that, after a simultaneous
+  # restart, each node can resolve its peers' stable hostnames (and fix up the
+  # stale peer IPs in nodes.conf) during startup, before readiness is achieved.
+  {{- if .Values.clusterStableAddressing.publishNotReadyAddresses }}
+  publishNotReadyAddresses: true
+  {{- end }}
+  ports:
+    - port: {{ .Values.containerPorts.valkey }}
+      targetPort: tcp
+      protocol: TCP
+      name: tcp
+    - port: {{ .Values.containerPorts.bus }}
+      targetPort: bus
+      protocol: TCP
+      name: bus
+  selector:
+    {{- include "valkey-cluster.selectorLabels" . | nindent 4 }}

@@ -1,0 +1,60 @@
+suite: cluster init script configuration
+templates:
+  - templates/cluster_config.yaml
+set:
+  fullnameOverride: ""
+  existingSecret: ""
+tests:
+  - it: should be a ConfigMap
+    asserts:
+      - isKind:
+          of: ConfigMap
+
+  - it: should contain the init-cluster.sh script
+    asserts:
+      - exists:
+          path: data["init-cluster.sh"]
+
+  - it: should reference the headless service for node discovery
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: "RELEASE-NAME-valkey-cluster-headless"
+
+  - it: should use the release namespace for node FQDNs
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: "svc.cluster.local"
+
+  - it: should wait for a local PONG before cluster operations
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: "ping.*PONG"
+
+  - it: should skip cluster init for single-node deployments
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: "Single node deployment"
+
+  - it: should handle auth via VALKEYCLI_AUTH env var
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: "VALKEYCLI_AUTH"
+
+  - it: should have correct ConfigMap name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-cluster-script
+
+  - it: should use fullnameOverride in the init script FQDNs
+    set:
+      fullnameOverride: my-valkey
+    asserts:
+      - matchRegex:
+          path: data["init-cluster.sh"]
+          pattern: "my-valkey-headless"

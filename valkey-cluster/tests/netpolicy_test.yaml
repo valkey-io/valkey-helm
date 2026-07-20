@@ -1,0 +1,129 @@
+suite: NetworkPolicy configuration
+templates:
+  - templates/netpolicy.yaml
+set:
+  fullnameOverride: ""
+  existingSecret: ""
+tests:
+  - it: should not render NetworkPolicy by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render NetworkPolicy when ingress is configured
+    set:
+      networkPolicy:
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    app: client
+            ports:
+              - protocol: TCP
+                port: 6379
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NetworkPolicy
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - notContains:
+          path: spec.policyTypes
+          content: Egress
+
+  - it: should render NetworkPolicy when only egress is configured
+    set:
+      networkPolicy:
+        egress:
+          - to:
+              - namespaceSelector: {}
+    asserts:
+      - hasDocuments:
+          count: 1
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+      - notContains:
+          path: spec.policyTypes
+          content: Ingress
+
+  - it: should render both policy types when ingress and egress are configured
+    set:
+      networkPolicy:
+        ingress:
+          - from: []
+        egress:
+          - to: []
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+
+  - it: should pass ingress rules through verbatim
+    set:
+      networkPolicy:
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    app: client
+            ports:
+              - protocol: TCP
+                port: 6379
+    asserts:
+      - equal:
+          path: spec.ingress[0].ports[0].port
+          value: 6379
+
+  - it: should set podSelector to chart selector labels
+    set:
+      networkPolicy:
+        ingress:
+          - from: []
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey-cluster
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: should apply networkPolicy.labels to metadata
+    set:
+      networkPolicy:
+        ingress:
+          - from: []
+        labels:
+          team: platform
+    asserts:
+      - equal:
+          path: metadata.labels.team
+          value: platform
+
+  - it: should apply networkPolicy.annotations to metadata
+    set:
+      networkPolicy:
+        ingress:
+          - from: []
+        annotations:
+          policy.io/enforce: "true"
+    asserts:
+      - equal:
+          path: metadata.annotations["policy.io/enforce"]
+          value: "true"
+
+  - it: should name NetworkPolicy with fullnameOverride
+    set:
+      fullnameOverride: my-valkey-cluster
+      networkPolicy:
+        ingress:
+          - from: []
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-valkey-cluster
