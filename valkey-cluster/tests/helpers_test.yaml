@@ -102,7 +102,7 @@ tests:
     asserts:
       - equal:
           path: metadata.labels["app.kubernetes.io/version"]
-          value: "9.0.2"
+          value: "9.1.0"
 
   - it: selectorLabels contain name and instance only
     template: templates/service.yaml

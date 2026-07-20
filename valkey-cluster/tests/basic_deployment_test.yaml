@@ -210,7 +210,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          pattern: "valkey/valkey:9.0.2"
+          pattern: "valkey/valkey:9.1.0"
 
   - it: should apply custom image tag
     template: templates/deploy_valkey.yaml
