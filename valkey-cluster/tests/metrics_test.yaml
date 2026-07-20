@@ -1,0 +1,183 @@
+suite: metrics service configuration
+templates:
+  - templates/metrics_service.yaml
+  - templates/deploy_valkey.yaml
+  - templates/init_config.yaml
+set:
+  fullnameOverride: ""
+  existingSecret: ""
+tests:
+  - it: should not create metrics service by default
+    template: templates/metrics_service.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create metrics service when metrics are enabled
+    template: templates/metrics_service.yaml
+    set:
+      metrics.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Service
+
+  - it: should name the metrics service with -metrics suffix
+    template: templates/metrics_service.yaml
+    set:
+      metrics.enabled: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-metrics
+
+  - it: should expose the metrics port
+    template: templates/metrics_service.yaml
+    set:
+      metrics.enabled: true
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9121
+            targetPort: http-metrics
+
+  - it: should use ClusterIP service type for metrics by default
+    template: templates/metrics_service.yaml
+    set:
+      metrics.enabled: true
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: should mark the metrics service with the metrics component label
+    template: templates/metrics_service.yaml
+    set:
+      metrics.enabled: true
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: metrics
+
+  - it: should select pods with the correct labels
+    template: templates/metrics_service.yaml
+    set:
+      metrics.enabled: true
+    asserts:
+      - isSubset:
+          path: spec.selector
+          content:
+            app.kubernetes.io/name: valkey-cluster
+            app.kubernetes.io/instance: RELEASE-NAME
+
+  - it: should add metrics sidecar container when metrics are enabled
+    template: templates/deploy_valkey.yaml
+    set:
+      metrics.enabled: true
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[1]
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: metrics
+
+  - it: should enable cluster mode in metrics exporter by default
+    template: templates/deploy_valkey.yaml
+    set:
+      metrics.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_IS_CLUSTER
+            value: "true"
+
+  - it: should pass metrics auth password from secret when existingSecret is configured
+    template: templates/deploy_valkey.yaml
+    set:
+      metrics.enabled: true
+      existingSecret: my-secret
+      existingSecretPasswordKey: password
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: password
+
+  - it: should not pass metrics auth password when existingSecret is not configured
+    template: templates/deploy_valkey.yaml
+    set:
+      metrics.enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+          any: true
+
+  - it: should apply custom metrics image tag to sidecar image
+    template: templates/deploy_valkey.yaml
+    set:
+      metrics.enabled: true
+      metrics.image.tag: "v1.99.0-alpine"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[1].image
+          pattern: "oliver006/redis_exporter:v1.99.0-alpine"
+
+  - it: should pass metrics.extraArgs as sidecar args
+    template: templates/deploy_valkey.yaml
+    set:
+      metrics.enabled: true
+      metrics.extraArgs:
+        log-format: json
+        debug: "true"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--log-format=json"
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--debug=true"
+
+  - it: should honor custom metrics.service.type
+    template: templates/metrics_service.yaml
+    set:
+      metrics.enabled: true
+      metrics.service.type: NodePort
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+
+  - it: should honor custom metrics.service.clusterIP
+    template: templates/metrics_service.yaml
+    set:
+      metrics.enabled: true
+      metrics.service.clusterIP: None
+    asserts:
+      - equal:
+          path: spec.clusterIP
+          value: None
+
+  - it: should mount extra exporter secrets as volumes when configured
+    template: templates/deploy_valkey.yaml
+    set:
+      metrics.enabled: true
+      metrics.exporter.extraExporterSecrets:
+        - name: my-exporter-cert
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: my-exporter-cert-exporter
+            secret:
+              secretName: my-exporter-cert
+              defaultMode: 0440

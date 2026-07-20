@@ -1,0 +1,56 @@
+suite: readiness-probe ConfigMap
+templates:
+  - templates/readiness.yaml
+set:
+  fullnameOverride: ""
+  existingSecret: ""
+tests:
+  - it: should be a ConfigMap
+    asserts:
+      - isKind:
+          of: ConfigMap
+
+  - it: should name the ConfigMap with -readiness-script suffix
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-cluster-readiness-script
+
+  - it: should respect fullnameOverride in ConfigMap name
+    set:
+      fullnameOverride: my-valkey-cluster
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-valkey-cluster-readiness-script
+
+  - it: should place the ConfigMap in the release namespace
+    release:
+      namespace: my-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: my-ns
+
+  - it: should embed the ping_readiness_local.sh script
+    asserts:
+      - exists:
+          path: data["ping_readiness_local.sh"]
+
+  - it: should contain the PING check from the readiness probe script
+    asserts:
+      - matchRegex:
+          path: data["ping_readiness_local.sh"]
+          pattern: "CHECK 1: PING"
+      - matchRegex:
+          path: data["ping_readiness_local.sh"]
+          pattern: "valkey-cli"
+
+  - it: should include the cluster state topology check
+    asserts:
+      - matchRegex:
+          path: data["ping_readiness_local.sh"]
+          pattern: "cluster_known_nodes"
+      - matchRegex:
+          path: data["ping_readiness_local.sh"]
+          pattern: "Majority Consensus"

@@ -1,0 +1,125 @@
+suite: PodDisruptionBudget configuration
+templates:
+  - templates/poddisruptionbudget.yaml
+set:
+  fullnameOverride: ""
+  existingSecret: ""
+tests:
+  - it: should create PDB by default
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+
+  - it: should not create PDB when pdb.create is false and no podDisruptionBudget override
+    set:
+      pdb.create: false
+      podDisruptionBudget: {}
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create PDB via podDisruptionBudget override even when pdb.create is false
+    set:
+      pdb.create: false
+      podDisruptionBudget:
+        maxUnavailable: 2
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+
+  - it: should default to maxUnavailable 1 when no min/max is set
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - isNull:
+          path: spec.minAvailable
+
+  - it: should set minAvailable when configured
+    set:
+      pdb.minAvailable: "4"
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 4
+
+  - it: should set maxUnavailable when configured
+    set:
+      pdb.maxUnavailable: "2"
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 2
+
+  - it: should support percentage for minAvailable
+    set:
+      pdb.minAvailable: "50%"
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: "50%"
+
+  - it: should support percentage for maxUnavailable
+    set:
+      pdb.maxUnavailable: "25%"
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: "25%"
+
+  - it: should use podDisruptionBudget override spec verbatim
+    set:
+      pdb.create: true
+      podDisruptionBudget:
+        minAvailable: 3
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 3
+
+  - it: should emit both minAvailable and maxUnavailable when both are set
+    set:
+      pdb.minAvailable: "3"
+      pdb.maxUnavailable: "2"
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 3
+      - equal:
+          path: spec.maxUnavailable
+          value: 2
+
+  - it: should have correct selector labels
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: valkey-cluster
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: should include standard labels
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey-cluster
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - isNotNull:
+          path: metadata.labels["helm.sh/chart"]
+
+  - it: should use fullnameOverride for PDB name
+    set:
+      fullnameOverride: my-valkey-cluster
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-valkey-cluster

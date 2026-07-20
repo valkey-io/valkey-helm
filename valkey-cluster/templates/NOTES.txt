@@ -10,29 +10,21 @@ Namespace:    {{ include "valkey-cluster.names.namespace" . }}
 Chart:        {{ .Chart.Name }} {{ .Chart.Version }}
 App version:  {{ .Chart.AppVersion }}
 
-Service:      {{ include "valkey-cluster.fullname" . }}
-Type:         {{ .Values.service.type }}
-Port:         {{ .Values.service.port }}
+Headless Service: {{ include "valkey-cluster.fullname" . }}-headless
+Port:             {{ .Values.containerPorts.valkey }}
+
+NOTE: Valkey cluster mode requires a cluster-aware client (valkey-cli -c).
+      Clients connect directly to individual pods via the headless service.
 
 1) In-cluster access
-   From another Pod:
-   $ valkey-cli -h {{ include "valkey-cluster.fullname" . }} -p {{ .Values.service.port }} PING
+   From another Pod (use -c for cluster redirect support):
+   $ valkey-cli -h {{ include "valkey-cluster.fullname" . }}-headless -p {{ .Values.containerPorts.valkey }} -c PING
 
 2) Local access via kubectl port-forward
-   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey-cluster.fullname" . }} 6379:{{ .Values.service.port }}
+   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey-cluster.fullname" . }}-headless 6379:{{ .Values.containerPorts.valkey }}
    In another terminal:
-   $ valkey-cli -h 127.0.0.1 -p 6379 PING
+   $ valkey-cli -h 127.0.0.1 -p 6379 -c PING
 
-{{ if eq .Values.service.type "LoadBalancer" }}
-3) External access (LoadBalancer)
-   $ export SERVICE_IP=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey-cluster.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-   $ valkey-cli -h $SERVICE_IP -p {{ .Values.service.port }} PING
-{{ else if eq .Values.service.type "NodePort" }}
-3) External access (NodePort)
-   $ export NODE_PORT=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey-cluster.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
-   $ export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-   $ valkey-cli -h $NODE_IP -p $NODE_PORT PING
-{{ end }}
 
 {{ if .Values.existingSecretPasswordKey }}
 🔐 Authentication is ENABLED

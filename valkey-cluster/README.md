@@ -1,6 +1,6 @@
 # valkey-cluster
 
-![Version: 0.7.5](https://img.shields.io/badge/Version-0.7.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 8.1.4](https://img.shields.io/badge/AppVersion-8.1.4-informational?style=flat-square)
+![Version: 0.9.4](https://img.shields.io/badge/Version-0.9.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.0.1](https://img.shields.io/badge/AppVersion-9.0.1-informational?style=flat-square)
 
 A Helm chart for Kubernetes to start valkey in cluster mode with 3 master and 3 replicas
 
@@ -46,7 +46,7 @@ This minimum of 6 nodes typically represents:
 | global.imageRegistry | string | `""` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.registry | string | `"docker.io"` |  |
-| image.repository | string | `"docker.io/valkey/valkey"` |  |
+| image.repository | string | `"valkey/valkey"` |  |
 | image.tag | string | `""` |  |
 | imagePullSecrets | list | `[]` |  |
 | initResources | object | `{}` |  |
@@ -86,7 +86,7 @@ This minimum of 6 nodes typically represents:
 | serviceAccount.name | string | `""` |  |
 | tls.enabled | bool | `false` |  |
 | tolerations | list | `[]` |  |
-| topologySpreadConstraints | object | `{}` |  |
+| topologySpreadConstraints | list | `[]` |  |
 | valkeyConfig | string | `""` |  |
 | valkeyLogLevel | string | `"notice"` |  |
 

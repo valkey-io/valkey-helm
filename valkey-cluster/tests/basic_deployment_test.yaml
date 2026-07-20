@@ -1,16 +1,597 @@
-suite: Basic Deployment Test
+suite: StatefulSet configuration
 templates:
   - templates/deploy_valkey.yaml
   - templates/init_config.yaml
+set:
+  fullnameOverride: ""
+  existingSecret: ""
 tests:
-  - it: Should return true
+  - it: should be a StatefulSet
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  - it: should set replica count
     template: templates/deploy_valkey.yaml
     set:
       replicaCount: 8
     asserts:
-      - isKind:
-          of: StatefulSet
       - equal:
           path: spec.replicas
           value: 8
-          
+
+  - it: should render Parallel pod management policy when set
+    template: templates/deploy_valkey.yaml
+    set:
+      podManagementPolicy: Parallel
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: Parallel
+
+  - it: should apply custom podManagementPolicy
+    template: templates/deploy_valkey.yaml
+    set:
+      podManagementPolicy: OrderedReady
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: OrderedReady
+
+  - it: should set headless service as StatefulSet serviceName
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-valkey-cluster-headless
+
+  - it: should always have annotations block with checksum even without podAnnotations
+    template: templates/deploy_valkey.yaml
+    set:
+      podAnnotations: {}
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations
+      - exists:
+          path: spec.template.metadata.annotations["checksum/initconfig"]
+
+  - it: should merge podAnnotations into the annotations block
+    template: templates/deploy_valkey.yaml
+    set:
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        custom.annotation: "value"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["custom.annotation"]
+          value: value
+      - exists:
+          path: spec.template.metadata.annotations["checksum/initconfig"]
+
+  - it: should add cluster-announce-ip to startup args when replicaCount >= 6
+    template: templates/deploy_valkey.yaml
+    set:
+      replicaCount: 6
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "cluster-announce-ip"
+
+  - it: should not add cluster-announce-ip when replicaCount < 6
+    template: templates/deploy_valkey.yaml
+    set:
+      replicaCount: 3
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "cluster-announce-ip"
+
+  - it: should always start the cluster init script in the background
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "/cluster-script/init-cluster.sh &"
+
+  - it: should set REPLICAS env var from replicaCount
+    template: templates/deploy_valkey.yaml
+    set:
+      replicaCount: 6
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REPLICAS
+            value: "6"
+
+  - it: should inject POD_IP from the pod's status field
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+
+  - it: should inject NAMESPACE from the pod's metadata field
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+
+  - it: should inject HOSTNAME from pod metadata name
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+
+  - it: should not set auth env vars when existingSecret is not configured
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEYCLI_AUTH
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_PASSWORD
+          any: true
+
+  - it: should set auth env vars when existingSecret and existingSecretPasswordKey are configured
+    template: templates/deploy_valkey.yaml
+    set:
+      existingSecret: my-secret
+      existingSecretPasswordKey: password
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEYCLI_AUTH
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: password
+
+  - it: should set VALKEY_LOGLEVEL env var
+    template: templates/deploy_valkey.yaml
+    set:
+      valkeyLogLevel: debug
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_LOGLEVEL
+            value: "debug"
+
+  - it: should use IfNotPresent image pull policy on init container by default
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: IfNotPresent
+
+  - it: should apply custom image pull policy to init container
+    template: templates/deploy_valkey.yaml
+    set:
+      image.pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
+
+  - it: should use appVersion as default image tag
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "valkey/valkey:9.0.2"
+
+  - it: should apply custom image tag
+    template: templates/deploy_valkey.yaml
+    set:
+      image.tag: "8.0.0"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "valkey/valkey:8.0.0"
+
+  - it: should not have imagePullSecrets by default
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+
+  - it: should set imagePullSecrets when configured
+    template: templates/deploy_valkey.yaml
+    set:
+      imagePullSecrets:
+        - name: myregistrykey
+    asserts:
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: myregistrykey
+
+  - it: should expose valkey port 6379
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: tcp
+            containerPort: 6379
+            protocol: TCP
+
+  - it: should expose cluster bus port 16379
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: tcp-redis-bus
+            containerPort: 16379
+            protocol: TCP
+
+  - it: should not have metrics sidecar by default
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[1]
+
+  - it: should add metrics sidecar when metrics are enabled
+    template: templates/deploy_valkey.yaml
+    set:
+      metrics.enabled: true
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[1]
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: metrics
+
+  - it: should mount cluster-script volume into main container
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: cluster-script
+            mountPath: /cluster-script
+
+  - it: should mount readiness-script volume into main container
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: readiness-script
+            mountPath: /scripts
+
+  - it: should use emptyDir for data volume when persistence is disabled
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            emptyDir: {}
+
+  - it: should create volumeClaimTemplates when persistence is enabled
+    template: templates/deploy_valkey.yaml
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "5Gi"
+    asserts:
+      - exists:
+          path: spec.volumeClaimTemplates
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "5Gi"
+
+  - it: should apply storageClass in volumeClaimTemplates when persistence is enabled
+    template: templates/deploy_valkey.yaml
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "10Gi"
+      dataStorage.className: fast-ssd
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: fast-ssd
+
+  - it: should use existingPVC when persistentVolumeClaimName is set
+    template: templates/deploy_valkey.yaml
+    set:
+      dataStorage.enabled: true
+      dataStorage.persistentVolumeClaimName: my-pvc
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            persistentVolumeClaim:
+              claimName: my-pvc
+
+  - it: should apply nodeSelector
+    template: templates/deploy_valkey.yaml
+    set:
+      nodeSelector:
+        disktype: ssd
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector.disktype
+          value: ssd
+
+  - it: should apply tolerations
+    template: templates/deploy_valkey.yaml
+    set:
+      tolerations:
+        - key: "node.kubernetes.io/not-ready"
+          operator: "Exists"
+          effect: "NoExecute"
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "node.kubernetes.io/not-ready"
+            operator: "Exists"
+            effect: "NoExecute"
+
+  - it: should apply affinity rules
+    template: templates/deploy_valkey.yaml
+    set:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: valkey-cluster
+              topologyKey: kubernetes.io/hostname
+    asserts:
+      - exists:
+          path: spec.template.spec.affinity.podAntiAffinity
+
+  - it: should apply pod security context
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 1000
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000
+
+  - it: should apply container security context
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: should use fullnameOverride for resource name
+    template: templates/deploy_valkey.yaml
+    set:
+      fullnameOverride: my-valkey-cluster
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-valkey-cluster
+
+  - it: should include standard labels
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey-cluster
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+
+  - it: should append extraInitContainers after the built-in init container
+    template: templates/deploy_valkey.yaml
+    set:
+      extraInitContainers:
+        - name: wait-for-dns
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 1"]
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: valkey-cluster-init
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-dns
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: busybox:1.36
+
+  - it: should apply resources to main container
+    template: templates/deploy_valkey.yaml
+    set:
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "500m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "128Mi"
+
+  - it: should apply initResources to init container only
+    template: templates/deploy_valkey.yaml
+    set:
+      initResources:
+        limits:
+          cpu: "200m"
+          memory: "256Mi"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.cpu
+          value: "200m"
+
+  - it: should mount extraValkeySecrets as volumes and volumeMounts
+    template: templates/deploy_valkey.yaml
+    set:
+      extraValkeySecrets:
+        - name: my-tls-secret
+          mountPath: /etc/tls
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: my-tls-secret-valkey
+            secret:
+              secretName: my-tls-secret
+              defaultMode: 0440
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: my-tls-secret-valkey
+            mountPath: /etc/tls
+
+  - it: should include the default preStop lifecycle hook with failover logic
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].lifecycle.preStop
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "CLUSTER FAILOVER TAKEOVER"
+
+  - it: should not render lifecycle hooks when lifecycleHooks is disabled
+    template: templates/deploy_valkey.yaml
+    set:
+      lifecycleHooks: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle
+
+  - it: should inject env entries from values.env into main container
+    template: templates/deploy_valkey.yaml
+    set:
+      env:
+        LOG_LEVEL: info
+        ENABLE_TRACE: "true"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOG_LEVEL
+            value: "info"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ENABLE_TRACE
+            value: "true"
+
+  - it: should propagate podLabels into pod template metadata
+    template: templates/deploy_valkey.yaml
+    set:
+      podLabels:
+        tier: cache
+        env: prod
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.tier
+          value: cache
+      - equal:
+          path: spec.template.metadata.labels.env
+          value: prod
+
+  - it: should name the main container via fullname helper
+    template: templates/deploy_valkey.yaml
+    set:
+      fullnameOverride: my-valkey-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: my-valkey-cluster
+
+  - it: should default serviceAccountName to release fullname when create is true and no explicit name
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-valkey-cluster
+
+  - it: should honor custom serviceAccount.name
+    template: templates/deploy_valkey.yaml
+    set:
+      serviceAccount.name: custom-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: custom-sa
+
+  - it: should fall back to default serviceAccount when create is false and no name is set
+    template: templates/deploy_valkey.yaml
+    set:
+      serviceAccount.create: false
+      serviceAccount.name: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: default
+
+  - it: should pass custom containerPorts.bus through to container port
+    template: templates/deploy_valkey.yaml
+    set:
+      containerPorts.bus: 26379
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: tcp-redis-bus
+            containerPort: 26379
+            protocol: TCP
+
+  - it: should mount valkey-config volume when replicaCount > 1
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-config
+            mountPath: /usr/local/etc/valkey/valkey.conf
+            subPath: valkey.conf
