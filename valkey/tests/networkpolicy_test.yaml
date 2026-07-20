@@ -1,0 +1,160 @@
+suite: network policy configuration
+templates:
+  - templates/netpolicy.yaml
+tests:
+  - it: should not render anything when disabled by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render a NetworkPolicy when enabled
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: apiVersion
+          value: networking.k8s.io/v1
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+            - Egress
+
+  - it: should select the Valkey pods
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+
+  - it: should allow all egress by default
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content: {}
+
+  - it: should restrict egress to DNS and intra-cluster when allowExternalEgress is false
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.allowExternalEgress: false
+    asserts:
+      - notContains:
+          path: spec.egress
+          content: {}
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - port: 53
+                protocol: UDP
+              - port: 53
+                protocol: TCP
+
+  - it: should allow ingress from any source on the Valkey port when allowExternal is true
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - port: 6379
+
+  - it: should restrict ingress to labeled clients when allowExternal is false
+    release:
+      name: rn
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.allowExternal: false
+    asserts:
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - port: 6379
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchLabels["rn-valkey-client"]
+          value: "true"
+      - equal:
+          path: spec.ingress[0].from[1].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+
+  - it: should add namespace selectors when ingressNSMatchLabels is set
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.allowExternal: false
+      networkPolicy.ingressNSMatchLabels:
+        kubernetes.io/metadata.name: my-app
+      networkPolicy.ingressNSPodMatchLabels:
+        role: client
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[2].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: my-app
+      - equal:
+          path: spec.ingress[0].from[2].podSelector.matchLabels.role
+          value: client
+
+  - it: should open the metrics port when metrics are enabled
+    set:
+      networkPolicy.enabled: true
+      metrics.enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - port: 9121
+
+  - it: should not open the metrics port when metrics are disabled
+    set:
+      networkPolicy.enabled: true
+      metrics.enabled: false
+    asserts:
+      - notContains:
+          path: spec.ingress
+          content:
+            ports:
+              - port: 9121
+
+  - it: should append extra ingress and egress rules verbatim
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.extraIngress:
+        - ports:
+            - port: 8080
+      networkPolicy.extraEgress:
+        - to:
+            - ipBlock:
+                cidr: 10.0.0.0/8
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - port: 8080
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 10.0.0.0/8
+
+  - it: should apply extra labels and annotations
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.labels:
+        team: data
+      networkPolicy.annotations:
+        owner: platform
+    asserts:
+      - equal:
+          path: metadata.labels.team
+          value: data
+      - equal:
+          path: metadata.annotations.owner
+          value: platform

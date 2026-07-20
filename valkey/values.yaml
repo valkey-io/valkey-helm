@@ -89,9 +89,35 @@ service:
   # Application protocol
   appProtocol: ""
 
-# Network policy to control traffic to the pods
+# Network policy to control traffic to and from the Valkey pods
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
-networkPolicy: {}
+networkPolicy:
+  # Enable creation of a NetworkPolicy for the Valkey pods
+  enabled: false
+  # Allow ingress on the Valkey port from any source.
+  # When set to false, ingress is restricted to pods carrying the
+  # `<fullname>-client: "true"` label, other Valkey pods (replication),
+  # and any namespaces/pods matched by ingressNSMatchLabels below.
+  allowExternal: true
+  # Allow unrestricted egress from the Valkey pods.
+  # When set to false, egress is limited to DNS and intra-cluster
+  # pod-to-pod communication on the Valkey port (plus any extraEgress rules).
+  allowExternalEgress: true
+  # Labels selecting namespaces allowed to connect when allowExternal is false
+  # Example:
+  #   ingressNSMatchLabels:
+  #     kubernetes.io/metadata.name: my-app
+  ingressNSMatchLabels: {}
+  # Labels selecting pods within the matched namespaces (used together with ingressNSMatchLabels)
+  ingressNSPodMatchLabels: {}
+  # Additional ingress rules appended verbatim to the policy
+  extraIngress: []
+  # Additional egress rules appended verbatim to the policy
+  extraEgress: []
+  # Extra labels to add to the NetworkPolicy
+  labels: {}
+  # Extra annotations to add to the NetworkPolicy
+  annotations: {}
 
 # Resource limits/requests for the main Valkey container
 resources: {}

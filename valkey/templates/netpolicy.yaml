@@ -1,33 +1,77 @@
-{{- with .Values.networkPolicy }}
+{{- if .Values.networkPolicy.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "valkey.fullname" $ }}
-  {{- with .labels }}
+  name: {{ include "valkey.fullname" . }}
   labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    {{- with .Values.networkPolicy.labels }}
     {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with .annotations }}
+    {{- end }}
+  {{- with .Values.networkPolicy.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "valkey.selectorLabels" $ | nindent 6 }}
+      {{- include "valkey.selectorLabels" . | nindent 6 }}
   policyTypes:
-  {{- if .ingress }}
     - Ingress
-  {{- end }}
-  {{- if .egress }}
     - Egress
-  {{- end }}
-  {{- with .ingress }}
-  ingress:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with .egress }}
   egress:
+    {{- if .Values.networkPolicy.allowExternalEgress }}
+    # Allow all egress traffic
+    - {}
+    {{- else }}
+    # Allow DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow intra-cluster (pod-to-pod) communication on the Valkey port
+    - ports:
+        - port: {{ .Values.service.port }}
+      to:
+        - podSelector:
+            matchLabels:
+              {{- include "valkey.selectorLabels" . | nindent 14 }}
+    {{- end }}
+    {{- with .Values.networkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- end }}
+  ingress:
+    # Allow inbound connections on the Valkey port
+    - ports:
+        - port: {{ .Values.service.port }}
+      {{- if not .Values.networkPolicy.allowExternal }}
+      from:
+        # Pods explicitly labeled as Valkey clients
+        - podSelector:
+            matchLabels:
+              {{ include "valkey.fullname" . }}-client: "true"
+        # Other Valkey pods (primary/replica replication)
+        - podSelector:
+            matchLabels:
+              {{- include "valkey.selectorLabels" . | nindent 14 }}
+        {{- with .Values.networkPolicy.ingressNSMatchLabels }}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- with $.Values.networkPolicy.ingressNSPodMatchLabels }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- if .Values.metrics.enabled }}
+    # Allow scraping the metrics exporter port
+    - ports:
+        - port: {{ .Values.metrics.exporter.port }}
+    {{- end }}
+    {{- with .Values.networkPolicy.extraIngress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 {{- end }}
