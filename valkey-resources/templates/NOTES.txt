@@ -1,0 +1,14 @@
+valkey-resources {{ .Chart.Version }} installed as release "{{ .Release.Name }}".
+
+Prerequisite: valkey-operator (and ValkeyCluster CRDs) must already be present.
+
+ValkeyCluster: {{ include "valkey-resources.fullname" . }}
+Namespace:     {{ .Release.Namespace }}
+
+Watch status:
+  kubectl get valkeycluster {{ include "valkey-resources.fullname" . }} -n {{ .Release.Namespace }} -w
+
+List nodes:
+  kubectl get valkeynodes -n {{ .Release.Namespace }}
+
+Docs: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md

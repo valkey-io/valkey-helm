@@ -1,0 +1,244 @@
+global:
+  # Override the image registry for all images
+  imageRegistry: ""
+  # Global image pull secrets
+  imagePullSecrets: []
+
+image:
+  # Image registry
+  registry: "ghcr.io"
+  # Operator container image repository
+  repository: valkey-io/valkey-operator
+  # Image tag (leave empty to use .Chart.AppVersion)
+  tag: ""
+  # Image pull policy (Always, IfNotPresent, Never)
+  pullPolicy: IfNotPresent
+
+# List of image pull secrets (for private registries)
+imagePullSecrets: []
+
+# Override the default name of resources
+nameOverride: ""
+# Override the full name of resources
+fullnameOverride: ""
+
+# Number of operator replicas
+replicaCount: 1
+
+serviceAccount:
+  # Create a service account for the operator
+  create: true
+  # Name of an existing service account to use (if create: false)
+  name: ""
+  # Annotations to add to the service account
+  annotations: {}
+  # Labels to add to the service account
+  labels: {}
+  # Whether to automount the service account token
+  automount: true
+
+rbac:
+  # Create the operator ClusterRole/ClusterRoleBinding and the aggregated
+  # admin/editor/viewer ClusterRoles for the Valkey CRDs
+  create: true
+
+manager:
+  # Leader election prevents multiple operator instances from conflicting
+  leaderElection:
+    enabled: true
+  # Restrict the operator's informer cache to these namespaces.
+  # Each entry maps to a --watch-namespace flag passed to the operator binary.
+  # Leave empty (default) to watch all namespaces cluster-wide.
+  # When set, include every namespace containing managed resources.
+  # Omitting a namespace where managed resources live will cause reconcile errors.
+  # Example:
+  #   watchNamespaces:
+  #     - valkey-prod
+  #     - valkey-staging
+  #     - valkey-{{ .Values.myEnv }}
+  watchNamespaces: []
+  # Additional command-line arguments for the operator binary
+  args: []
+
+# Resource limits/requests for the operator container
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+# Security context for the pod (applies to all containers)
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Security context for the operator container
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# nodeSelector:
+#   kubernetes.io/os: linux
+nodeSelector: {}
+
+# Termination grace period for pods (seconds)
+terminationGracePeriodSeconds: 30
+
+# tolerations:
+#   - key: "node-role.kubernetes.io/control-plane"
+#     operator: "Exists"
+#     effect: "NoSchedule"
+tolerations: []
+
+# affinity:
+#   nodeAffinity:
+#     requiredDuringSchedulingIgnoredDuringExecution:
+#       nodeSelectorTerms:
+#         - matchExpressions:
+#             - key: kubernetes.io/arch
+#               operator: In
+#               values:
+#                 - amd64
+#                 - arm64
+affinity: {}
+
+# topologySpreadConstraints:
+#   - maxSkew: 1
+#     topologyKey: topology.kubernetes.io/zone
+#     whenUnsatisfiable: DoNotSchedule
+#     labelSelector:
+#       matchLabels:
+#         app.kubernetes.io/name: valkey-operator
+topologySpreadConstraints: []
+
+# priorityClassName for the operator pods
+# Assign a PriorityClass to protect the operator from eviction under resource pressure
+# priorityClassName: system-cluster-critical
+priorityClassName: ""
+
+# Annotations for pods
+podAnnotations: {}
+# Labels for pods
+podLabels: {}
+# Labels to add to all resources
+commonLabels: {}
+
+# PodDisruptionBudget configuration
+# Helps keep enough operator replicas available during voluntary disruptions
+podDisruptionBudget:
+  # Enable PodDisruptionBudget
+  enabled: false
+  # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
+  minAvailable:
+  # Maximum number of pods that can be unavailable during disruptions
+  maxUnavailable: 1
+  # Unhealthy pod eviction policy (optional)
+  # Valid values: IfHealthyBudget, AlwaysAllow
+  unhealthyPodEvictionPolicy: ""
+
+# Network policy to control traffic to/from the operator pod.
+# Disabled by default. When enabled, the operator's required egress is added
+# automatically: DNS, the Kubernetes API server, and managed Valkey pods on the
+# Valkey port. This keeps the operator working when egress is locked down.
+# policyTypes are derived from the rules in effect (extraIngress you provide,
+# and/or egress).
+# More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+#
+# The default Valkey egress rule targets the namespaces in manager.watchNamespaces;
+# when that list is empty (watch all namespaces) it allows the Valkey port to every
+# namespace.
+networkPolicy:
+  # Enable creation of a NetworkPolicy for the operator pod
+  enabled: false
+  # Inject the operator's required egress (DNS, API server, managed Valkey pods).
+  # Set false to manage all egress yourself via extraEgress.
+  defaultEgressRules: true
+  # Port the operator uses to reach Valkey pods
+  valkeyPort: 6379
+  # Kubernetes API server port
+  apiServerPort: 6443
+  # Namespace running kube-dns / CoreDNS
+  dnsNamespace: kube-system
+  # Extra labels to add to the NetworkPolicy
+  labels: {}
+  # Extra annotations to add to the NetworkPolicy
+  annotations: {}
+  # Additional ingress rules appended verbatim to the policy (templated with tpl)
+  extraIngress: []
+  # Additional egress rules merged with the default operator egress (templated with tpl)
+  extraEgress: []
+  # Example (allow Prometheus to scrape metrics; operator egress is added for you):
+  #   extraIngress:
+  #     - from:
+  #         - namespaceSelector:
+  #             matchLabels:
+  #               kubernetes.io/metadata.name: monitoring
+  #       ports:
+  #         - protocol: TCP
+  #           port: 8443
+
+metrics:
+  # Enable the metrics endpoint
+  enabled: true
+  # Port for the metrics endpoint
+  port: 8443
+  # Serve metrics over HTTPS with authn/authz, protecting the endpoint with
+  # TokenReviews and SubjectAccessReviews (passes --metrics-secure=true).
+  # The metrics RBAC (metrics-auth and metrics-reader ClusterRoles) is only
+  # rendered when this is true, since the operator only issues TokenReviews and
+  # SubjectAccessReviews under secure serving. Also requires rbac.create and
+  # metrics.enabled. Defaults to false to preserve the existing insecure HTTP
+  # behavior.
+  secure: false
+  reader:
+    # Optionally bind a scraper ServiceAccount to the metrics-reader ClusterRole
+    # so it can read the /metrics endpoint. Disabled by default; most setups
+    # bind their scraper manually (see README). Requires rbac.create,
+    # metrics.enabled, and metrics.secure.
+    binding:
+      # Create the ClusterRoleBinding for the scraper ServiceAccount.
+      create: false
+      # Name of the scraper ServiceAccount to authorize. Supports templating,
+      # e.g. "{{ .Release.Name }}-prometheus". Required when create is true.
+      serviceAccountName: ""
+      # Namespace of the scraper ServiceAccount. Supports templating.
+      # Defaults to the release namespace when empty.
+      namespace: ""
+  service:
+    # Service type for the metrics service
+    type: ClusterIP
+    # Annotations for the metrics service
+    annotations: {}
+    # Labels for the metrics service
+    labels: {}
+  # Prometheus ServiceMonitor for the operator metrics endpoint
+  # Requires the Prometheus Operator CRDs (monitoring.coreos.com) to be installed
+  serviceMonitor:
+    # Enable the ServiceMonitor
+    enabled: false
+    # Namespace for the ServiceMonitor (defaults to the release namespace)
+    namespace: ""
+    # Additional labels for the ServiceMonitor (e.g. to match the Prometheus serviceMonitorSelector)
+    labels: {}
+    # Annotations for the ServiceMonitor
+    annotations: {}
+    # Scrape interval (defaults to the Prometheus global interval when empty)
+    interval: ""
+    # Scrape timeout (defaults to the Prometheus global timeout when empty)
+    scrapeTimeout: ""
+    # HTTP scheme used for scraping (defaults to http when empty)
+    scheme: ""
+    # TLS configuration used when scraping the endpoint
+    tlsConfig: {}
+    # Keep labels from the scraped target on collision with server-side labels
+    honorLabels: false
+    # relabelings applied to samples before scraping
+    relabelings: []
+    # metricRelabelings applied to samples before ingestion
+    metricRelabelings: []

@@ -1,0 +1,140 @@
+suite: valkeycluster resource
+templates:
+  - templates/valkeycluster.yaml
+tests:
+  - it: renders ValkeyCluster with defaults
+    asserts:
+      - isKind:
+          of: ValkeyCluster
+      - equal:
+          path: apiVersion
+          value: valkey.io/v1alpha1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-resources
+      - equal:
+          path: spec.shards
+          value: 3
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: uses fullnameOverride
+    set:
+      fullnameOverride: my-cluster
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-cluster
+
+  - it: drops in arbitrary ValkeyClusterSpec fields via cluster.spec
+    set:
+      cluster:
+        spec:
+          shards: 5
+          replicas: 2
+          image: valkey/valkey:9.0.0
+          config:
+            maxmemory: 50mb
+          scheduling:
+            priorityClassName: high-priority
+            nodeSelector:
+              disk: ssd
+          persistence:
+            size: 10Gi
+            reclaimPolicy: Retain
+          tls:
+            certificate:
+              secretName: valkey-tls
+          exporter:
+            enabled: false
+    asserts:
+      - equal:
+          path: spec.shards
+          value: 5
+      - equal:
+          path: spec.replicas
+          value: 2
+      - equal:
+          path: spec.image
+          value: valkey/valkey:9.0.0
+      - equal:
+          path: spec.config.maxmemory
+          value: 50mb
+      - equal:
+          path: spec.scheduling.priorityClassName
+          value: high-priority
+      - equal:
+          path: spec.scheduling.nodeSelector.disk
+          value: ssd
+      - equal:
+          path: spec.persistence.size
+          value: 10Gi
+      - equal:
+          path: spec.tls.certificate.secretName
+          value: valkey-tls
+      - equal:
+          path: spec.exporter.enabled
+          value: false
+
+  - it: applies metadata labels and annotations under cluster
+    set:
+      cluster:
+        annotations:
+          example.com/owner: team-a
+        labels:
+          env: test
+        spec:
+          shards: 3
+          replicas: 1
+      commonLabels:
+        team: platform
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: team-a
+      - equal:
+          path: metadata.labels.env
+          value: test
+      - equal:
+          path: metadata.labels.team
+          value: platform
+
+  - it: templates cluster.spec strings with tpl
+    set:
+      cluster:
+        spec:
+          shards: 3
+          replicas: 1
+          image: "valkey/valkey:{{ .Chart.AppVersion }}"
+          tls:
+            certificate:
+              secretName: "{{ .Release.Name }}-tls"
+    asserts:
+      - equal:
+          path: spec.image
+          value: valkey/valkey:v0.3.0
+      - equal:
+          path: spec.tls.certificate.secretName
+          value: RELEASE-NAME-tls
+
+  - it: templates using extraValues
+    set:
+      extraValues:
+        tlsSecret: shared-valkey-tls
+      cluster:
+        annotations:
+          note: "tls={{ .Values.extraValues.tlsSecret }}"
+        spec:
+          shards: 3
+          replicas: 0
+          tls:
+            certificate:
+              secretName: "{{ .Values.extraValues.tlsSecret }}"
+    asserts:
+      - equal:
+          path: metadata.annotations.note
+          value: tls=shared-valkey-tls
+      - equal:
+          path: spec.tls.certificate.secretName
+          value: shared-valkey-tls

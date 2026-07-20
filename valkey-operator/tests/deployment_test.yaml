@@ -1,0 +1,41 @@
+suite: operator deployment metrics flags
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should default to insecure metrics
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-secure=false
+
+  - it: should pass --metrics-secure=true when metrics.secure is enabled
+    set:
+      metrics.secure: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-secure=true
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-secure=false
+
+  - it: should bind metrics on the configured port
+    set:
+      metrics.port: 9443
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-bind-address=:9443
+
+  - it: should disable metrics when metrics.enabled is false
+    set:
+      metrics.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-bind-address=0
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-secure=false

@@ -1,26 +1,20 @@
 # Valkey Helm Chart Tasks
 
-# Run helm-unittest tests on both charts
-test: test-standalone test-cluster
-
-test-standalone:
-    @echo "=== Running Unit Tests (valkey) ==="
+# Run helm-unittest tests on all charts
+test:
+    @echo "=== Running Unit Tests ==="
     helm unittest ./valkey
-
-test-cluster:
-    @echo "=== Running Unit Tests (valkey-cluster) ==="
     helm unittest ./valkey-cluster
+    helm unittest ./valkey-operator
+    helm unittest ./valkey-resources
 
-# Lint both Helm charts
-lint: lint-standalone lint-cluster
-
-lint-standalone:
-    @echo "=== Linting Valkey Helm Chart ==="
+# Lint the Helm charts
+lint:
+    @echo "=== Linting Helm Charts ==="
     helm lint ./valkey
-
-lint-cluster:
-    @echo "=== Linting Valkey Cluster Helm Chart ==="
     helm lint ./valkey-cluster
+    helm lint ./valkey-operator
+    helm lint ./valkey-resources
 
 # Render templates with default values
 template:
@@ -29,22 +23,22 @@ template:
 template-cluster:
     helm template valkey-cluster ./valkey-cluster
 
+template-resources:
+    helm template my-cluster ./valkey-resources
+
 # Render templates with auth enabled
 template-auth:
     helm template valkey ./valkey \
         --set auth.enabled=true \
         --set auth.generateDefaultUser.enabled=true
 
-# Package both charts
-package: package-standalone package-cluster
-
-package-standalone:
+# Package the charts
+package:
     helm package ./valkey
-
-package-cluster:
     helm package ./valkey-cluster
+    helm package ./valkey-operator
+    helm package ./valkey-resources
 
 # Run all validations
 validate: lint test
     @echo "=== All validations passed ==="
-

@@ -1,25 +1,40 @@
-name: Test valkey-helm template 
+name: Test valkey-operator chart
+
 on:
   push:
     branches: ["**"]
     paths:
-      - "valkey/**"
-      - ".github/workflows/test.yml"
+      - "valkey-operator/**"
+      - ".github/workflows/test-operator.yml"
   pull_request:
     branches: ["**"]
     paths:
-      - "valkey/**"
-      - ".github/workflows/test.yml"
+      - "valkey-operator/**"
+      - ".github/workflows/test-operator.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: helm-template-${{ github.ref }}
+  group: helm-operator-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.19.4
+
+      - name: Lint chart
+        run: helm lint ./valkey-operator
+
   template:
     runs-on: ubuntu-latest
     strategy:
@@ -36,16 +51,12 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
-          version: v3.15.3
-
-      - name: Build dependencies (if any)
-        run: |
-          helm dependency build valkey || true
+          version: v3.19.4
 
       - name: Render manifests (helm template)
         run: |
-          out="/tmp/valkey-k${{ matrix.kube }}.yaml"
-          helm template valkey-tmpl ./valkey \
+          out="/tmp/valkey-operator-k${{ matrix.kube }}.yaml"
+          helm template valkey-operator-tmpl ./valkey-operator \
             --kube-version "${{ matrix.kube }}" \
             > "$out"
           echo "Rendered -> $out"
@@ -53,6 +64,6 @@ jobs:
       - name: Upload rendered manifests
         uses: actions/upload-artifact@v4
         with:
-          name: valkey-template-k${{ matrix.kube }}
-          path: /tmp/valkey-*.yaml
+          name: valkey-operator-template-k${{ matrix.kube }}
+          path: /tmp/valkey-operator-*.yaml
           if-no-files-found: error

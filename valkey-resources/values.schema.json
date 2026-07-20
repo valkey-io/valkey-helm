@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["cluster"],
+  "additionalProperties": true,
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "commonLabels": { "type": "object" },
+    "extraValues": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Free-form values referenced from templated strings in cluster.spec (and labels/annotations)."
+    },
+    "cluster": {
+      "type": "object",
+      "required": ["spec"],
+      "additionalProperties": true,
+      "properties": {
+        "annotations": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "spec": {
+          "type": "object",
+          "required": ["shards"],
+          "additionalProperties": true,
+          "description": "Drop-in for ValkeyCluster.spec; any CRD field is allowed.",
+          "properties": {
+            "shards": { "type": "integer", "minimum": 1 },
+            "replicas": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}

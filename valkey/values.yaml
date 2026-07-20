@@ -55,6 +55,11 @@ podSecurityContext:
 # Priority class name for pod scheduling (leave empty to use cluster's default)
 priorityClassName: ""
 
+# RuntimeClassName for the pods, used to select the container runtime configuration
+# (e.g. "gvisor", "kata-containers"). Leave empty to use the cluster's default runtime.
+# See https://kubernetes.io/docs/concepts/containers/runtime-class/#usage
+runtimeClassName: ""
+
 # Security context for the Valkey containers
 securityContext:
   allowPrivilegeEscalation: false
@@ -107,6 +112,36 @@ initResources: {}
   # requests:
   #   cpu: 100m
   #   memory: 128Mi
+
+# Health probes for the main Valkey container.
+# Each probe is gated on its own `enabled` flag and rendered by the
+# `valkey.healthProbes` helper. The default handler is a `valkey-cli ping` exec
+# (TLS-aware). Set `customProbe` to a full probe spec to replace the default
+# handler and timing entirely (e.g. an httpGet or tcpSocket probe).
+# The defaults below match the previous hardcoded behavior (Kubernetes probe
+# defaults); readinessProbe is opt-in since the container had none before.
+startupProbe:
+  enabled: true
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
+  customProbe: {}
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
+  customProbe: {}
+readinessProbe:
+  enabled: false
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
+  successThreshold: 1
+  customProbe: {}
 
 # Additional init containers
 extraInitContainers: []
@@ -180,6 +215,7 @@ auth:
   enabled: false
 
   # Use an existing secret for user passwords. Key defaults to username.
+  # Supports templating, e.g.: "users-{{ .Release.Name }}"
   usersExistingSecret: ""
 
   # Map of users to create with ACL permissions.

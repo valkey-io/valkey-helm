@@ -1,6 +1,12 @@
 # valkey Helm Chart
 
-A lightweight Helm chart for deploying Valkey (a Redis alternative) to Kubernetes.
+Helm charts for Valkey on Kubernetes.
+
+| Chart | Description |
+|---|---|
+| [valkey](valkey/) | Standalone / replication without operator |
+| [valkey-operator](valkey-operator/) | Installs the valkey-operator |
+| [valkey-resources](valkey-resources/) | Operator managed CRs (ValkeyCluster) |
 
 ---
 
@@ -11,11 +17,18 @@ helm repo add valkey https://valkey.io/valkey-helm/
 helm install valkey valkey/valkey
 ```
 
+Operator managed cluster:
+
+```bash
+helm install valkey-operator valkey/valkey-operator -n valkey-operator-system --create-namespace
+helm install my-cluster valkey/valkey-resources -n valkey
+```
+
 ---
 
 ## Introduction
 
-This chart bootstraps a [Valkey](https://valkey.io) deployment using the Helm package manager.
+These charts bootstrap Valkey using the Helm package manager.
 
 ---
 ## Deployment Options
@@ -65,6 +78,8 @@ Cluster mode features:
 | -------- | ------------- |
 | mk-raven | maikebit at gmail.com |
 | sgissi   | silvio at gissilabs.com |
+| jdheyburn   | joseph.heyburn at braze.com |
+| Bloodraven21   | ishanij10115 at gmail.com |
 
 ---
 

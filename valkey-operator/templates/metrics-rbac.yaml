@@ -1,0 +1,68 @@
+{{- if and .Values.rbac.create .Values.metrics.enabled .Values.metrics.secure -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "valkey-operator.fullname" . }}-metrics-auth
+  labels:
+    {{- include "valkey-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "valkey-operator.fullname" . }}-metrics-auth
+  labels:
+    {{- include "valkey-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "valkey-operator.fullname" . }}-metrics-auth
+subjects:
+- kind: ServiceAccount
+  name: {{ include "valkey-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "valkey-operator.fullname" . }}-metrics-reader
+  labels:
+    {{- include "valkey-operator.labels" . | nindent 4 }}
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+{{- if and .Values.metrics.reader.binding.create (not .Values.metrics.reader.binding.serviceAccountName) }}
+{{- fail "metrics.reader.binding.serviceAccountName is required when metrics.reader.binding.create is true" }}
+{{- end }}
+{{- if .Values.metrics.reader.binding.create }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "valkey-operator.fullname" . }}-metrics-reader
+  labels:
+    {{- include "valkey-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "valkey-operator.fullname" . }}-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: {{ tpl .Values.metrics.reader.binding.serviceAccountName . }}
+  namespace: {{ tpl (.Values.metrics.reader.binding.namespace | default .Release.Namespace) . }}
+{{- end }}
+{{- end }}
