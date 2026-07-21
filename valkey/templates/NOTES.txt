@@ -106,7 +106,7 @@ valkey> GET foo
 
 💾 Persistence
 {{- if .Values.replica.enabled }}
-- Persistence is ENABLED (required for replication mode). Each instance has its own volume.
+- Persistence is ENABLED by default (highly recommended for replication mode). Each instance has its own volume.
 - Size: {{ .Values.replica.persistence.size }}
 {{- if .Values.replica.persistence.storageClass }}
 - Storage class: {{ .Values.replica.persistence.storageClass }}
