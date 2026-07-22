@@ -2,6 +2,28 @@ apiVersion: v1
 entries:
   valkey:
   - apiVersion: v2
+    appVersion: 9.1.1
+    created: "2026-07-22T12:57:35.694047744Z"
+    description: A Helm chart for Kubernetes
+    digest: 6aa9f2e423642cae84ed6a9798cdfd0faf2e347290ce7b3e4c393333a79743f8
+    home: https://valkey.io/valkey-helm/
+    icon: https://dyltqmyl993wv.cloudfront.net/assets/stacks/valkey/img/valkey-stack-220x234.png
+    maintainers:
+    - name: raven
+      url: https://github.com/mk-raven
+    - name: sgissi
+      url: https://github.com/sgissi
+    - name: Bloodraven21
+      url: https://github.com/Bloodraven21
+    name: valkey
+    sources:
+    - https://github.com/valkey-io/valkey-helm.git
+    - https://valkey.io
+    type: application
+    urls:
+    - https://github.com/valkey-io/valkey-helm/releases/download/valkey-0.11.0/valkey-0.11.0.tgz
+    version: 0.11.0
+  - apiVersion: v2
     appVersion: 9.1.0
     created: "2026-06-18T16:19:35.723027193Z"
     description: A Helm chart for Kubernetes
@@ -726,4 +748,4 @@ entries:
     urls:
     - https://github.com/valkey-io/valkey-helm/releases/download/valkey-resources-0.1.0/valkey-resources-0.1.0.tgz
     version: 0.1.0
-generated: "2026-07-20T13:01:32.885413674Z"
+generated: "2026-07-22T12:57:35.694581438Z"
