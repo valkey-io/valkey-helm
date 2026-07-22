@@ -389,8 +389,13 @@ metrics:
     extraExporterSecrets: []
     # Environment variables to inject into the metrics exporter container
     extraEnvs: {}
-    # Example:
-    # LOG_LEVEL: info
+    # Example with plain string values:
+    #   LOG_LEVEL: info
+    # Example with secret references:
+    #   REDIS_PASSWORD:
+    #     secretKeyRef:
+    #       name: valkey-secret
+    #       key: password
     securityContext: {}
       # Example:
       # runAsNonRoot: true
