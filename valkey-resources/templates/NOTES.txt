@@ -11,4 +11,12 @@ Watch status:
 List nodes:
   kubectl get valkeynodes -n {{ .Release.Namespace }}
 
+{{- if .Values.metrics.podMonitor.enabled }}
+
+PodMonitor: {{ include "valkey-resources.fullname" . }}
+  selector: valkey.io/cluster={{ include "valkey-resources.fullname" . }}
+  port: {{ .Values.metrics.podMonitor.port }}
+{{- end }}
+
 Docs: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
+
