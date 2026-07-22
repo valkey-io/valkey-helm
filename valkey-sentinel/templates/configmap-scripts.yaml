@@ -1,0 +1,199 @@
+{{- if not .Values.existingConfigmap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-scripts
+  namespace: {{ include "valkey.namespace" . }}
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  start-valkey.sh: |
+    #!/bin/bash
+    set -e
+    {{- if .Values.image.debug }}
+    set -x
+    {{- end }}
+    
+    HOSTNAME=$(hostname)
+    HEADLESS="{{ include "valkey.fullname" . }}-headless.{{ include "valkey.namespace" . }}.svc.{{ .Values.clusterDomain }}"
+    MY_FQDN="${HOSTNAME}.${HEADLESS}"
+    PORT={{ .Values.service.port }}
+    
+    echo "Starting Valkey on ${MY_FQDN}"
+    
+    {{- if .Values.replica.preExecCmds }}
+    echo "Running pre-exec commands..."
+    {{- range .Values.replica.preExecCmds }}
+    {{ . }}
+    {{- end }}
+    {{- end }}
+    
+    # Create base config
+    cat > /data/valkey.conf <<'EOFBASE'
+    bind 0.0.0.0
+    protected-mode no
+    dir /data
+    {{- if .Values.commonConfiguration }}
+    {{ .Values.commonConfiguration | nindent 4 }}
+    {{- end }}
+    {{- if .Values.valkeyConfig }}
+    {{ .Values.valkeyConfig | nindent 4 }}
+    {{- end }}
+    {{- if .Values.replica.configuration }}
+    {{ .Values.replica.configuration | nindent 4 }}
+    {{- end }}
+    EOFBASE
+    
+    # Add runtime config
+    cat >> /data/valkey.conf <<EOF
+    port ${PORT}
+    {{- if .Values.useHostnames }}
+    replica-announce-ip ${MY_FQDN}
+    {{- else }}
+    replica-announce-ip $(hostname -i)
+    {{- end }}
+    replica-announce-port ${PORT}
+    {{- if .Values.auth.enabled }}
+    requirepass {{ include "valkey.password" . }}
+    masterauth {{ include "valkey.password" . }}
+    {{- end }}
+    {{- range .Values.replica.disableCommands }}
+    rename-command {{ . }} ""
+    {{- end }}
+    EOF
+    
+    # Configure replication
+    if [ "${HOSTNAME}" != "{{ include "valkey.fullname" . }}-0" ]; then
+      {{- if .Values.useHostnames }}
+      MASTER="{{ include "valkey.fullname" . }}-0.${HEADLESS}"
+      {{- else }}
+      MASTER="{{ include "valkey.fullname" . }}-0"
+      {{- end }}
+      
+      # DNS resolution retry logic
+      RETRIES={{ .Values.nameResolutionThreshold }}
+      TIMEOUT={{ .Values.nameResolutionTimeout }}
+      while [ $RETRIES -gt 0 ]; do
+        if nslookup "${MASTER}" >/dev/null 2>&1; then
+          echo "Master DNS resolved: ${MASTER}"
+          break
+        fi
+        echo "Waiting for master DNS resolution... ($RETRIES retries left)"
+        sleep $TIMEOUT
+        RETRIES=$((RETRIES-1))
+      done
+      
+      echo "replicaof ${MASTER} ${PORT}" >> /data/valkey.conf
+    fi
+    
+    cat /data/valkey.conf
+    
+    {{- if .Values.replica.command }}
+    exec {{ join " " .Values.replica.command }} {{ join " " .Values.replica.args }} /data/valkey.conf {{- if .Values.replica.extraFlags }} {{ join " " .Values.replica.extraFlags }}{{- end }}
+    {{- else }}
+    exec valkey-server /data/valkey.conf {{- if .Values.replica.extraFlags }} {{ join " " .Values.replica.extraFlags }}{{- end }}
+    {{- end }}
+    
+  start-sentinel.sh: |
+    #!/bin/bash
+    set -e
+    {{- if .Values.image.debug }}
+    set -x
+    {{- end }}
+    
+    HOSTNAME=$(hostname)
+    HEADLESS="{{ include "valkey.fullname" . }}-headless.{{ include "valkey.namespace" . }}.svc.{{ .Values.clusterDomain }}"
+    MY_FQDN="${HOSTNAME}.${HEADLESS}"
+    PORT={{ .Values.service.port }}
+    SENTINEL_PORT={{ .Values.sentinel.port }}
+    
+    echo "Starting Sentinel on ${MY_FQDN}"
+    
+    update_config() {
+      {{- if .Values.useHostnames }}
+      MASTER_FQDN="{{ include "valkey.fullname" . }}-0.${HEADLESS}"
+      {{- else }}
+      MASTER_FQDN="{{ include "valkey.fullname" . }}-0"
+      {{- end }}
+      
+      # DNS resolution retry for master
+      RETRIES={{ .Values.nameResolutionThreshold }}
+      TIMEOUT={{ .Values.nameResolutionTimeout }}
+      while [ $RETRIES -gt 0 ]; do
+        if nslookup "${MASTER_FQDN}" >/dev/null 2>&1; then
+          break
+        fi
+        echo "Waiting for master DNS... ($RETRIES retries left)"
+        sleep $TIMEOUT
+        RETRIES=$((RETRIES-1))
+      done
+      
+      # Try to find actual master
+      for i in $(seq 0 $(({{ .Values.replicaCount }}-1))); do
+        {{- if .Values.useHostnames }}
+        NODE="{{ include "valkey.fullname" . }}-${i}.${HEADLESS}"
+        {{- else }}
+        NODE="{{ include "valkey.fullname" . }}-${i}"
+        {{- end }}
+        if timeout 3 valkey-cli -h "${NODE}" -p ${PORT} {{- if .Values.auth.enabled }} -a "{{ include "valkey.password" . }}"{{- end }} INFO replication 2>/dev/null | grep -q "^role:master"; then
+          MASTER_FQDN="${NODE}"
+          echo "Found master: ${MASTER_FQDN}"
+          break
+        fi
+      done
+      
+      cat > /data/sentinel.conf <<EOF
+    port ${SENTINEL_PORT}
+    dir /data
+    protected-mode no
+    {{- if .Values.useHostnames }}
+    sentinel announce-hostnames yes
+    sentinel resolve-hostnames yes
+    sentinel announce-ip ${MY_FQDN}
+    {{- else }}
+    sentinel announce-ip $(hostname -i)
+    {{- end }}
+    sentinel announce-port ${SENTINEL_PORT}
+    sentinel monitor {{ .Values.sentinel.masterSet }} ${MASTER_FQDN} ${PORT} {{ .Values.sentinel.quorum }}
+    {{- if .Values.auth.enabled }}
+    sentinel auth-pass {{ .Values.sentinel.masterSet }} {{ include "valkey.password" . }}
+    {{- end }}
+    sentinel down-after-milliseconds {{ .Values.sentinel.masterSet }} {{ .Values.sentinel.downAfterMilliseconds }}
+    sentinel parallel-syncs {{ .Values.sentinel.masterSet }} {{ .Values.sentinel.parallelSyncs }}
+    sentinel failover-timeout {{ .Values.sentinel.masterSet }} {{ .Values.sentinel.failoverTimeout }}
+    EOF
+    }
+    
+    update_config
+    cat /data/sentinel.conf
+    
+    valkey-sentinel /data/sentinel.conf &
+    PID=$!
+    
+    {{- if .Values.useHostnames }}
+    # Monitor and restore DNS names if sentinel rewrites with IPs
+    while kill -0 $PID 2>/dev/null; do
+      sleep 10
+      if grep -q "sentinel monitor {{ .Values.sentinel.masterSet }} [0-9]*\.[0-9]*\." /data/sentinel.conf 2>/dev/null; then
+        echo "Restoring DNS names..."
+        MASTER_IP=$(valkey-cli -p ${SENTINEL_PORT} {{- if .Values.auth.enabled }} -a "{{ include "valkey.password" . }}"{{- end }} SENTINEL get-master-addr-by-name {{ .Values.sentinel.masterSet }} 2>/dev/null | head -n1 || echo "")
+        if [ -n "$MASTER_IP" ]; then
+          for i in $(seq 0 $(({{ .Values.replicaCount }}-1))); do
+            NODE="{{ include "valkey.fullname" . }}-${i}.${HEADLESS}"
+            NODE_IP=$(getent hosts "${NODE}" 2>/dev/null | awk '{print $1}' | head -n1)
+            if [ "$NODE_IP" = "$MASTER_IP" ]; then
+              sed -i "s/sentinel monitor {{ .Values.sentinel.masterSet }} [0-9]*\.[0-9]*\.[0-9]*\.[0-9]* /sentinel monitor {{ .Values.sentinel.masterSet }} ${NODE} /" /data/sentinel.conf
+              break
+            fi
+          done
+        fi
+      fi
+    done
+    {{- end }}
+    
+    wait $PID
+{{- end }}
