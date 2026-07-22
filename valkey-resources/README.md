@@ -1,6 +1,6 @@
 # valkey-resources
 
-![Version: 0.1.1](https://img.shields.io/badge/Version-0.1.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.3.0](https://img.shields.io/badge/AppVersion-v0.3.0-informational?style=flat-square)
+![Version: 0.1.2](https://img.shields.io/badge/Version-0.1.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.4.0](https://img.shields.io/badge/AppVersion-v0.4.0-informational?style=flat-square)
 
 Deploys a single operator managed `ValkeyCluster`. Does not install the operator.
 
@@ -8,9 +8,9 @@ Deploys a single operator managed `ValkeyCluster`. Does not install the operator
 
 * Kubernetes 1.20+
 * Helm 3.5+
-* [valkey-operator](../valkey-operator/) installed (CRDs present)
+* [valkey-operator](../valkey-operator/) **v0.4.0+** installed (CRDs present)
 
-Without CRDs the API server rejects `ValkeyCluster` on apply.
+Without matching CRDs the API server rejects `ValkeyCluster` on apply. Helm does not upgrade CRDs for you; apply the operator chart CRDs when moving to v0.4.0. See [CHANGELOG.md](CHANGELOG.md) and the [operator v0.4.0 notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.4.0).
 
 ## Install
 
@@ -40,7 +40,30 @@ cluster:
         secretName: "{{ .Values.extraValues.tlsSecret }}"
 ```
 
-See [values.yaml](values.yaml) and the [ValkeyCluster API](https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md).
+### Operator v0.4.0 `cluster.spec` shape
+
+Placement and PDB fields changed in the CRD. Use the nested forms in values:
+
+```yaml
+cluster:
+  spec:
+    shards: 3
+    replicas: 1
+    podDisruptionBudget:
+      mode: Cluster   # or Disabled
+    scheduling:
+      priorityClassName: high-priority
+      node:
+        spread:
+          shard:
+            mode: Required    # same-shard pods not co-located (anti-affinity)
+          primaries:
+            mode: Preferred
+          pods:
+            mode: Disabled
+```
+
+See [values.yaml](values.yaml), [CHANGELOG.md](CHANGELOG.md), and the [ValkeyCluster API](https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md).
 
 | Parameter | Description | Default |
 |---|---|---|
