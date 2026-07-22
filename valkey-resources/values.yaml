@@ -18,6 +18,33 @@ commonLabels: {}
 #           secretName: "{{ .Values.extraValues.tlsSecret }}"
 extraValues: {}
 
+# Scrape ValkeyNode metrics-exporter sidecars (port name "metrics", default 9121).
+# Requires Prometheus Operator CRDs. Operator enables the exporter by default
+# (cluster.spec.exporter.enabled); disable the exporter there if you do not want metrics.
+metrics:
+  podMonitor:
+    enabled: false
+    # Container port name on the metrics-exporter sidecar
+    port: metrics
+    # Namespace for the PodMonitor (defaults to release namespace)
+    namespace: ""
+    # Extra labels on the PodMonitor object (e.g. prometheus release selector)
+    labels: {}
+    annotations: {}
+    interval: ""
+    scrapeTimeout: ""
+    honorLabels: false
+    scheme: ""
+    tlsConfig: {}
+    relabelings: []
+    metricRelabelings: []
+    podTargetLabels: []
+    sampleLimit: null
+    targetLimit: null
+    # Additional matchLabels merged into the pod selector (default selects
+    # valkey.io/cluster=<ValkeyCluster name> in the release namespace)
+    selector: {}
+
 # ValkeyCluster resource. Nested so future CR kinds (e.g. standalone, sentinel)
 # can sit beside this as valkey / sentinel without a generic top-level "spec".
 # v0.1: one ValkeyCluster per release. Later kinds stay one logical workload
@@ -28,7 +55,9 @@ cluster:
   # Labels on the ValkeyCluster object (in addition to chart labels)
   labels: {}
 
-  # ValkeyCluster.spec drop-in (any CRD field allowed).
+  # ValkeyCluster.spec drop-in (any CRD field allowed). Tested against operator
+  # appVersion (v0.4.0): scheduling under spec.scheduling, PDB as {mode: ...},
+  # node.spread.shard|primaries|pods. See CHANGELOG.md.
   # Rendered via tpl so string values may use Helm templates, e.g.
   #   image: "valkey/valkey:{{ .Chart.AppVersion }}"
   #   tls.certificate.secretName: "{{ .Release.Name }}-tls"

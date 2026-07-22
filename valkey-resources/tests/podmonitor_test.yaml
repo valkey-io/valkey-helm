@@ -1,0 +1,102 @@
+suite: podmonitor
+templates:
+  - templates/podmonitor.yaml
+tests:
+  - it: does not render PodMonitor by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders PodMonitor when enabled
+    set:
+      metrics.podMonitor.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodMonitor
+      - equal:
+          path: apiVersion
+          value: monitoring.coreos.com/v1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-resources
+      - equal:
+          path: spec.selector.matchLabels["valkey.io/cluster"]
+          value: RELEASE-NAME-valkey-resources
+      - equal:
+          path: spec.namespaceSelector.matchNames[0]
+          value: NAMESPACE
+      - equal:
+          path: spec.podMetricsEndpoints[0].port
+          value: metrics
+
+  - it: uses fullnameOverride for name and cluster selector
+    set:
+      fullnameOverride: my-cluster
+      metrics.podMonitor.enabled: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-cluster
+      - equal:
+          path: spec.selector.matchLabels["valkey.io/cluster"]
+          value: my-cluster
+
+  - it: honors PodMonitor namespace and scrape knobs
+    set:
+      metrics:
+        podMonitor:
+          enabled: true
+          namespace: monitoring
+          interval: 30s
+          scrapeTimeout: 10s
+          honorLabels: true
+          scheme: https
+          labels:
+            release: prometheus
+          annotations:
+            meta: test
+          podTargetLabels:
+            - valkey.io/shard-index
+          sampleLimit: 1000
+          targetLimit: 50
+          selector:
+            app.kubernetes.io/component: valkey-node
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: monitoring
+      - equal:
+          path: metadata.labels.release
+          value: prometheus
+      - equal:
+          path: metadata.annotations.meta
+          value: test
+      - equal:
+          path: spec.podMetricsEndpoints[0].interval
+          value: 30s
+      - equal:
+          path: spec.podMetricsEndpoints[0].scrapeTimeout
+          value: 10s
+      - equal:
+          path: spec.podMetricsEndpoints[0].scheme
+          value: https
+      - equal:
+          path: spec.podMetricsEndpoints[0].honorLabels
+          value: true
+      - equal:
+          path: spec.podTargetLabels[0]
+          value: valkey.io/shard-index
+      - equal:
+          path: spec.sampleLimit
+          value: 1000
+      - equal:
+          path: spec.targetLimit
+          value: 50
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: valkey-node
+      - equal:
+          path: spec.selector.matchLabels["valkey.io/cluster"]
+          value: RELEASE-NAME-valkey-resources
