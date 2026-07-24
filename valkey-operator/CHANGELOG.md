@@ -12,6 +12,16 @@
 
 - Add log level configuration example to valkey-operator deployment.
 
+### Fixed
+
+- Align ServiceMonitor endpoint port name and scrape scheme with `metrics.secure`.
+  When secure metrics are enabled the metrics Service exposes port `https`, but
+  the ServiceMonitor previously always targeted port `http`, so scrapes failed.
+  Defaults `scheme: https` and `tlsConfig.insecureSkipVerify: true` for the
+  operator's self-signed metrics cert when `metrics.secure` is true and the
+  ServiceMonitor fields are left unset; explicit `serviceMonitor.scheme` /
+  `tlsConfig` still win.
+
 ## 0.4.0
 
 - Valkey Operator version defaults to v0.4.0. See the [v0.4.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.4.0) for the upstream changes.

@@ -235,9 +235,12 @@ metrics:
     interval: ""
     # Scrape timeout (defaults to the Prometheus global timeout when empty)
     scrapeTimeout: ""
-    # HTTP scheme used for scraping (defaults to http when empty)
+    # HTTP scheme used for scraping. When empty: https if metrics.secure is true,
+    # otherwise Prometheus defaults to http.
     scheme: ""
-    # TLS configuration used when scraping the endpoint
+    # TLS configuration used when scraping the endpoint. When empty and
+    # metrics.secure is true, insecureSkipVerify is set so the operator's
+    # self-signed metrics cert scrapes successfully. Set explicitly to override.
     tlsConfig: {}
     # Keep labels from the scraped target on collision with server-side labels
     honorLabels: false
