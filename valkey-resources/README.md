@@ -1,6 +1,6 @@
 # valkey-resources
 
-![Version: 0.1.2](https://img.shields.io/badge/Version-0.1.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.4.0](https://img.shields.io/badge/AppVersion-v0.4.0-informational?style=flat-square)
+![Version: 0.1.3](https://img.shields.io/badge/Version-0.1.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.4.0](https://img.shields.io/badge/AppVersion-v0.4.0-informational?style=flat-square)
 
 Deploys a single operator managed `ValkeyCluster`. Does not install the operator.
 
@@ -20,6 +20,17 @@ helm install valkey-operator valkey/valkey-operator \
 
 helm install my-cluster valkey/valkey-resources -n valkey
 ```
+
+### Examples
+
+Copy-paste values for common shapes live under [`examples/`](examples/) (operator v0.4.0+). Start with `minimal.yaml` and `scheduling-node-spread.yaml` for production node HA via `scheduling.node.spread`. See [`examples/README.md`](examples/README.md).
+
+```bash
+helm install my-cluster ./valkey-resources -n valkey \
+  -f valkey-resources/examples/scheduling-node-spread.yaml
+```
+
+Further examples and helm unittest render smoke for that directory are planned as a follow-up.
 
 ## Configuration
 

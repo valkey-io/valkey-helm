@@ -1,0 +1,5 @@
+# Explicit topology size only. Matches chart defaults for shards / replicas.
+cluster:
+  spec:
+    shards: 3
+    replicas: 1
