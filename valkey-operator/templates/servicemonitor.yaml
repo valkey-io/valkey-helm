@@ -32,9 +32,8 @@ spec:
     {{- if .Values.metrics.serviceMonitor.tlsConfig }}
     tlsConfig:
       {{- toYaml .Values.metrics.serviceMonitor.tlsConfig | nindent 6 }}
-    {{- else if .Values.metrics.secure }}
-    # Operator metrics use a self-signed cert by default; scrapers must skip verify
-    # unless a custom tlsConfig is provided.
+    {{- else if and .Values.metrics.secure .Values.metrics.serviceMonitor.insecureSkipVerify }}
+    # Opt-in: operator metrics use a self-signed cert by default.
     tlsConfig:
       insecureSkipVerify: true
     {{- end }}

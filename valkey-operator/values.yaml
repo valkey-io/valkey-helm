@@ -238,9 +238,12 @@ metrics:
     # HTTP scheme used for scraping. When empty: https if metrics.secure is true,
     # otherwise Prometheus defaults to http.
     scheme: ""
-    # TLS configuration used when scraping the endpoint. When empty and
-    # metrics.secure is true, insecureSkipVerify is set so the operator's
-    # self-signed metrics cert scrapes successfully. Set explicitly to override.
+    # When metrics.secure is true and tlsConfig is empty, set
+    # tlsConfig.insecureSkipVerify so scrapers accept the operator's self-signed
+    # metrics cert. Defaults to false (opt-in). Ignored when tlsConfig is set.
+    insecureSkipVerify: false
+    # Full TLS configuration for the scrape endpoint. When set, wins over
+    # insecureSkipVerify. Use this to trust a real CA instead of skip-verify.
     tlsConfig: {}
     # Keep labels from the scraped target on collision with server-side labels
     honorLabels: false
