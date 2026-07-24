@@ -12,6 +12,21 @@
       "additionalProperties": true,
       "description": "Free-form values referenced from templated strings in cluster.spec (and labels/annotations)."
     },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "podMonitor": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "port": { "type": ["string", "integer"] },
+            "namespace": { "type": "string" }
+          }
+        }
+      }
+    },
     "cluster": {
       "type": "object",
       "required": ["spec"],
