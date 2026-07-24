@@ -55,7 +55,9 @@ cluster:
   # Labels on the ValkeyCluster object (in addition to chart labels)
   labels: {}
 
-  # ValkeyCluster.spec drop-in (any CRD field allowed).
+  # ValkeyCluster.spec drop-in (any CRD field allowed). Tested against operator
+  # appVersion (v0.4.0): scheduling under spec.scheduling, PDB as {mode: ...},
+  # node.spread.shard|primaries|pods. See CHANGELOG.md.
   # Rendered via tpl so string values may use Helm templates, e.g.
   #   image: "valkey/valkey:{{ .Chart.AppVersion }}"
   #   tls.certificate.secretName: "{{ .Release.Name }}-tls"
