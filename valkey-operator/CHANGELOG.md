@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+### Changed
+
+- Add log level configuration example to valkey-operator deployment.
+
 ## 0.4.0
 
 - Valkey Operator version defaults to v0.4.0. See the [v0.4.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.4.0) for the upstream changes.

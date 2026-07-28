@@ -58,6 +58,9 @@ manager:
   #     - valkey-{{ .Values.myEnv }}
   watchNamespaces: []
   # Additional command-line arguments for the operator binary
+  # Example: set log verbosity
+  #   args:
+  #     - --zap-log-level=info    # debug, info, error
   args: []
 
 # Resource limits/requests for the operator container
