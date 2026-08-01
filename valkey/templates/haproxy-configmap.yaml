@@ -1,0 +1,92 @@
+{{- if .Values.haproxy.enabled }}
+{{- $port := .Values.service.port }}
+{{- $pods := add (int .Values.replica.replicas) 1 | int }}
+{{- $checkUser := .Values.haproxy.checkUser | default "default" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-haproxy
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: haproxy
+data:
+  haproxy.cfg: |
+    global
+      log stdout format raw local0
+      maxconn {{ .Values.haproxy.config.maxconn }}
+
+    # Pod IPs change on every reschedule, so the backends are resolved at
+    # runtime instead of once at startup.
+    resolvers kubernetes
+      parse-resolv-conf
+      hold valid 1s
+      hold nx 1s
+      hold other 1s
+      hold refused 1s
+      hold timeout 1s
+
+    defaults
+      log global
+      mode tcp
+      option tcplog
+      retries 3
+      timeout connect {{ .Values.haproxy.config.timeout.connect }}
+      timeout client {{ .Values.haproxy.config.timeout.client }}
+      timeout server {{ .Values.haproxy.config.timeout.server }}
+      # Pub/sub connections are idle by design. Without a tunnel timeout the
+      # client and server timeouts above would drop every SUBSCRIBE.
+      timeout tunnel {{ .Values.haproxy.config.timeout.tunnel }}
+      option clitcpka
+      option srvtcpka
+
+    frontend valkey_write
+      bind *:{{ .Values.haproxy.service.port }}
+      default_backend valkey_master
+
+    frontend valkey_read
+      bind *:{{ .Values.haproxy.service.readPort }}
+      default_backend valkey_replicas
+
+    # Only the node that answers "role:master" receives traffic. The health
+    # check is the failover mechanism, so no Sentinel watcher is needed.
+    backend valkey_master
+      option tcp-check
+      tcp-check connect port {{ $port }}{{ if .Values.tls.enabled }} ssl{{ end }}
+      {{- if .Values.auth.enabled }}
+      tcp-check send AUTH\ {{ $checkUser }}\ "${VALKEY_CHECK_PASSWORD}"\r\n
+      tcp-check expect string +OK
+      {{- end }}
+      # QUIT is sent before the expect so that the node closes the connection as
+      # soon as it has answered. Without it a replica would only fail the check
+      # once "timeout check" expires, and would keep receiving writes until then.
+      tcp-check send info\ replication\r\n
+      tcp-check send QUIT\r\n
+      tcp-check expect string role:master
+      timeout check {{ .Values.haproxy.config.checkTimeout }}
+      # init-state down keeps a node out of rotation until a check has proven it
+      # is the master, otherwise a starting HAProxy would forward writes to a
+      # replica during the first few seconds. fall 1 takes a demoted master out
+      # immediately, and shutdown-sessions drops its connections so that clients
+      # reconnect to the new master instead of holding a read-only one.
+      default-server check inter {{ .Values.haproxy.config.checkInterval }} fall 1 rise 1 init-addr last,libc,none init-state down resolvers kubernetes on-marked-down shutdown-sessions{{ include "valkey.haproxy.serverTlsOptions" . }}
+      {{- range $i := until $pods }}
+      server {{ include "valkey.fullname" $ }}-{{ $i }} {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $port }}
+      {{- end }}
+
+    backend valkey_replicas
+      option tcp-check
+      tcp-check connect port {{ $port }}{{ if .Values.tls.enabled }} ssl{{ end }}
+      {{- if .Values.auth.enabled }}
+      tcp-check send AUTH\ {{ $checkUser }}\ "${VALKEY_CHECK_PASSWORD}"\r\n
+      tcp-check expect string +OK
+      {{- end }}
+      tcp-check send PING\r\n
+      tcp-check send QUIT\r\n
+      tcp-check expect string +PONG
+      timeout check {{ .Values.haproxy.config.checkTimeout }}
+      balance {{ .Values.haproxy.config.readBalance }}
+      default-server check inter {{ .Values.haproxy.config.checkInterval }} fall 2 rise 1 init-addr last,libc,none init-state down resolvers kubernetes{{ include "valkey.haproxy.serverTlsOptions" . }}
+      {{- range $i := until $pods }}
+      server {{ include "valkey.fullname" $ }}-{{ $i }} {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $port }}
+      {{- end }}
+{{- end }}

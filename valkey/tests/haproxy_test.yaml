@@ -1,0 +1,202 @@
+suite: haproxy configuration
+templates:
+  - templates/haproxy-configmap.yaml
+  - templates/haproxy-deployment.yaml
+  - templates/haproxy-service.yaml
+set:
+  replica.enabled: true
+  replica.persistence.size: "5Gi"
+  replica.sentinel.enabled: true
+  haproxy.enabled: true
+tests:
+  - it: should fail when sentinel is not enabled
+    set:
+      replica.sentinel.enabled: false
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "HAProxy routes clients to whichever node Sentinel promoted.*"
+
+  - it: should fail when the check user is missing from aclUsers
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+      haproxy.checkUser: "missing-user"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "HAProxy check user 'missing-user' must be defined in auth.aclUsers.*"
+
+  - it: should route the write port to the node that reports role:master
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check send info\\ replication\\r\\n\n  tcp-check send QUIT\\r\\n\n  tcp-check expect string role:master'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'backend valkey_master'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-2 RELEASE-NAME-valkey-2\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local:6379'
+
+  - it: should keep a node out of the write backend until it proves it is master
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'fall 1 rise 1 init-addr last,libc,none init-state down .*on-marked-down shutdown-sessions'
+
+  - it: should keep pub/sub connections open
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'timeout tunnel 0s'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'option clitcpka'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'option srvtcpka'
+
+  - it: should render one server per valkey pod
+    set:
+      replica.replicas: 4
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-4 '
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-5 '
+
+  - it: should not authenticate the health check when auth is disabled
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check send AUTH'
+
+  - it: should take the health check password from the secret, never the configmap
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "supersecret"
+    templates:
+      - templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check send AUTH\\ default\\ "\$\{VALKEY_CHECK_PASSWORD\}"'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'supersecret'
+
+  - it: should read the health check password from the generated auth secret
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: VALKEY_CHECK_PASSWORD
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: RELEASE-NAME-valkey-auth
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: default-password
+
+  - it: should read the health check password from an existing secret
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          passwordKey: "admin-pwd"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: my-users
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: admin-pwd
+
+  - it: should run without a writable root filesystem and without extra tooling
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - notExists:
+          path: spec.template.spec.containers[0].command
+
+  - it: should verify the node certificates when TLS is enabled
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check connect port 6379 ssl'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'ssl ca-file /tls/ca.crt verify required'
+
+  - it: should skip certificate verification when asked to
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      haproxy.tls.verify: none
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'ssl verify none'
+
+  - it: should expose a write and a read port
+    template: templates/haproxy-service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].name
+          value: valkey-write
+      - equal:
+          path: spec.ports[0].port
+          value: 6379
+      - equal:
+          path: spec.ports[1].name
+          value: valkey-read
+      - equal:
+          path: spec.ports[1].port
+          value: 6380
+
+  - it: should not render anything when haproxy is disabled
+    set:
+      haproxy.enabled: false
+    templates:
+      - templates/haproxy-configmap.yaml
+      - templates/haproxy-deployment.yaml
+      - templates/haproxy-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 0

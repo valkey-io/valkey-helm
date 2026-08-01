@@ -111,6 +111,145 @@
                 }
             }
         },
+        "haproxy": {
+            "type": "object",
+            "properties": {
+                "affinity": {
+                    "type": "object"
+                },
+                "checkUser": {
+                    "type": "string"
+                },
+                "config": {
+                    "type": "object",
+                    "properties": {
+                        "checkInterval": {
+                            "type": "string"
+                        },
+                        "checkTimeout": {
+                            "type": "string"
+                        },
+                        "maxconn": {
+                            "type": "integer"
+                        },
+                        "readBalance": {
+                            "type": "string"
+                        },
+                        "timeout": {
+                            "type": "object",
+                            "properties": {
+                                "client": {
+                                    "type": "string"
+                                },
+                                "connect": {
+                                    "type": "string"
+                                },
+                                "server": {
+                                    "type": "string"
+                                },
+                                "tunnel": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "extraInitContainers": {
+                    "type": "array"
+                },
+                "extraVolumeMounts": {
+                    "type": "array"
+                },
+                "extraVolumes": {
+                    "type": "array"
+                },
+                "image": {
+                    "type": "object",
+                    "properties": {
+                        "pullPolicy": {
+                            "type": "string"
+                        },
+                        "registry": {
+                            "type": "string"
+                        },
+                        "repository": {
+                            "type": "string"
+                        },
+                        "tag": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "nodeSelector": {
+                    "type": "object"
+                },
+                "podSecurityContext": {
+                    "type": "object"
+                },
+                "replicas": {
+                    "type": "integer"
+                },
+                "resources": {
+                    "type": "object"
+                },
+                "securityContext": {
+                    "type": "object"
+                },
+                "service": {
+                    "type": "object",
+                    "properties": {
+                        "annotations": {
+                            "type": "object"
+                        },
+                        "clusterIP": {
+                            "type": "string"
+                        },
+                        "loadBalancerClass": {
+                            "type": "string"
+                        },
+                        "loadBalancerSourceRanges": {
+                            "type": "array"
+                        },
+                        "nodePort": {
+                            "type": "integer"
+                        },
+                        "port": {
+                            "type": "integer"
+                        },
+                        "readNodePort": {
+                            "type": "integer"
+                        },
+                        "readPort": {
+                            "type": "integer"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "tls": {
+                    "type": "object",
+                    "properties": {
+                        "verify": {
+                            "type": "string",
+                            "enum": [
+                                "required",
+                                "none"
+                            ]
+                        }
+                    }
+                },
+                "tolerations": {
+                    "type": "array"
+                },
+                "topologySpreadConstraints": {
+                    "type": "array"
+                }
+            }
+        },
         "image": {
             "type": "object",
             "properties": {
