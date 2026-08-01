@@ -285,6 +285,103 @@ tests:
           path: data["init.sh"]
           pattern: 'REPLICATION_TARGET="replicaof \$MASTER_HOST \$MASTER_PORT"'
 
+  - it: should ask the running sentinels before falling back to the pod index
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'master_from_sentinels\(\) \{'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'sentinel get-master-addr-by-name mymaster'
+
+  - it: should reject an incomplete answer from a peer sentinel
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'echo "\$port" \| grep -qE "\^\[0-9\]\+\$"'
+
+  - it: should reject an incomplete peer answer in the init script too
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'echo "\$port" \| grep -qE "\^\[0-9\]\+\$"'
+
+  - it: should keep the credentials out of the process list
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'REDISCLI_AUTH='
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: ' -a "\$'
+      - notMatchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: ' -a "\$'
+      - notMatchRegex:
+          path: data["sentinel-ping.sh"]
+          pattern: ' -a "\$'
+
+  - it: should render the listen port from service.port
+    set:
+      service.port: 7000
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'echo "port 7000"'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'echo "port 6379"'
+
+  - it: should give the graceful failover time to finish before SIGKILL
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 30
+
+  - it: should fail when the preStop failover outlasts the grace period
+    set:
+      replica.sentinel.preStopFailoverTimeoutSeconds: 30
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "preStopFailoverTimeoutSeconds \\(30\\) must be lower than replica.terminationGracePeriodSeconds \\(30\\).*"
+
+  - it: should let an existing release keep its pod management policy
+    set:
+      replica.podManagementPolicy: OrderedReady
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: OrderedReady
+
+  - it: should render loadBalancerSourceRanges as a yaml list
+    set:
+      replica.sentinel.service.type: LoadBalancer
+      replica.sentinel.service.loadBalancerSourceRanges:
+        - 10.0.0.0/8
+        - 10.1.0.0/16
+    template: templates/sentinel-service.yaml
+    asserts:
+      - equal:
+          path: spec.loadBalancerSourceRanges
+          value: [ "10.0.0.0/8", "10.1.0.0/16" ]
+
   - it: should not render any sentinel resource when sentinel is disabled
     set:
       replica.sentinel.enabled: false

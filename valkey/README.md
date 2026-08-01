@@ -106,6 +106,18 @@ The minimum permissions are:
 +config|rewrite +client|setname +client|kill +script|kill +psync +replconf
 ```
 
+**Enabling Sentinel on an existing release:**
+
+`podManagementPolicy` is immutable, and the chart switches it to `Parallel` when Sentinel is enabled, so `helm upgrade` on an existing replication release is rejected by Kubernetes.
+Either set `replica.podManagementPolicy: OrderedReady` to keep the current value, or recreate the StatefulSet while keeping the pods and volumes:
+
+```bash
+kubectl delete statefulset <release>-valkey --cascade=orphan
+helm upgrade <release> valkey/valkey -f your-values.yaml
+```
+
+The same applies to `replica.sentinel.persistence.enabled`, which adds a `volumeClaimTemplates` entry.
+
 **Failover behaviour:**
 
 A master that stops responding for `replica.sentinel.downAfterMilliseconds` is replaced within a few seconds.

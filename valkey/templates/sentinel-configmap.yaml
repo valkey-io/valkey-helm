@@ -63,21 +63,25 @@ data:
     MONITOR_PASSWORD=$(get_user_password "{{ $monitorUser }}" "{{ $monitorPasswordKey }}") || exit 1
     {{- end }}
 
-    # Credentials are passed as arguments and never written to the log.
+    # The password goes through REDISCLI_AUTH rather than an argument, so that
+    # it does not show up in the process list of the pod.
     sentinel_cli() {
+      {{- if .Values.auth.enabled }}
+      REDISCLI_AUTH="$DEFAULT_PASSWORD" \
+      {{- end }}
       valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
-        {{- if .Values.auth.enabled }}
-        -a "$DEFAULT_PASSWORD" --no-auth-warning \
-        {{- end }}
-        -p "{{ $sentinelPort }}" "$@"
+        -t 2 -p "{{ $sentinelPort }}" "$@"
     }
 
     valkey_cli() {
+      {{- if .Values.auth.enabled }}
+      REDISCLI_AUTH="$MONITOR_PASSWORD" \
+      {{- end }}
       valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
         {{- if .Values.auth.enabled }}
-        --user "{{ $monitorUser }}" -a "$MONITOR_PASSWORD" --no-auth-warning \
+        --user "{{ $monitorUser }}" \
         {{- end }}
-        -p "{{ .Values.service.port }}" "$@"
+        -t 2 -p "{{ .Values.service.port }}" "$@"
     }
 
     # Ask the Sentinels that are already running. They hold the authoritative
@@ -89,9 +93,13 @@ data:
         peer="{{ include "valkey.fullname" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
         if [ "$peer" != "$SELF_HOST" ]; then
           addr=$(sentinel_cli -h "$peer" sentinel get-master-addr-by-name "$MASTER_SET" 2>/dev/null || true)
-          if [ -n "$addr" ]; then
-            log "Sentinel $peer reports the master as $(echo "$addr" | tr '\n' ' ')"
-            echo "$addr"
+          host=$(echo "$addr" | sed -n 1p)
+          port=$(echo "$addr" | sed -n 2p)
+          # A peer that does not know this master set answers with an error or a
+          # single line, which would otherwise become a broken monitor directive.
+          if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
+            log "Sentinel $peer reports the master as $host:$port"
+            printf '%s\n%s\n' "$host" "$port"
             return 0
           fi
         fi
@@ -118,7 +126,7 @@ data:
 
       host=$(echo "$info" | sed -n 's/^master_host://p')
       port=$(echo "$info" | sed -n 's/^master_port://p')
-      if [ -n "$host" ] && [ -n "$port" ]; then
+      if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
         log "The local Valkey node replicates from $host:$port"
         printf '%s\n%s\n' "$host" "$port"
         return 0
@@ -138,9 +146,11 @@ data:
 
     MASTER_HOST="$DEFAULT_MASTER_HOST"
     DISCOVERED=$(master_from_peers || master_from_local_node || true)
-    if [ -n "$DISCOVERED" ]; then
-      MASTER_HOST=$(echo "$DISCOVERED" | sed -n 1p)
-      MASTER_PORT=$(echo "$DISCOVERED" | sed -n 2p)
+    DISCOVERED_HOST=$(echo "$DISCOVERED" | sed -n 1p)
+    DISCOVERED_PORT=$(echo "$DISCOVERED" | sed -n 2p)
+    if [ -n "$DISCOVERED_HOST" ] && [ -n "$DISCOVERED_PORT" ]; then
+      MASTER_HOST="$DISCOVERED_HOST"
+      MASTER_PORT="$DISCOVERED_PORT"
     else
       log "No Sentinel peer or Valkey node answered, bootstrapping with $MASTER_HOST as master"
     fi
@@ -235,11 +245,8 @@ data:
     fi
     {{- end }}
 
-    REPLY=$(valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
-      {{- if .Values.auth.enabled }}
-      -a "$PASSWORD" --no-auth-warning \
-      {{- end }}
-      -p {{ $sentinelPort }} ping)
+    REPLY=$({{ if .Values.auth.enabled }}REDISCLI_AUTH="$PASSWORD" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+      -t 2 -p {{ $sentinelPort }} ping)
 
     [ "$REPLY" = "PONG" ]
   {{- if .Values.replica.sentinel.preStopFailover }}
@@ -283,11 +290,14 @@ data:
     {{- end }}
 
     local_role() {
+      {{- if .Values.auth.enabled }}
+      REDISCLI_AUTH="$MONITOR_PASSWORD" \
+      {{- end }}
       valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
         {{- if .Values.auth.enabled }}
-        --user "{{ $monitorUser }}" -a "$MONITOR_PASSWORD" --no-auth-warning \
+        --user "{{ $monitorUser }}" \
         {{- end }}
-        -p {{ .Values.service.port }} info replication 2>/dev/null | sed -n 's/^role://p' | tr -d '\r' || true
+        -t 2 -p {{ .Values.service.port }} info replication 2>/dev/null | sed -n 's/^role://p' | tr -d '\r' || true
     }
 
     if [ "$(local_role)" != "master" ]; then
@@ -296,11 +306,8 @@ data:
     fi
 
     log "This pod is the master, asking Sentinel to fail over before shutting down"
-    valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
-      {{- if .Values.auth.enabled }}
-      -a "$DEFAULT_PASSWORD" --no-auth-warning \
-      {{- end }}
-      -p {{ $sentinelPort }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
+    {{ if .Values.auth.enabled }}REDISCLI_AUTH="$DEFAULT_PASSWORD" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+      -t 2 -p {{ $sentinelPort }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
         log "WARN: the failover request failed, continuing with the shutdown"
         exit 0
       }

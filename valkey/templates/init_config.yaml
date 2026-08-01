@@ -104,9 +104,9 @@ data:
       echo "tls-auth-clients no"
       {{- end }}
       echo "port 0"
-      echo "tls-port 6379"
+      echo "tls-port {{ .Values.service.port }}"
 {{- else }}
-      echo "port 6379"
+      echo "port {{ .Values.service.port }}"
 {{- end }}
       echo "protected-mode no"
       echo "bind * -::*"
@@ -180,6 +180,39 @@ data:
       echo "replica-announce-port {{ .Values.service.port }}"
     } >>"$VALKEY_CONFIG_TMP"
 
+    {{- if .Values.replica.sentinel.enabled }}
+    SELF_HOST="{{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+
+    # Ask the Sentinels that are already running which node is the master.
+    # Without this, a pod that lost its volume would fall back to the pod index
+    # and pod-0 would come back as a second writable master after a failover.
+    master_from_sentinels() {
+      {{- if .Values.auth.enabled }}
+      {{- $defaultUser := index .Values.auth.aclUsers "default" }}
+      sentinel_password=$(get_user_password "default" "{{ $defaultUser.passwordKey | default "default" }}") || return 1
+      {{- end }}
+      i=0
+      while [ "$i" -lt {{ add (int .Values.replica.replicas) 1 }} ]; do
+        peer="{{ include "valkey.fullname" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        if [ "$peer" != "$SELF_HOST" ]; then
+          addr=$({{ if .Values.auth.enabled }}REDISCLI_AUTH="$sentinel_password" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+            -t 2 -h "$peer" -p {{ .Values.replica.sentinel.port }} \
+            sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null || true)
+          host=$(echo "$addr" | sed -n 1p)
+          port=$(echo "$addr" | sed -n 2p)
+          # Reject anything that is not a complete host/port pair, an error
+          # reply would otherwise be turned into a bogus replication target.
+          if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
+            printf '%s %s\n' "$host" "$port"
+            return 0
+          fi
+        fi
+        i=$((i + 1))
+      done
+      return 1
+    }
+    {{- end }}
+
     # Determine the replication target for this pod.
     REPLICATION_TARGET=""
     {{- if .Values.replica.sentinel.enabled }}
@@ -191,11 +224,25 @@ data:
       # A complete config from a previous run without a replicaof directive:
       # this pod was the master and stays the master.
       log "This pod (index $POD_INDEX) was the master before the restart, staying MASTER"
-    elif [ "$POD_INDEX" = "0" ]; then
-      log "Bootstrapping cluster, this pod (index $POD_INDEX) starts as MASTER"
     else
-      log "Bootstrapping cluster, this pod (index $POD_INDEX) starts as REPLICA of $MASTER_HOST:$MASTER_PORT"
-      REPLICATION_TARGET="replicaof $MASTER_HOST $MASTER_PORT"
+      # No usable local state: this is either a first boot or a pod that lost
+      # its volume.
+      DISCOVERED=$(master_from_sentinels || true)
+      if [ -n "$DISCOVERED" ]; then
+        FOUND_HOST=${DISCOVERED% *}
+        FOUND_PORT=${DISCOVERED#* }
+        if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
+          log "Sentinel reports this pod as the master, starting as MASTER"
+        else
+          log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
+          REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
+        fi
+      elif [ "$POD_INDEX" = "0" ]; then
+        log "Bootstrapping cluster, this pod (index $POD_INDEX) starts as MASTER"
+      else
+        log "Bootstrapping cluster, this pod (index $POD_INDEX) starts as REPLICA of $MASTER_HOST:$MASTER_PORT"
+        REPLICATION_TARGET="replicaof $MASTER_HOST $MASTER_PORT"
+      fi
     fi
     {{- else }}
     if [ "$POD_INDEX" = "0" ]; then

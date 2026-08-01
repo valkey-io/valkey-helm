@@ -244,6 +244,18 @@ replica:
   # Number of replica instances (total pods = replicas + 1 master)
   replicas: 2
 
+  # Pod management policy for the StatefulSet. Empty means OrderedReady, or
+  # Parallel when Sentinel is enabled so that the quorum can form without
+  # waiting for pod-0. This field is immutable: setting it explicitly to
+  # OrderedReady lets an existing release enable Sentinel without recreating
+  # the StatefulSet.
+  podManagementPolicy: ""
+
+  # Grace period for a terminating pod. It must be longer than
+  # sentinel.preStopFailoverTimeoutSeconds, otherwise Kubernetes sends SIGKILL
+  # while the graceful failover is still running.
+  terminationGracePeriodSeconds: 30
+
   # Username for replicas to authenticate to master, ignored if auth.enabled is false.
   # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
   # The chart requires this to retrieve the password for replica authentication.
