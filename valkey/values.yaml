@@ -403,6 +403,112 @@ replica:
       accessModes:
         - ReadWriteOnce
 
+# HAProxy in front of a Sentinel setup, for clients that cannot talk to Sentinel.
+# It health checks every Valkey node and forwards writes to whichever one answers
+# "role:master", so a failover needs no client support and no extra watcher.
+haproxy:
+  # Enable HAProxy (requires replica.enabled and replica.sentinel.enabled)
+  enabled: false
+
+  # Number of HAProxy pods
+  replicas: 3
+
+  image:
+    # Image registry
+    registry: docker.io
+    # HAProxy container image repository
+    repository: haproxy
+    # Image pull policy (Always, IfNotPresent, Never)
+    pullPolicy: IfNotPresent
+    # Image tag. HAProxy 3.1 or newer is required for the init-state server
+    # option, which keeps replicas out of the write backend on startup.
+    tag: "3.2-alpine"
+
+  # User HAProxy authenticates with to run its health check, ignored if
+  # auth.enabled is false. Must be defined in auth.aclUsers and needs +info
+  # and +ping. Defaults to the 'default' user.
+  checkUser: ""
+
+  service:
+    # Service type (ClusterIP, NodePort, LoadBalancer)
+    type: ClusterIP
+    # Port forwarding to the current master, for reads and writes
+    port: 6379
+    # Port load balancing across all healthy nodes, for reads only
+    readPort: 6380
+    # Optional annotations for the HAProxy service
+    annotations: {}
+    # NodePort values (if service.type is NodePort)
+    nodePort: 0
+    readNodePort: 0
+    # ClusterIP value
+    clusterIP: ""
+    # Class of a load balancer implementation
+    loadBalancerClass: ""
+    # Restricts traffic through the cloud-provider load balancer to these client IPs
+    loadBalancerSourceRanges: []
+
+  config:
+    # Maximum number of concurrent connections
+    maxconn: 4096
+    # How often each Valkey node is health checked. This is also how long a
+    # failover takes to be reflected in the routing.
+    checkInterval: 2s
+    # Maximum duration of a single health check
+    checkTimeout: 5s
+    # Load balancing algorithm for the read port
+    readBalance: roundrobin
+    timeout:
+      connect: 5s
+      client: 1m
+      server: 1m
+      # Timeout for long lived bidirectional connections such as pub/sub.
+      # 0s keeps SUBSCRIBE connections open indefinitely.
+      tunnel: 0s
+
+  tls:
+    # Certificate validation for the connections to the Valkey nodes, only used
+    # when tls.enabled is true. Either "required" (validate against
+    # tls.caPublicKey) or "none".
+    verify: required
+
+  # Resource limits/requests for the HAProxy container
+  resources: {}
+    # Example:
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  # Security context for the HAProxy pod
+  podSecurityContext:
+    runAsUser: 99
+    runAsGroup: 99
+    seccompProfile:
+      type: RuntimeDefault
+
+  # Security context for the HAProxy container
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+
+  # Scheduling for the HAProxy pods, falls back to the top level values
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  topologySpreadConstraints: []
+
+  # Additional init containers, volumes and volume mounts
+  extraInitContainers: []
+  extraVolumes: []
+  extraVolumeMounts: []
+
 tls:
   # Enable TLS
   enabled: false

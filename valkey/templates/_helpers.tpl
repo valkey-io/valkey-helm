@@ -226,6 +226,43 @@ Validate sentinel configuration
 {{- end -}}
 
 {{/*
+Returns the HAProxy container image
+*/}}
+{{- define "valkey.haproxy.image" -}}
+{{- include "common.image" (dict "image" .Values.haproxy.image "global" .Values.global) }}
+{{- end -}}
+
+{{/*
+Per-server TLS options for the HAProxy backends
+*/}}
+{{- define "valkey.haproxy.serverTlsOptions" -}}
+{{- if .Values.tls.enabled }} ssl
+{{- if eq .Values.haproxy.tls.verify "required" }} ca-file /tls/{{ .Values.tls.caPublicKey }} verify required
+{{- else }} verify none
+{{- end }}
+{{- if .Values.tls.requireClientCertificate }} crt /tls/{{ .Values.tls.serverPublicKey }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Validate haproxy configuration
+*/}}
+{{- define "valkey.validateHaproxyConfig" -}}
+{{- if .Values.haproxy.enabled }}
+  {{- if not (and .Values.replica.enabled .Values.replica.sentinel.enabled) }}
+    {{- fail "HAProxy routes clients to whichever node Sentinel promoted. Please set replica.enabled=true and replica.sentinel.enabled=true, or disable haproxy." }}
+  {{- end }}
+  {{- if .Values.auth.enabled }}
+    {{- $checkUser := .Values.haproxy.checkUser | default "default" }}
+    {{- if not (hasKey .Values.auth.aclUsers $checkUser) }}
+      {{- fail (printf "HAProxy check user '%s' must be defined in auth.aclUsers. HAProxy needs it to run the health check that finds the master." $checkUser) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Render the Valkey server container health probes (startupProbe, livenessProbe,
 readinessProbe). Each probe is gated on its own `enabled` flag. When a probe's
 `customProbe` map is set it replaces the default handler and timing entirely;

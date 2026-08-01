@@ -112,6 +112,40 @@ A master that stops responding for `replica.sentinel.downAfterMilliseconds` is r
 When a master pod is terminated by a rolling update, its `preStop` hook asks Sentinel to promote a replica first, so the failover happens before the pod goes away rather than after.
 The replication topology survives a full restart of the StatefulSet: each pod restores the replication target Sentinel last wrote, and each Sentinel rediscovers the current master instead of assuming it is pod-0.
 
+### HAProxy Front-End
+
+Sentinel requires a Sentinel-aware client.
+When a client library does not support it, enable HAProxy to get a plain connection endpoint that always points at the current master:
+
+```bash
+helm install valkey valkey/valkey -f examples/ha-sentinel.yaml --set haproxy.enabled=true
+```
+
+HAProxy health checks every Valkey node with `INFO replication` and forwards the write port only to the node that answers `role:master`.
+The health check is the failover mechanism, so no sidecar, no runtime package installation and no admin socket are involved.
+
+**Services:**
+
+* `valkey-haproxy:6379`: reads and writes, always routed to the current master
+* `valkey-haproxy:6380`: reads, load balanced across all healthy nodes
+
+**Failover behaviour:**
+
+When the master fails, HAProxy drops the connections to it and starts routing to the promoted node within `haproxy.config.checkInterval`.
+Clients see connection errors for a few seconds and must reconnect, which is what a Sentinel-aware client would also do.
+A short `-READONLY` window is still possible while a recovered old master is being demoted by Sentinel.
+
+**Authentication:**
+
+HAProxy authenticates its health check as `haproxy.checkUser`, which defaults to the `default` user and needs `+info` and `+ping`.
+The password is passed to HAProxy as an environment variable read from the existing secret, so it never lands in a ConfigMap.
+
+**TLS:**
+
+HAProxy connects to the nodes over TLS when `tls.enabled` is true and validates their certificates against `tls.caPublicKey`.
+Set `haproxy.tls.verify: none` if the certificates do not cover the pod DNS names.
+Note that HAProxy itself accepts plaintext client connections.
+
 ## Cluster Mode
 
 This chart does not and will not support **Valkey cluster** mode. Managing a clustered topology is fundamentally different from standalone or replicated deployments, and the operational requirements go well beyond what this chart is designed to handle.
@@ -446,6 +480,32 @@ tls:
 | replica.sentinel.persistence.enabled | bool | `false` |  |
 | replica.sentinel.persistence.size | string | `"100Mi"` |  |
 | replica.sentinel.persistence.storageClass | string | `""` |  |
+| haproxy.enabled | bool | `false` | Route non Sentinel-aware clients to the current master |
+| haproxy.replicas | int | `3` |  |
+| haproxy.image.registry | string | `"docker.io"` |  |
+| haproxy.image.repository | string | `"haproxy"` |  |
+| haproxy.image.tag | string | `"3.2-alpine"` | HAProxy 3.1 or newer is required |
+| haproxy.image.pullPolicy | string | `"IfNotPresent"` |  |
+| haproxy.checkUser | string | `""` | Defaults to the 'default' user |
+| haproxy.service.type | string | `"ClusterIP"` |  |
+| haproxy.service.port | int | `6379` | Write port, follows the master |
+| haproxy.service.readPort | int | `6380` | Read port, load balanced |
+| haproxy.service.annotations | object | `{}` |  |
+| haproxy.config.maxconn | int | `4096` |  |
+| haproxy.config.checkInterval | string | `"2s"` | Bounds how long a failover takes to be routed |
+| haproxy.config.checkTimeout | string | `"5s"` |  |
+| haproxy.config.readBalance | string | `"roundrobin"` |  |
+| haproxy.config.timeout.connect | string | `"5s"` |  |
+| haproxy.config.timeout.client | string | `"1m"` |  |
+| haproxy.config.timeout.server | string | `"1m"` |  |
+| haproxy.config.timeout.tunnel | string | `"0s"` | Keeps pub/sub connections open |
+| haproxy.tls.verify | string | `"required"` | Certificate validation towards the nodes |
+| haproxy.resources | object | `{}` |  |
+| haproxy.podSecurityContext | object | see values.yaml |  |
+| haproxy.securityContext | object | see values.yaml |  |
+| haproxy.extraInitContainers | list | `[]` |  |
+| haproxy.extraVolumes | list | `[]` |  |
+| haproxy.extraVolumeMounts | list | `[]` |  |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |

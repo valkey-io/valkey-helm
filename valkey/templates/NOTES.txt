@@ -31,6 +31,17 @@ Most client libraries do this for you, e.g. in Python:
 
   Sentinel([("{{ include "valkey.fullname" . }}-sentinel", {{ .Values.replica.sentinel.service.port }})]).master_for("{{ .Values.replica.sentinel.masterSet }}")
 
+{{- if .Values.haproxy.enabled }}
+
+Clients that cannot talk to Sentinel can use HAProxy instead, which always
+forwards to the node Sentinel promoted:
+
+  Writes and reads: {{ include "valkey.fullname" . }}-haproxy:{{ .Values.haproxy.service.port }}
+  Reads only:       {{ include "valkey.fullname" . }}-haproxy:{{ .Values.haproxy.service.readPort }} (load balanced across all pods)
+
+  $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }}-haproxy 6379:{{ .Values.haproxy.service.port }}
+{{- end }}
+
 ⚠️  The {{ include "valkey.fullname" . }} service load balances across ALL pods in this mode,
     so writes sent to it may hit a replica and fail with -READONLY.
 {{- else }}
