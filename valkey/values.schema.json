@@ -538,6 +538,17 @@
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"
                 },
+                "podManagementPolicy": {
+                    "type": "string",
+                    "enum": [
+                        "",
+                        "OrderedReady",
+                        "Parallel"
+                    ]
+                },
+                "terminationGracePeriodSeconds": {
+                    "type": "integer"
+                },
                 "replicas": {
                     "type": "integer"
                 },

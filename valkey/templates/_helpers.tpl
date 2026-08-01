@@ -216,6 +216,9 @@ Validate sentinel configuration
   {{- if gt (int .Values.replica.sentinel.quorum) $pods }}
     {{- fail (printf "replica.sentinel.quorum (%d) cannot be greater than the number of Sentinels (%d)." (int .Values.replica.sentinel.quorum) $pods) }}
   {{- end }}
+  {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
+    {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than replica.terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
+  {{- end }}
   {{- if .Values.auth.enabled }}
     {{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
     {{- if not (hasKey .Values.auth.aclUsers $monitorUser) }}

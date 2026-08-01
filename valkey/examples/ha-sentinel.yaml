@@ -5,6 +5,13 @@
 #
 # Clients resolve the current master through the valkey-sentinel service, see
 # the notes printed after the install.
+#
+# SECURITY: the passwords below are placeholders and grant full access. Replace
+# both before installing anywhere real, or drop the inline passwords and point
+# auth.usersExistingSecret at a secret you manage:
+#
+#   kubectl create secret generic valkey-users \
+#     --from-literal=default=... --from-literal=replicator=...
 
 replica:
   enabled: true
@@ -25,7 +32,7 @@ auth:
   aclUsers:
     default:
       permissions: "~* &* +@all"
-      password: "changeme"
+      password: "REPLACE-ME"
     replicator:
       # Sentinel needs all of these to monitor the nodes and to promote a
       # replica, see replica.sentinel.monitorUser in values.yaml
@@ -33,4 +40,4 @@ auth:
         on ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof
         +replicaof +config|rewrite +client|setname +client|kill +script|kill
         +psync +replconf
-      password: "changeme-too"
+      password: "REPLACE-ME-TOO"

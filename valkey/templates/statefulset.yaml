@@ -16,7 +16,9 @@ metadata:
 spec:
   serviceName: {{ include "valkey.fullname" . }}-headless
   replicas: {{ add (int .Values.replica.replicas) 1 }}
-  {{- if .Values.replica.sentinel.enabled }}
+  {{- if .Values.replica.podManagementPolicy }}
+  podManagementPolicy: {{ .Values.replica.podManagementPolicy }}
+  {{- else if .Values.replica.sentinel.enabled }}
   # Sentinel forms its quorum from the pods themselves, so they have to be able
   # to come up together instead of waiting for pod-0 to become ready first.
   podManagementPolicy: Parallel
@@ -80,6 +82,7 @@ spec:
         {{- end }}
     spec:
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
+      terminationGracePeriodSeconds: {{ .Values.replica.terminationGracePeriodSeconds }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       {{- if .Values.priorityClassName }}
@@ -233,7 +236,9 @@ spec:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
             periodSeconds: 5
-            failureThreshold: {{ div (add .Values.replica.sentinel.startupTimeoutSeconds 10) 5 }}
+            # Covers the wait for the local Valkey server plus the peer discovery
+            # that follows it, both bounded by startupTimeoutSeconds.
+            failureThreshold: {{ div (add (mul .Values.replica.sentinel.startupTimeoutSeconds 2) 30) 5 }}
           livenessProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]

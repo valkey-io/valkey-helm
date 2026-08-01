@@ -18,8 +18,9 @@ spec:
   {{- if .Values.replica.sentinel.service.loadBalancerClass }}
   loadBalancerClass: {{ .Values.replica.sentinel.service.loadBalancerClass }}
   {{- end }}
-  {{- if .Values.replica.sentinel.service.loadBalancerSourceRanges }}
-  loadBalancerSourceRanges: {{ .Values.replica.sentinel.service.loadBalancerSourceRanges }}
+  {{- with .Values.replica.sentinel.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   ports:
     - name: sentinel

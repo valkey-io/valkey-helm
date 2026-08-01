@@ -24,12 +24,24 @@ Sentinel promotes a replica when the master stops responding for
 {{ .Values.replica.sentinel.downAfterMilliseconds }}ms, so the master can be any pod. Clients must therefore
 ask Sentinel for the current master instead of connecting to a fixed pod:
 
-  $ valkey-cli -h {{ include "valkey.fullname" . }}-sentinel -p {{ .Values.replica.sentinel.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} -a <default password>{{ end }} \
+{{- if .Values.replica.sentinel.service.enabled }}
+{{- $sentinelHost := printf "%s-sentinel" (include "valkey.fullname" .) }}
+{{- $sentinelPort := .Values.replica.sentinel.service.port }}
+
+  $ valkey-cli -h {{ $sentinelHost }} -p {{ $sentinelPort }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} -a <default password>{{ end }} \
       SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }}
 
 Most client libraries do this for you, e.g. in Python:
 
-  Sentinel([("{{ include "valkey.fullname" . }}-sentinel", {{ .Values.replica.sentinel.service.port }})]).master_for("{{ .Values.replica.sentinel.masterSet }}")
+  Sentinel([("{{ $sentinelHost }}", {{ $sentinelPort }})]).master_for("{{ .Values.replica.sentinel.masterSet }}")
+{{- else }}
+
+The Sentinel service is disabled (replica.sentinel.service.enabled), so address
+the Sentinels through the headless service instead:
+{{- range $i := until (add (int .Values.replica.replicas) 1 | int) }}
+  {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $.Values.replica.sentinel.port }}
+{{- end }}
+{{- end }}
 
 {{- if .Values.haproxy.enabled }}
 
