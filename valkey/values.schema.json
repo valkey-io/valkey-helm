@@ -233,6 +233,9 @@
                 "tls": {
                     "type": "object",
                     "properties": {
+                        "clientCertFile": {
+                            "type": "string"
+                        },
                         "verify": {
                             "type": "string",
                             "enum": [

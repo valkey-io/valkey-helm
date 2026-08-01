@@ -107,7 +107,9 @@ spec:
         - name: {{ include "valkey.fullname" . }}-tls
           secret:
             secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
-            defaultMode: 0400
+            # The group bit is what makes these readable for the non-root
+            # HAProxy user, combined with fsGroup on the pod.
+            defaultMode: 0440
         {{- end }}
         {{- with .Values.haproxy.extraVolumes }}
         {{- toYaml . | nindent 8 }}

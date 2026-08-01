@@ -190,6 +190,51 @@ tests:
           path: spec.ports[1].port
           value: 6380
 
+  - it: should send writes to a single node if two ever look like the master
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'backend valkey_master\n(.*\n)*?  balance first'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'backend valkey_replicas\n(.*\n)*?  balance roundrobin'
+
+  - it: should make the TLS secret readable for the non-root user
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[1].secret.defaultMode
+          value: 0440
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 99
+
+  - it: should fail when a client certificate is required but no bundle is given
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "tls.requireClientCertificate needs haproxy.tls.clientCertFile.*"
+
+  - it: should present the configured client certificate bundle
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+      haproxy.tls.clientCertFile: "client.pem"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'crt /tls/client.pem'
+
   - it: should not render anything when haproxy is disabled
     set:
       haproxy.enabled: false
