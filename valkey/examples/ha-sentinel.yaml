@@ -25,6 +25,9 @@ replica:
 
   sentinel:
     enabled: true
+    # Use a distinct credential for the Sentinel endpoint. In production,
+    # prefer auth.usersExistingSecret and set passwordKey instead.
+    password: "replace-with-a-sentinel-password"
     quorum: 2
 
 auth:

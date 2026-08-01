@@ -437,6 +437,12 @@
                         "monitorUser": {
                             "type": "string"
                         },
+                        "password": {
+                            "type": "string"
+                        },
+                        "passwordKey": {
+                            "type": "string"
+                        },
                         "parallelSyncs": {
                             "type": "integer"
                         },

@@ -188,14 +188,13 @@ data:
     # and pod-0 would come back as a second writable master after a failover.
     master_from_sentinels() {
       {{- if .Values.auth.enabled }}
-      {{- $defaultUser := index .Values.auth.aclUsers "default" }}
-      sentinel_password=$(get_user_password "default" "{{ $defaultUser.passwordKey | default "default" }}") || return 1
+      sentinel_password=$(get_user_password "sentinel" "{{ .Values.replica.sentinel.passwordKey }}") || return 1
       {{- end }}
       i=0
       while [ "$i" -lt {{ add (int .Values.replica.replicas) 1 }} ]; do
         peer="{{ include "valkey.fullname" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
         if [ "$peer" != "$SELF_HOST" ]; then
-          addr=$({{ if .Values.auth.enabled }}REDISCLI_AUTH="$sentinel_password" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+          addr=$({{ if .Values.auth.enabled }}REDISCLI_AUTH="$sentinel_password" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} {{ if .Values.auth.enabled }}--user sentinel {{ end }}\
             -t 2 -h "$peer" -p {{ .Values.replica.sentinel.port }} \
             sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null || true)
           host=$(echo "$addr" | sed -n 1p)
@@ -335,4 +334,3 @@ data:
 
     # Publish the finished config atomically.
     mv "$VALKEY_CONFIG_TMP" "$VALKEY_CONFIG"
-
