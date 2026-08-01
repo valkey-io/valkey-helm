@@ -405,6 +405,105 @@
                 "replicationUser": {
                     "type": "string"
                 },
+                "sentinel": {
+                    "type": "object",
+                    "properties": {
+                        "downAfterMilliseconds": {
+                            "type": "integer"
+                        },
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "extraConfig": {
+                            "type": "string"
+                        },
+                        "failoverTimeout": {
+                            "type": "integer"
+                        },
+                        "masterSet": {
+                            "type": "string"
+                        },
+                        "monitorUser": {
+                            "type": "string"
+                        },
+                        "parallelSyncs": {
+                            "type": "integer"
+                        },
+                        "persistence": {
+                            "type": "object",
+                            "properties": {
+                                "accessModes": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "enabled": {
+                                    "type": "boolean"
+                                },
+                                "size": {
+                                    "type": "string"
+                                },
+                                "storageClass": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "port": {
+                            "type": "integer"
+                        },
+                        "preStopFailover": {
+                            "type": "boolean"
+                        },
+                        "preStopFailoverTimeoutSeconds": {
+                            "type": "integer"
+                        },
+                        "quorum": {
+                            "type": "integer"
+                        },
+                        "resources": {
+                            "type": "object"
+                        },
+                        "securityContext": {
+                            "type": "object"
+                        },
+                        "service": {
+                            "type": "object",
+                            "properties": {
+                                "annotations": {
+                                    "type": "object"
+                                },
+                                "appProtocol": {
+                                    "type": "string"
+                                },
+                                "clusterIP": {
+                                    "type": "string"
+                                },
+                                "enabled": {
+                                    "type": "boolean"
+                                },
+                                "loadBalancerClass": {
+                                    "type": "string"
+                                },
+                                "loadBalancerSourceRanges": {
+                                    "type": "array"
+                                },
+                                "nodePort": {
+                                    "type": "integer"
+                                },
+                                "port": {
+                                    "type": "integer"
+                                },
+                                "type": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "startupTimeoutSeconds": {
+                            "type": "integer"
+                        }
+                    }
+                },
                 "service": {
                     "type": "object",
                     "properties": {

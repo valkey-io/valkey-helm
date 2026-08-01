@@ -300,6 +300,107 @@ replica:
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
   persistentVolumeClaimRetentionPolicy: {}
 
+  # Valkey Sentinel for automatic failover.
+  # Sentinel runs as a sidecar in every Valkey pod, monitors the master and
+  # promotes a replica when the master becomes unreachable.
+  # NOTE: with Sentinel enabled the Valkey service load balances across all pods,
+  # because the master can move at any time. Clients must therefore discover the
+  # master through Sentinel (SENTINEL get-master-addr-by-name).
+  sentinel:
+    # Enable Sentinel (requires replica.enabled and at least 3 pods)
+    enabled: false
+
+    # Port on which Sentinel listens
+    port: 26379
+
+    # Name Sentinel uses to identify the monitored master
+    masterSet: mymaster
+
+    # Number of Sentinels that must agree the master is down before a failover
+    # starts. Use a majority of the Sentinel count, e.g. 2 for 3 pods.
+    quorum: 2
+
+    # Time in milliseconds after which an unresponsive master is considered down
+    downAfterMilliseconds: 5000
+
+    # Time in milliseconds before a failover attempt is considered failed
+    failoverTimeout: 60000
+
+    # Number of replicas that resynchronise with the new master simultaneously
+    parallelSyncs: 1
+
+    # User Sentinel authenticates with against the Valkey nodes, ignored if
+    # auth.enabled is false. Defaults to replica.replicationUser.
+    # The user must be defined in auth.aclUsers. Sentinel promotes replicas by
+    # sending them SLAVEOF, so a user without those permissions makes every
+    # failover abort with -failover-abort-slave-timeout. The minimum is:
+    #   ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof
+    #   +replicaof +config|rewrite +client|setname +client|kill +script|kill
+    # and, because the same user replicates, +psync +replconf
+    monitorUser: ""
+
+    # Ask Sentinel to promote a replica before this pod shuts down, so that a
+    # rolling update does not leave clients writing to a terminating master.
+    preStopFailover: true
+    # How long to wait for that failover to complete before shutting down anyway.
+    # Keep it below terminationGracePeriodSeconds.
+    preStopFailoverTimeoutSeconds: 20
+
+    # How long Sentinel waits for the local Valkey server on startup before it
+    # gives up on discovering the current master and assumes pod-0 is the master
+    startupTimeoutSeconds: 60
+
+    # Raw configuration appended to the generated sentinel.conf.
+    # Supports templating, e.g. "sentinel notification-script {{ .Release.Name }} /script.sh"
+    extraConfig: ""
+
+    # Resource limits/requests for the Sentinel container
+    resources: {}
+      # Example:
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+      # requests:
+      #   cpu: 10m
+      #   memory: 64Mi
+
+    # Security context for the Sentinel container, defaults to securityContext
+    securityContext: {}
+
+    # Service exposing the Sentinel endpoints to clients
+    service:
+      # Enable the Sentinel service
+      enabled: true
+      # Service type (ClusterIP, NodePort, LoadBalancer)
+      type: ClusterIP
+      # Port on which the Sentinel service will be exposed
+      port: 26379
+      # Optional annotations for the Sentinel service
+      annotations: {}
+      # NodePort value (if service.type is NodePort)
+      nodePort: 0
+      # ClusterIP value
+      clusterIP: ""
+      # Application protocol
+      appProtocol: ""
+      # Class of a load balancer implementation
+      loadBalancerClass: ""
+      # Restricts traffic through the cloud-provider load balancer to these client IPs
+      loadBalancerSourceRanges: []
+
+    # Persistence for the Sentinel state directory. Optional: the chart
+    # rediscovers the current master on every start, so an emptyDir is enough.
+    persistence:
+      # Enable a PVC for the Sentinel state instead of an emptyDir
+      enabled: false
+      # Size of the PVC for each Sentinel
+      size: 100Mi
+      # Storage class name (empty = use default storage class)
+      storageClass: ""
+      # Access modes for the PVC
+      accessModes:
+        - ReadWriteOnce
+
 tls:
   # Enable TLS
   enabled: false

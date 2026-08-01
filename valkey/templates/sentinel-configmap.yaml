@@ -1,0 +1,314 @@
+{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
+{{- $sentinelPort := .Values.replica.sentinel.port }}
+{{- $masterSet := .Values.replica.sentinel.masterSet }}
+{{- $totalPods := add (int .Values.replica.replicas) 1 }}
+{{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-sentinel-scripts
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sentinel
+data:
+  sentinel-start.sh: |-
+    #!/bin/sh
+    # Generates sentinel.conf and starts Sentinel.
+    #
+    # This runs as the Sentinel container entrypoint rather than as an init
+    # container on purpose: discovering the current master requires the local
+    # Valkey server to be running, which is only true once the init containers
+    # have finished.
+    set -eu
+
+    SENTINEL_CONF="/sentinel-data/sentinel.conf"
+    MASTER_SET="{{ $masterSet }}"
+    MASTER_PORT="{{ .Values.service.port }}"
+    TOTAL_PODS="{{ $totalPods }}"
+    SELF_HOST="${POD_NAME}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    DEFAULT_MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+
+    # Logging goes to stderr so that command substitutions stay clean.
+    log() {
+      echo "$(date) $1" >&2
+    }
+
+    {{- if .Values.auth.enabled }}
+    {{- $defaultUser := index .Values.auth.aclUsers "default" }}
+    {{- $defaultPasswordKey := $defaultUser.passwordKey | default "default" }}
+    {{- $monitorUserObj := index .Values.auth.aclUsers $monitorUser }}
+    {{- $monitorPasswordKey := $monitorUserObj.passwordKey | default $monitorUser }}
+
+    # Function to get password for a user
+    # Usage: get_user_password <username> [password_key]
+    get_user_password() {
+      username="$1"
+      password_key="${2:-$username}"
+
+      {{- if .Values.auth.usersExistingSecret }}
+      if [ -f "/valkey-users-secret/$password_key" ]; then
+        cat "/valkey-users-secret/$password_key"
+        return 0
+      fi
+      {{- end }}
+      if [ -f "/valkey-auth-secret/${username}-password" ]; then
+        cat "/valkey-auth-secret/${username}-password"
+        return 0
+      fi
+      log "ERROR: No password found for user $username"
+      return 1
+    }
+
+    DEFAULT_PASSWORD=$(get_user_password "default" "{{ $defaultPasswordKey }}") || exit 1
+    MONITOR_PASSWORD=$(get_user_password "{{ $monitorUser }}" "{{ $monitorPasswordKey }}") || exit 1
+    {{- end }}
+
+    # Credentials are passed as arguments and never written to the log.
+    sentinel_cli() {
+      valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+        {{- if .Values.auth.enabled }}
+        -a "$DEFAULT_PASSWORD" --no-auth-warning \
+        {{- end }}
+        -p "{{ $sentinelPort }}" "$@"
+    }
+
+    valkey_cli() {
+      valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+        {{- if .Values.auth.enabled }}
+        --user "{{ $monitorUser }}" -a "$MONITOR_PASSWORD" --no-auth-warning \
+        {{- end }}
+        -p "{{ .Values.service.port }}" "$@"
+    }
+
+    # Ask the Sentinels that are already running. They hold the authoritative
+    # view of the topology, which matters when this pod joins or rejoins a
+    # cluster that has already failed over away from pod-0.
+    master_from_peers() {
+      i=0
+      while [ "$i" -lt "$TOTAL_PODS" ]; do
+        peer="{{ include "valkey.fullname" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        if [ "$peer" != "$SELF_HOST" ]; then
+          addr=$(sentinel_cli -h "$peer" sentinel get-master-addr-by-name "$MASTER_SET" 2>/dev/null || true)
+          if [ -n "$addr" ]; then
+            log "Sentinel $peer reports the master as $(echo "$addr" | tr '\n' ' ')"
+            echo "$addr"
+            return 0
+          fi
+        fi
+        i=$((i + 1))
+      done
+      return 1
+    }
+
+    # Fall back to the local Valkey server. After a full cluster restart no
+    # Sentinel is up yet, but every Valkey node has restored the replication
+    # target Sentinel last wrote, so the local node knows who the master is.
+    master_from_local_node() {
+      info=$(valkey_cli -h 127.0.0.1 info replication 2>/dev/null | tr -d '\r' || true)
+      if [ -z "$info" ]; then
+        return 1
+      fi
+
+      role=$(echo "$info" | sed -n 's/^role://p')
+      if [ "$role" = "master" ]; then
+        log "The local Valkey node is the master"
+        printf '%s\n%s\n' "$SELF_HOST" "$MASTER_PORT"
+        return 0
+      fi
+
+      host=$(echo "$info" | sed -n 's/^master_host://p')
+      port=$(echo "$info" | sed -n 's/^master_port://p')
+      if [ -n "$host" ] && [ -n "$port" ]; then
+        log "The local Valkey node replicates from $host:$port"
+        printf '%s\n%s\n' "$host" "$port"
+        return 0
+      fi
+      return 1
+    }
+
+    # The local Valkey container starts in parallel with this one.
+    WAITED=0
+    while [ "$WAITED" -lt "{{ .Values.replica.sentinel.startupTimeoutSeconds }}" ]; do
+      if valkey_cli -h 127.0.0.1 ping >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+      WAITED=$((WAITED + 1))
+    done
+
+    MASTER_HOST="$DEFAULT_MASTER_HOST"
+    DISCOVERED=$(master_from_peers || master_from_local_node || true)
+    if [ -n "$DISCOVERED" ]; then
+      MASTER_HOST=$(echo "$DISCOVERED" | sed -n 1p)
+      MASTER_PORT=$(echo "$DISCOVERED" | sed -n 2p)
+    else
+      log "No Sentinel peer or Valkey node answered, bootstrapping with $MASTER_HOST as master"
+    fi
+
+    log "Writing $SENTINEL_CONF monitoring $MASTER_HOST:$MASTER_PORT"
+    rm -f "$SENTINEL_CONF"
+    cat > "$SENTINEL_CONF" << EOF
+    # Generated by the valkey Helm chart. Sentinel rewrites this file at runtime.
+    {{- if .Values.tls.enabled }}
+    port 0
+    tls-port {{ $sentinelPort }}
+    tls-cert-file /tls/{{ .Values.tls.serverPublicKey }}
+    tls-key-file /tls/{{ .Values.tls.serverKey }}
+    tls-ca-cert-file /tls/{{ .Values.tls.caPublicKey }}
+    {{- if .Values.tls.dhParamKey }}
+    tls-dh-params-file /tls/{{ .Values.tls.dhParamKey }}
+    {{- end }}
+    {{- if not .Values.tls.requireClientCertificate }}
+    tls-auth-clients no
+    {{- end }}
+    tls-replication yes
+    {{- else }}
+    port {{ $sentinelPort }}
+    {{- end }}
+    dir /sentinel-data
+    protected-mode no
+
+    # Address peers by DNS name, pod IPs change on every reschedule.
+    sentinel resolve-hostnames yes
+    sentinel announce-hostnames yes
+    sentinel announce-ip ${SELF_HOST}
+    sentinel announce-port {{ $sentinelPort }}
+
+    sentinel monitor ${MASTER_SET} ${MASTER_HOST} ${MASTER_PORT} {{ .Values.replica.sentinel.quorum }}
+    sentinel down-after-milliseconds ${MASTER_SET} {{ .Values.replica.sentinel.downAfterMilliseconds }}
+    sentinel failover-timeout ${MASTER_SET} {{ .Values.replica.sentinel.failoverTimeout }}
+    sentinel parallel-syncs ${MASTER_SET} {{ .Values.replica.sentinel.parallelSyncs }}
+    EOF
+
+    {{- if .Values.auth.enabled }}
+    # Sentinel's own ACL. It mirrors the Valkey 'default' user password so that
+    # the Sentinel port is never left unauthenticated, and the same credentials
+    # secure the Sentinel-to-Sentinel gossip.
+    DEFAULT_PASSHASH=$(echo -n "$DEFAULT_PASSWORD" | sha256sum | cut -f 1 -d " ")
+    cat >> "$SENTINEL_CONF" << EOF
+
+    user default on #${DEFAULT_PASSHASH} ~* &* +@all
+    sentinel sentinel-pass ${DEFAULT_PASSWORD}
+
+    # Credentials Sentinel uses to reach the monitored Valkey nodes.
+    sentinel auth-pass ${MASTER_SET} ${MONITOR_PASSWORD}
+    EOF
+    {{- if ne $monitorUser "default" }}
+    echo "sentinel auth-user ${MASTER_SET} {{ $monitorUser }}" >> "$SENTINEL_CONF"
+    {{- end }}
+    log "Configured the Sentinel ACL and the monitor credentials"
+    {{- end }}
+    {{- with .Values.replica.sentinel.extraConfig }}
+
+    cat >> "$SENTINEL_CONF" << 'EOF'
+
+    {{- tpl . $ | nindent 4 }}
+    EOF
+    {{- end }}
+
+    log "Starting Sentinel"
+    exec valkey-sentinel "$SENTINEL_CONF"
+
+  sentinel-ping.sh: |-
+    #!/bin/sh
+    # Health probe for the Sentinel container. It lives here rather than inline
+    # in the pod spec so that the credentials stay in the mounted secret.
+    set -eu
+
+    {{- if .Values.auth.enabled }}
+    {{- $defaultUser := index .Values.auth.aclUsers "default" }}
+    {{- $defaultPasswordKey := $defaultUser.passwordKey | default "default" }}
+    PASSWORD=""
+    {{- if .Values.auth.usersExistingSecret }}
+    if [ -f "/valkey-users-secret/{{ $defaultPasswordKey }}" ]; then
+      PASSWORD=$(cat "/valkey-users-secret/{{ $defaultPasswordKey }}")
+    fi
+    {{- end }}
+    if [ -z "$PASSWORD" ] && [ -f "/valkey-auth-secret/default-password" ]; then
+      PASSWORD=$(cat "/valkey-auth-secret/default-password")
+    fi
+    {{- end }}
+
+    REPLY=$(valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+      {{- if .Values.auth.enabled }}
+      -a "$PASSWORD" --no-auth-warning \
+      {{- end }}
+      -p {{ $sentinelPort }} ping)
+
+    [ "$REPLY" = "PONG" ]
+  {{- if .Values.replica.sentinel.preStopFailover }}
+
+  sentinel-prestop.sh: |-
+    #!/bin/sh
+    # Runs in the Valkey container before it is terminated. When this pod is the
+    # master, ask Sentinel to promote a replica first, so that a rolling update
+    # does not leave clients writing to a pod that is about to disappear.
+    set -eu
+
+    log() {
+      echo "$(date) $1" >&2
+    }
+
+    {{- if .Values.auth.enabled }}
+    {{- $defaultUser := index .Values.auth.aclUsers "default" }}
+    {{- $defaultPasswordKey := $defaultUser.passwordKey | default "default" }}
+    {{- $monitorUserObj := index .Values.auth.aclUsers $monitorUser }}
+    {{- $monitorPasswordKey := $monitorUserObj.passwordKey | default $monitorUser }}
+
+    get_user_password() {
+      username="$1"
+      password_key="${2:-$username}"
+
+      {{- if .Values.auth.usersExistingSecret }}
+      if [ -f "/valkey-users-secret/$password_key" ]; then
+        cat "/valkey-users-secret/$password_key"
+        return 0
+      fi
+      {{- end }}
+      if [ -f "/valkey-auth-secret/${username}-password" ]; then
+        cat "/valkey-auth-secret/${username}-password"
+        return 0
+      fi
+      return 1
+    }
+
+    DEFAULT_PASSWORD=$(get_user_password "default" "{{ $defaultPasswordKey }}") || exit 0
+    MONITOR_PASSWORD=$(get_user_password "{{ $monitorUser }}" "{{ $monitorPasswordKey }}") || exit 0
+    {{- end }}
+
+    local_role() {
+      valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+        {{- if .Values.auth.enabled }}
+        --user "{{ $monitorUser }}" -a "$MONITOR_PASSWORD" --no-auth-warning \
+        {{- end }}
+        -p {{ .Values.service.port }} info replication 2>/dev/null | sed -n 's/^role://p' | tr -d '\r' || true
+    }
+
+    if [ "$(local_role)" != "master" ]; then
+      log "This pod is not the master, shutting down"
+      exit 0
+    fi
+
+    log "This pod is the master, asking Sentinel to fail over before shutting down"
+    valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+      {{- if .Values.auth.enabled }}
+      -a "$DEFAULT_PASSWORD" --no-auth-warning \
+      {{- end }}
+      -p {{ $sentinelPort }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
+        log "WARN: the failover request failed, continuing with the shutdown"
+        exit 0
+      }
+
+    WAITED=0
+    while [ "$WAITED" -lt "{{ .Values.replica.sentinel.preStopFailoverTimeoutSeconds }}" ]; do
+      if [ "$(local_role)" != "master" ]; then
+        log "Failover complete after ${WAITED}s"
+        exit 0
+      fi
+      sleep 1
+      WAITED=$((WAITED + 1))
+    done
+
+    log "WARN: still the master after ${WAITED}s, continuing with the shutdown"
+  {{- end }}
+{{- end }}

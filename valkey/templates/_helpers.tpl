@@ -189,6 +189,43 @@ Validate replica authentication configuration
 {{- end -}}
 
 {{/*
+valkey-cli TLS flags shared by the Sentinel scripts and probes
+*/}}
+{{- define "valkey.sentinel.cliTlsFlags" -}}
+{{- if .Values.tls.enabled -}}
+--tls --cacert /tls/{{ .Values.tls.caPublicKey }}
+{{- if .Values.tls.requireClientCertificate }} --cert /tls/{{ .Values.tls.serverPublicKey }} --key /tls/{{ .Values.tls.serverKey }}{{ end }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Validate sentinel configuration
+*/}}
+{{- define "valkey.validateSentinelConfig" -}}
+{{- if .Values.replica.sentinel.enabled }}
+  {{- if not .Values.replica.enabled }}
+    {{- fail "Sentinel requires replication. Please set replica.enabled=true along with replica.sentinel.enabled=true" }}
+  {{- end }}
+  {{- $pods := add (int .Values.replica.replicas) 1 }}
+  {{- if lt $pods 3 }}
+    {{- fail (printf "Sentinel requires at least 3 pods to form a quorum, replica.replicas=%d gives %d. Please set replica.replicas to 2 or more." (int .Values.replica.replicas) $pods) }}
+  {{- end }}
+  {{- if lt (int .Values.replica.sentinel.quorum) 2 }}
+    {{- fail "replica.sentinel.quorum must be at least 2, a quorum of 1 allows a single Sentinel to trigger a failover on its own." }}
+  {{- end }}
+  {{- if gt (int .Values.replica.sentinel.quorum) $pods }}
+    {{- fail (printf "replica.sentinel.quorum (%d) cannot be greater than the number of Sentinels (%d)." (int .Values.replica.sentinel.quorum) $pods) }}
+  {{- end }}
+  {{- if .Values.auth.enabled }}
+    {{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
+    {{- if not (hasKey .Values.auth.aclUsers $monitorUser) }}
+      {{- fail (printf "Sentinel monitor user '%s' must be defined in auth.aclUsers. Sentinel needs it to reach the monitored Valkey nodes." $monitorUser) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Render the Valkey server container health probes (startupProbe, livenessProbe,
 readinessProbe). Each probe is gated on its own `enabled` flag. When a probe's
 `customProbe` map is set it replaces the default handler and timing entirely;

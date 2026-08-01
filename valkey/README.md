@@ -42,14 +42,6 @@ helm install valkey valkey/valkey --set replica.enabled=true --set replica.persi
 
 **IMPORTANT**
 
-## Cluster Mode
-
-This chart does not and will not support **Valkey cluster** mode. Managing a clustered topology is fundamentally different from standalone or replicated deployments, and the operational requirements go well beyond what this chart is designed to handle.
-
-For cluster mode, a separate chart is being developed that uses the valkey-operator to deploy and manage clusters. The operator must be installed first.
-
-To follow progress or get involved, see the [weekly meeting wiki](https://github.com/valkey-io/valkey-operator/wiki/Weekly-meeting). 
-
 **Services:**
 
 * `valkey`: Master/write service
@@ -67,6 +59,66 @@ replica:
 ```
 
 If fewer than `minReplicasToWrite` replicas are available, the master will reject write operations.
+
+### High Availability Mode (Sentinel)
+
+Replication mode alone does not recover from a master failure: the master is always pod-0 and a client keeps writing to it until an operator intervenes.
+Enabling Sentinel adds a `valkey-sentinel` container to every Valkey pod.
+The Sentinels monitor each other and the Valkey nodes, and promote a replica automatically when the master stops responding.
+
+```bash
+helm install valkey valkey/valkey -f examples/ha-sentinel.yaml
+```
+
+Sentinel needs at least three pods to form a quorum, so `replica.replicas` must be 2 or more.
+See [examples/ha-sentinel.yaml](examples/ha-sentinel.yaml) for a complete values file.
+
+**Services:**
+
+* `valkey`: load balances across all pods, the master can be any of them
+* `valkey-sentinel`: Sentinel endpoints, used by clients to resolve the current master
+* `valkey-headless`: headless service for pod and Sentinel discovery
+
+**Connecting:**
+
+Because the master moves, clients must ask Sentinel for its address instead of connecting to a fixed pod.
+Most client libraries do this for you:
+
+```python
+from valkey.sentinel import Sentinel
+
+sentinel = Sentinel([("valkey-sentinel", 26379)], password="...")
+master = sentinel.master_for("mymaster")
+master.set("key", "value")
+```
+
+Writes sent to the `valkey` service directly may land on a replica and fail with `-READONLY`.
+
+**Authentication:**
+
+When `auth.enabled` is true, Sentinel reuses the `default` user password to secure its own port and the Sentinel-to-Sentinel gossip.
+Sentinel reaches the Valkey nodes as `replica.sentinel.monitorUser`, which defaults to `replica.replicationUser`.
+That user must be allowed to promote a replica, otherwise every failover aborts with `-failover-abort-slave-timeout`.
+The minimum permissions are:
+
+```
+~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof +replicaof
++config|rewrite +client|setname +client|kill +script|kill +psync +replconf
+```
+
+**Failover behaviour:**
+
+A master that stops responding for `replica.sentinel.downAfterMilliseconds` is replaced within a few seconds.
+When a master pod is terminated by a rolling update, its `preStop` hook asks Sentinel to promote a replica first, so the failover happens before the pod goes away rather than after.
+The replication topology survives a full restart of the StatefulSet: each pod restores the replication target Sentinel last wrote, and each Sentinel rediscovers the current master instead of assuming it is pod-0.
+
+## Cluster Mode
+
+This chart does not and will not support **Valkey cluster** mode. Managing a clustered topology is fundamentally different from standalone or replicated deployments, and the operational requirements go well beyond what this chart is designed to handle.
+
+For cluster mode, a separate chart is being developed that uses the valkey-operator to deploy and manage clusters. The operator must be installed first.
+
+To follow progress or get involved, see the [weekly meeting wiki](https://github.com/valkey-io/valkey-operator/wiki/Weekly-meeting).
 
 ## Storage
 
@@ -373,6 +425,27 @@ tls:
 | replica.persistence.size | string | `""` | Required if replica is enabled |
 | replica.persistence.storageClass | string | `""` |  |
 | replica.persistence.accessModes | list | `""` |  |
+| replica.sentinel.enabled | bool | `false` | Run Valkey Sentinel for automatic failover |
+| replica.sentinel.port | int | `26379` |  |
+| replica.sentinel.masterSet | string | `"mymaster"` |  |
+| replica.sentinel.quorum | int | `2` | Sentinels that must agree before a failover starts |
+| replica.sentinel.downAfterMilliseconds | int | `5000` |  |
+| replica.sentinel.failoverTimeout | int | `60000` |  |
+| replica.sentinel.parallelSyncs | int | `1` |  |
+| replica.sentinel.monitorUser | string | `""` | Defaults to replica.replicationUser |
+| replica.sentinel.preStopFailover | bool | `true` | Fail over before a master pod is terminated |
+| replica.sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
+| replica.sentinel.startupTimeoutSeconds | int | `60` |  |
+| replica.sentinel.extraConfig | string | `""` | Raw lines appended to sentinel.conf |
+| replica.sentinel.resources | object | `{}` |  |
+| replica.sentinel.securityContext | object | `{}` | Defaults to securityContext |
+| replica.sentinel.service.enabled | bool | `true` |  |
+| replica.sentinel.service.type | string | `"ClusterIP"` |  |
+| replica.sentinel.service.port | int | `26379` |  |
+| replica.sentinel.service.annotations | object | `{}` |  |
+| replica.sentinel.persistence.enabled | bool | `false` |  |
+| replica.sentinel.persistence.size | string | `"100Mi"` |  |
+| replica.sentinel.persistence.storageClass | string | `""` |  |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |

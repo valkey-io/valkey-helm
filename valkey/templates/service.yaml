@@ -33,6 +33,6 @@ spec:
       {{- end }}
   selector:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
-    {{- if .Values.replica.enabled }}
+    {{- if and .Values.replica.enabled (not .Values.replica.sentinel.enabled) }}
     statefulset.kubernetes.io/pod-name: {{ include "valkey.fullname" . }}-0
     {{- end }}

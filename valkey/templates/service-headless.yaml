@@ -15,6 +15,12 @@ spec:
       port: {{ .Values.service.port }}
       targetPort: tcp
       protocol: TCP
+    {{- if .Values.replica.sentinel.enabled }}
+    - name: sentinel
+      port: {{ .Values.replica.sentinel.port }}
+      targetPort: sentinel
+      protocol: TCP
+    {{- end }}
   selector:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
 {{- end }}

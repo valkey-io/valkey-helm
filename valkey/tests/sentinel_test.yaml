@@ -1,0 +1,293 @@
+suite: sentinel configuration
+templates:
+  - templates/statefulset.yaml
+  - templates/init_config.yaml
+  - templates/sentinel-configmap.yaml
+  - templates/sentinel-service.yaml
+  - templates/service.yaml
+  - templates/service-headless.yaml
+  - templates/deploy_valkey.yaml
+set:
+  replica.enabled: true
+  replica.persistence.size: "5Gi"
+  replica.sentinel.enabled: true
+tests:
+  - it: should fail when sentinel is enabled without replication
+    set:
+      replica.enabled: false
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Sentinel requires replication.*"
+
+  - it: should fail when there are fewer than three pods
+    set:
+      replica.replicas: 1
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Sentinel requires at least 3 pods.*"
+
+  - it: should fail when the quorum exceeds the number of sentinels
+    set:
+      replica.sentinel.quorum: 4
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "quorum \\(4\\) cannot be greater than the number of Sentinels \\(3\\).*"
+
+  - it: should fail when the quorum allows a single sentinel to fail over
+    set:
+      replica.sentinel.quorum: 1
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "quorum must be at least 2.*"
+
+  - it: should fail when the monitor user is missing from aclUsers
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+      replica.sentinel.monitorUser: "missing-user"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Sentinel monitor user 'missing-user' must be defined in auth.aclUsers.*"
+
+  - it: should add a sentinel container to every valkey pod
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: sentinel
+      - equal:
+          path: spec.template.spec.containers[1].command
+          value: [ "/sentinel-scripts/sentinel-start.sh" ]
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].containerPort
+          value: 26379
+
+  - it: should start the pods in parallel so that the quorum can form
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: Parallel
+
+  - it: should keep ordered startup when sentinel is disabled
+    set:
+      replica.sentinel.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: OrderedReady
+
+  - it: should mount an emptyDir for the sentinel state by default
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: sentinel-data
+            emptyDir: {}
+      - lengthEqual:
+          path: spec.volumeClaimTemplates
+          count: 1
+
+  - it: should claim a volume for the sentinel state when persistence is enabled
+    set:
+      replica.sentinel.persistence.enabled: true
+      replica.sentinel.persistence.size: "200Mi"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[1].metadata.name
+          value: sentinel-data
+      - equal:
+          path: spec.volumeClaimTemplates[1].spec.resources.requests.storage
+          value: "200Mi"
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: sentinel-data
+            emptyDir: {}
+
+  - it: should fail over gracefully before a pod is terminated
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+          value: [ "/sentinel-scripts/sentinel-prestop.sh" ]
+
+  - it: should not install a preStop hook when the graceful failover is disabled
+    set:
+      replica.sentinel.preStopFailover: false
+    template: templates/statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle
+
+  - it: should stop pinning the valkey service to pod-0, the master can move
+    template: templates/service.yaml
+    asserts:
+      - notExists:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+
+  - it: should keep pinning the valkey service to pod-0 without sentinel
+    set:
+      replica.sentinel.enabled: false
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-valkey-0
+
+  - it: should expose the sentinel port on the headless service
+    template: templates/service-headless.yaml
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: sentinel
+            port: 26379
+            targetPort: sentinel
+            protocol: TCP
+
+  - it: should expose a sentinel service for client discovery
+    template: templates/sentinel-service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel
+      - equal:
+          path: spec.ports[0].port
+          value: 26379
+
+  - it: should monitor pod-0 by default with the configured quorum
+    set:
+      replica.sentinel.quorum: 3
+      replica.sentinel.masterSet: "valkey-ha"
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel monitor \$\{MASTER_SET\} \$\{MASTER_HOST\} \$\{MASTER_PORT\} 3'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'MASTER_SET="valkey-ha"'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'DEFAULT_MASTER_HOST="RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local"'
+
+  - it: should not configure authentication when auth is disabled
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel auth-pass'
+
+  - it: should authenticate to the nodes and secure the sentinel port
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+        replicator:
+          permissions: "~* &* +psync +replconf"
+          password: "replpw"
+      replica.replicationUser: replicator
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'user default on #\$\{DEFAULT_PASSHASH\}'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel sentinel-pass \$\{DEFAULT_PASSWORD\}'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel auth-user \$\{MASTER_SET\} replicator'
+
+  - it: should not emit an auth-user for the default user
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel auth-user'
+
+  - it: should serve sentinel over TLS when TLS is enabled
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'tls-port 26379'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'valkey-cli --tls --cacert /tls/ca.crt'
+
+  - it: should append extra sentinel configuration
+    set:
+      replica.sentinel.extraConfig: |
+        sentinel deny-scripts-reconfig yes
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel deny-scripts-reconfig yes'
+
+  - it: should roll the pods when the sentinel scripts change
+    template: templates/statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations["checksum/sentinelconfig"]
+
+  - it: should restore the replication target chosen by sentinel on restart
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'SAVED_REPLICAOF=\$\(grep -E "\^\[\[:space:\]\]\*\(replicaof\|slaveof\)'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REPLICATION_TARGET="\$SAVED_REPLICAOF"'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'touch "\$BOOTSTRAP_MARKER"'
+
+  - it: should pin non-zero pods to pod-0 without sentinel
+    set:
+      replica.sentinel.enabled: false
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'BOOTSTRAP_MARKER'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REPLICATION_TARGET="replicaof \$MASTER_HOST \$MASTER_PORT"'
+
+  - it: should not render any sentinel resource when sentinel is disabled
+    set:
+      replica.sentinel.enabled: false
+    templates:
+      - templates/sentinel-configmap.yaml
+      - templates/sentinel-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
