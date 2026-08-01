@@ -101,7 +101,7 @@ Sentinel reaches the Valkey nodes as `replica.sentinel.monitorUser`, which defau
 That user must be allowed to promote a replica, otherwise every failover aborts with `-failover-abort-slave-timeout`.
 The minimum permissions are:
 
-```
+```text
 ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof +replicaof
 +config|rewrite +client|setname +client|kill +script|kill +psync +replconf
 ```

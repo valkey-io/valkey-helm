@@ -11,14 +11,14 @@ data:
 
     # Default config paths
     VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
+    # The config is assembled in a temporary file and moved into place at the
+    # very end, so that an interrupted run can never leave a half written config
+    # behind. The restart logic below reads the previous config to decide the
+    # replication role, and a truncated file would make it read the wrong one.
+    VALKEY_CONFIG_TMP="${VALKEY_CONFIG}.tmp"
 
     LOGFILE="/data/init.log"
     DATA_DIR="/data/conf"
-    {{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
-    # Marker written after the first successful bootstrap. Its presence means the
-    # replication topology below is owned by Sentinel, not by the pod index.
-    BOOTSTRAP_MARKER="/data/conf/.bootstrapped"
-    {{- end }}
 
     # Logging function (outputs to stderr and file)
     log() {
@@ -79,13 +79,15 @@ data:
     # it before the config is regenerated, otherwise every restart would reset
     # the cluster to "pod-0 is master" and fight Sentinel.
     SAVED_REPLICAOF=""
+    HAS_PREVIOUS_CONFIG=false
     if [ -f "$VALKEY_CONFIG" ]; then
+      HAS_PREVIOUS_CONFIG=true
       SAVED_REPLICAOF=$(grep -E "^[[:space:]]*(replicaof|slaveof)[[:space:]]" "$VALKEY_CONFIG" | tail -n 1 || true)
     fi
     {{- end }}
 
     mkdir -p "$DATA_DIR"
-    rm -f "$VALKEY_CONFIG"
+    rm -f "$VALKEY_CONFIG_TMP"
 
 
     # Base valkey.conf
@@ -109,7 +111,7 @@ data:
       echo "protected-mode no"
       echo "bind * -::*"
       echo "dir /data"
-    } >>"$VALKEY_CONFIG"
+    } >>"$VALKEY_CONFIG_TMP"
 
     {{- if .Values.auth.enabled }}
     # Create secure directory for ACL file
@@ -117,7 +119,7 @@ data:
     mkdir -p /etc/valkey
 
     # Set aclfile path in valkey.conf
-    echo "aclfile /etc/valkey/users.acl" >>"$VALKEY_CONFIG"
+    echo "aclfile /etc/valkey/users.acl" >>"$VALKEY_CONFIG_TMP"
 
     # Remove or reset existing ACL file if present (it may be read-only from previous run)
     log "Preparing ACL file at /etc/valkey/users.acl"
@@ -176,7 +178,7 @@ data:
       echo "# Replication announce configuration"
       echo "replica-announce-ip {{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
       echo "replica-announce-port {{ .Values.service.port }}"
-    } >>"$VALKEY_CONFIG"
+    } >>"$VALKEY_CONFIG_TMP"
 
     # Determine the replication target for this pod.
     REPLICATION_TARGET=""
@@ -185,8 +187,9 @@ data:
       # Sentinel owns the topology: keep whatever it last wrote.
       log "Restoring replication target chosen by Sentinel: $SAVED_REPLICAOF"
       REPLICATION_TARGET="$SAVED_REPLICAOF"
-    elif [ -f "$BOOTSTRAP_MARKER" ]; then
-      # Already bootstrapped and no replicaof on disk: this pod is the master.
+    elif [ "$HAS_PREVIOUS_CONFIG" = "true" ]; then
+      # A complete config from a previous run without a replicaof directive:
+      # this pod was the master and stays the master.
       log "This pod (index $POD_INDEX) was the master before the restart, staying MASTER"
     elif [ "$POD_INDEX" = "0" ]; then
       log "Bootstrapping cluster, this pod (index $POD_INDEX) starts as MASTER"
@@ -208,7 +211,7 @@ data:
         echo ""
         echo "# Replica Configuration"
         echo "$REPLICATION_TARGET"
-      } >>"$VALKEY_CONFIG"
+      } >>"$VALKEY_CONFIG_TMP"
     fi
 
     {{- if .Values.replica.sentinel.enabled }}
@@ -230,7 +233,7 @@ data:
         echo "# Diskless replication"
         echo "repl-diskless-sync yes"
         echo "repl-diskless-sync-delay 5"
-      } >>"$VALKEY_CONFIG"
+      } >>"$VALKEY_CONFIG_TMP"
       {{- end }}
 
       {{- if .Values.auth.enabled }}
@@ -246,7 +249,7 @@ data:
         echo "# Master authentication"
         echo "masterauth $REPL_PASSWORD"
         echo "masteruser {{ $replUsername }}"
-      } >>"$VALKEY_CONFIG"
+      } >>"$VALKEY_CONFIG_TMP"
       log "Configured masterauth with user {{ $replUsername }}"
       {{- end }}
 
@@ -256,7 +259,7 @@ data:
         echo ""
         echo "# TLS for replication"
         echo "tls-replication yes"
-      } >>"$VALKEY_CONFIG"
+      } >>"$VALKEY_CONFIG_TMP"
       log "Enabled TLS for replication"
       {{- end }}
     fi
@@ -268,7 +271,7 @@ data:
       echo "# Minimum replicas for write operations"
       echo "min-replicas-to-write {{ .Values.replica.minReplicasToWrite }}"
       echo "min-replicas-max-lag {{ .Values.replica.minReplicasMaxLag }}"
-    } >>"$VALKEY_CONFIG"
+    } >>"$VALKEY_CONFIG_TMP"
     log "Configured write safety: require {{ .Values.replica.minReplicasToWrite }} replicas with max {{ .Values.replica.minReplicasMaxLag }}s lag"
     {{- end }}
     {{- end }}
@@ -276,14 +279,13 @@ data:
     # Append extra configs if present
     if [ -f /usr/local/etc/valkey/valkey.conf ]; then
       log "Appending /usr/local/etc/valkey/valkey.conf"
-      cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONFIG"
+      cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONFIG_TMP"
     fi
     if [ -d /extravalkeyconfigs ]; then
       log "Appending files in /extravalkeyconfigs/"
-      cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
+      cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG_TMP"
     fi
-    {{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
 
-    touch "$BOOTSTRAP_MARKER"
-    {{- end }}
+    # Publish the finished config atomically.
+    mv "$VALKEY_CONFIG_TMP" "$VALKEY_CONFIG"
 

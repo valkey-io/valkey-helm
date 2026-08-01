@@ -166,7 +166,13 @@ data:
     port {{ $sentinelPort }}
     {{- end }}
     dir /sentinel-data
+    {{- if not .Values.auth.enabled }}
+    # Sentinel peers connect over the pod network, which protected mode rejects
+    # while no password is configured. Note that this leaves the Sentinel port
+    # open to anything that can reach it, exactly like the Valkey port itself
+    # when auth is disabled. Enable auth to require credentials on both.
     protected-mode no
+    {{- end }}
 
     # Address peers by DNS name, pod IPs change on every reschedule.
     sentinel resolve-hostnames yes

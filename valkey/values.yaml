@@ -307,7 +307,9 @@ replica:
   # because the master can move at any time. Clients must therefore discover the
   # master through Sentinel (SENTINEL get-master-addr-by-name).
   sentinel:
-    # Enable Sentinel (requires replica.enabled and at least 3 pods)
+    # Enable Sentinel (requires replica.enabled and at least 3 pods).
+    # When auth.enabled is false the Sentinel port accepts commands such as
+    # SENTINEL FAILOVER from anything that can reach it, like the Valkey port.
     enabled: false
 
     # Port on which Sentinel listens

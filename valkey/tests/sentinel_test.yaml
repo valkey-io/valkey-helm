@@ -268,7 +268,10 @@ tests:
           pattern: 'REPLICATION_TARGET="\$SAVED_REPLICAOF"'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'touch "\$BOOTSTRAP_MARKER"'
+          pattern: 'HAS_PREVIOUS_CONFIG=true'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'mv "\$VALKEY_CONFIG_TMP" "\$VALKEY_CONFIG"'
 
   - it: should pin non-zero pods to pod-0 without sentinel
     set:
@@ -277,7 +280,7 @@ tests:
     asserts:
       - notMatchRegex:
           path: data["init.sh"]
-          pattern: 'BOOTSTRAP_MARKER'
+          pattern: 'HAS_PREVIOUS_CONFIG'
       - matchRegex:
           path: data["init.sh"]
           pattern: 'REPLICATION_TARGET="replicaof \$MASTER_HOST \$MASTER_PORT"'
