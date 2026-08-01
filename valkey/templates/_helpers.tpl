@@ -243,7 +243,7 @@ Per-server TLS options for the HAProxy backends
 {{- if eq .Values.haproxy.tls.verify "required" }} ca-file /tls/{{ .Values.tls.caPublicKey }} verify required
 {{- else }} verify none
 {{- end }}
-{{- if .Values.tls.requireClientCertificate }} crt /tls/{{ .Values.tls.serverPublicKey }}
+{{- if .Values.tls.requireClientCertificate }} crt /tls/{{ .Values.haproxy.tls.clientCertFile }}
 {{- end }}
 {{- end }}
 {{- end -}}
@@ -255,6 +255,9 @@ Validate haproxy configuration
 {{- if .Values.haproxy.enabled }}
   {{- if not (and .Values.replica.enabled .Values.replica.sentinel.enabled) }}
     {{- fail "HAProxy routes clients to whichever node Sentinel promoted. Please set replica.enabled=true and replica.sentinel.enabled=true, or disable haproxy." }}
+  {{- end }}
+  {{- if and .Values.tls.enabled .Values.tls.requireClientCertificate (not .Values.haproxy.tls.clientCertFile) }}
+    {{- fail "tls.requireClientCertificate needs haproxy.tls.clientCertFile. HAProxy loads a client certificate from a single file holding both the certificate and its private key, which tls.serverPublicKey and tls.serverKey do not provide separately." }}
   {{- end }}
   {{- if .Values.auth.enabled }}
     {{- $checkUser := .Values.haproxy.checkUser | default "default" }}

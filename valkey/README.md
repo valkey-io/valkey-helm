@@ -143,8 +143,10 @@ The health check is the failover mechanism, so no sidecar, no runtime package in
 
 **Failover behaviour:**
 
-When the master fails, HAProxy drops the connections to it and starts routing to the promoted node within `haproxy.config.checkInterval`.
-Clients see connection errors for a few seconds and must reconnect, which is what a Sentinel-aware client would also do.
+A failover has two steps, and HAProxy only covers the second one.
+Sentinel first has to notice the failure (`replica.sentinel.downAfterMilliseconds`) and promote a replica; HAProxy then needs up to `haproxy.config.checkInterval` to see the new master in its health check.
+End to end that is the sum of both, not `checkInterval` alone.
+Clients see connection errors in the meantime and must reconnect, which is what a Sentinel-aware client would also do.
 A short `-READONLY` window is still possible while a recovered old master is being demoted by Sentinel.
 
 **Authentication:**
@@ -504,7 +506,7 @@ tls:
 | haproxy.service.readPort | int | `6380` | Read port, load balanced |
 | haproxy.service.annotations | object | `{}` |  |
 | haproxy.config.maxconn | int | `4096` |  |
-| haproxy.config.checkInterval | string | `"2s"` | Bounds how long a failover takes to be routed |
+| haproxy.config.checkInterval | string | `"2s"` | Time for HAProxy to notice a new master, on top of Sentinel's own detection |
 | haproxy.config.checkTimeout | string | `"5s"` |  |
 | haproxy.config.readBalance | string | `"roundrobin"` |  |
 | haproxy.config.timeout.connect | string | `"5s"` |  |
@@ -512,6 +514,7 @@ tls:
 | haproxy.config.timeout.server | string | `"1m"` |  |
 | haproxy.config.timeout.tunnel | string | `"0s"` | Keeps pub/sub connections open |
 | haproxy.tls.verify | string | `"required"` | Certificate validation towards the nodes |
+| haproxy.tls.clientCertFile | string | `""` | Combined cert+key, required with tls.requireClientCertificate |
 | haproxy.resources | object | `{}` |  |
 | haproxy.podSecurityContext | object | see values.yaml |  |
 | haproxy.securityContext | object | see values.yaml |  |

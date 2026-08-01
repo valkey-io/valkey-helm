@@ -483,6 +483,11 @@ haproxy:
     # when tls.enabled is true. Either "required" (validate against
     # tls.caPublicKey) or "none".
     verify: required
+    # Key in tls.existingSecret holding the client certificate HAProxy presents
+    # to the nodes, required when tls.requireClientCertificate is true. HAProxy
+    # reads the certificate and its private key from one file, so this key must
+    # hold both of them concatenated.
+    clientCertFile: ""
 
   # Resource limits/requests for the HAProxy container
   resources: {}
@@ -494,8 +499,10 @@ haproxy:
     #   cpu: 100m
     #   memory: 128Mi
 
-  # Security context for the HAProxy pod
+  # Security context for the HAProxy pod. fsGroup gives the non-root user access
+  # to the mounted TLS secret, whose files are owned by root.
   podSecurityContext:
+    fsGroup: 99
     runAsUser: 99
     runAsGroup: 99
     seccompProfile:

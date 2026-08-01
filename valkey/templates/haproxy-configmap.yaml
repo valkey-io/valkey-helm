@@ -50,6 +50,12 @@ data:
     # Only the node that answers "role:master" receives traffic. The health
     # check is the failover mechanism, so no Sentinel watcher is needed.
     backend valkey_master
+      # first, not the default roundrobin: if two nodes ever pass the role:master
+      # check at the same time, for example an old master that Sentinel has not
+      # demoted yet, roundrobin would split writes between them and the ones
+      # landing on the loser would be discarded. first sends every connection to
+      # the same node instead.
+      balance first
       option tcp-check
       tcp-check connect port {{ $port }}{{ if .Values.tls.enabled }} ssl{{ end }}
       {{- if .Values.auth.enabled }}
