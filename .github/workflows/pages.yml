@@ -1,0 +1,37 @@
+name: Update GitHub Pages landing page
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'pages/index.html'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Update gh-pages index.html
+        run: |
+          cp pages/index.html /tmp/index.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          cp /tmp/index.html index.html
+          git add index.html
+          if ! git diff --staged --quiet; then
+            git commit -m "Update GitHub Pages landing page"
+            git push origin gh-pages
+          fi
