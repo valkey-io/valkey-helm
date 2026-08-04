@@ -38,13 +38,21 @@
   <p>Update your local cache:</p>
   <pre><code>helm repo update</code></pre>
 
-  <p>Install the chart:</p>
+  <h2>Available Charts</h2>
+  <p>Install the standalone Valkey chart:</p>
   <pre><code>helm install valkey valkey/valkey</code></pre>
+
+  <p>Install the Valkey operator:</p>
+  <pre><code>helm install valkey-operator valkey/valkey-operator \
+  -n valkey-operator-system --create-namespace</code></pre>
+
+  <p>Install an operator-managed ValkeyCluster:</p>
+  <pre><code>helm install my-cluster valkey/valkey-resources -n valkey</code></pre>
 
   <h2>Repository Contents</h2>
   <ul>
     <li><a href="./index.yaml">index.yaml</a> - Helm repository index</li>
-    <li><a href="./charts/">charts/</a> - Packaged charts</li>
+    <li><a href="https://github.com/valkey-io/valkey-helm/releases">GitHub Releases</a> - Packaged charts (.tgz)</li>
   </ul>
 
   <footer style="margin-top: 50px; font-size: 0.9em;">
