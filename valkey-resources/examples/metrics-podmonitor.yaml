@@ -1,0 +1,14 @@
+# Scrapes ValkeyNode metrics-exporter sidecars (port name metrics, default 9121).
+# Needs Prometheus Operator PodMonitor CRDs. Exporter is on by default on the CR
+# (cluster.spec.exporter); disable there if you do not want the sidecar.
+metrics:
+  podMonitor:
+    enabled: true
+    # Match your Prometheus Operator serviceMonitorSelector / podMonitorSelector
+    labels:
+      release: prometheus
+
+cluster:
+  spec:
+    shards: 3
+    replicas: 1

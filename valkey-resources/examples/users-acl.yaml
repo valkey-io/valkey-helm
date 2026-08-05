@@ -1,0 +1,24 @@
+# ACL users. Password material lives in a Secret you create; this only references it.
+# Usernames must not start with _ (reserved for operator system users).
+#
+# Example Secret (create before install):
+#   kubectl create secret generic valkey-users \
+#     --from-literal=alicepw='change-me'
+extraValues:
+  usersSecret: valkey-users
+
+cluster:
+  spec:
+    shards: 3
+    replicas: 1
+    users:
+      - name: alice
+        passwordSecret:
+          name: "{{ .Values.extraValues.usersSecret }}"
+          keys: [alicepw]
+        commands:
+          allow: ["@read", "@write", "@connection"]
+          deny: ["@admin", "@dangerous"]
+        keys:
+          readWrite: ["app:*"]
+          readOnly: ["shared:*"]
