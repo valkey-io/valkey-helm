@@ -112,3 +112,91 @@ tests:
       - equal:
           path: spec.selector.matchLabels["app.kubernetes.io/instance"]
           value: RELEASE-NAME
+
+  - it: should use https port and scheme when metrics.secure is true
+    set:
+      metrics.secure: true
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: spec.endpoints[0].port
+          value: https
+      - equal:
+          path: spec.endpoints[0].scheme
+          value: https
+      - equal:
+          path: spec.endpoints[0].bearerTokenFile
+          value: /var/run/secrets/kubernetes.io/serviceaccount/token
+      - isNull:
+          path: spec.endpoints[0].tlsConfig
+
+  - it: should honor an explicit scheme over the secure default
+    set:
+      metrics.secure: true
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.scheme: http
+    asserts:
+      - equal:
+          path: spec.endpoints[0].port
+          value: https
+      - equal:
+          path: spec.endpoints[0].scheme
+          value: http
+
+  - it: should inject insecureSkipVerify when secure and opt-in without tlsConfig
+    set:
+      metrics.secure: true
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.insecureSkipVerify: true
+    asserts:
+      - equal:
+          path: spec.endpoints[0].tlsConfig.insecureSkipVerify
+          value: true
+
+  - it: should prefer explicit tlsConfig over insecureSkipVerify
+    set:
+      metrics.secure: true
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.insecureSkipVerify: true
+      metrics.serviceMonitor.tlsConfig:
+        caFile: /etc/ssl/certs/ca.crt
+        insecureSkipVerify: false
+    asserts:
+      - equal:
+          path: spec.endpoints[0].tlsConfig.caFile
+          value: /etc/ssl/certs/ca.crt
+      - equal:
+          path: spec.endpoints[0].tlsConfig.insecureSkipVerify
+          value: false
+
+  - it: should prefer authorization over bearerTokenFile when secure
+    set:
+      metrics.secure: true
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.authorization:
+        type: Bearer
+        credentials:
+          name: scrape-token
+          key: token
+    asserts:
+      - equal:
+          path: spec.endpoints[0].authorization.type
+          value: Bearer
+      - equal:
+          path: spec.endpoints[0].authorization.credentials.name
+          value: scrape-token
+      - isNull:
+          path: spec.endpoints[0].bearerTokenFile
+
+  - it: should omit bearer auth when metrics are not secure
+    set:
+      metrics.secure: false
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: spec.endpoints[0].port
+          value: http
+      - isNull:
+          path: spec.endpoints[0].scheme
+      - isNull:
+          path: spec.endpoints[0].bearerTokenFile

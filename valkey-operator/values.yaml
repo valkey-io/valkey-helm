@@ -238,6 +238,17 @@ metrics:
     # HTTP scheme used for scraping. When empty: https if metrics.secure is true,
     # otherwise Prometheus defaults to http.
     scheme: ""
+    # When metrics.secure is true: auth for the protected /metrics endpoint.
+    # Precedence: authorization > bearerTokenSecret > bearerTokenFile.
+    # Default bearerTokenFile is the scraper's ServiceAccount token (Prometheus
+    # pod). Bind that SA to metrics-reader (see metrics.reader.binding or README).
+    # Set bearerTokenFile to "" and leave authorization/bearerTokenSecret empty
+    # only if you inject credentials another way (scrapes will 401 otherwise).
+    bearerTokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    # Optional SecretKeySelector (name/key/optional) instead of bearerTokenFile.
+    bearerTokenSecret: {}
+    # Optional Prometheus Operator authorization block (wins over bearer* fields).
+    authorization: {}
     # When metrics.secure is true and tlsConfig is empty, set
     # tlsConfig.insecureSkipVerify so scrapers accept the operator's self-signed
     # metrics cert. Defaults to false (opt-in). Ignored when tlsConfig is set.
