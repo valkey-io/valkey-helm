@@ -23,6 +23,8 @@
   scraper SA to `metrics-reader` or scrapes return 401.
 - Helm unittest coverage for secure ServiceMonitor port, scheme, TLS precedence,
   skip-verify, and bearer token rendering.
+- Template fails if `metrics.secure` is true and `serviceMonitor.scheme` is
+  `http` (prevents sending scrape credentials over cleartext).
 
 ## 0.5.0
 

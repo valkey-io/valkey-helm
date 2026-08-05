@@ -1,4 +1,7 @@
 {{- if and .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}
+{{- if and .Values.metrics.secure (eq (lower (.Values.metrics.serviceMonitor.scheme | default "")) "http") }}
+{{- fail "metrics.serviceMonitor.scheme cannot be http when metrics.secure is true (would send scrape credentials over cleartext)" }}
+{{- end }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -30,7 +33,7 @@ spec:
     scheme: https
     {{- end }}
     {{- if .Values.metrics.secure }}
-    {{- /* Secure metrics require a metrics-reader token (401 without it). */}}
+    {{- /* Secure metrics require a metrics-reader token (401 without it). Only with HTTPS. */}}
     {{- if .Values.metrics.serviceMonitor.authorization }}
     authorization:
       {{- toYaml .Values.metrics.serviceMonitor.authorization | nindent 6 }}

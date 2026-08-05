@@ -130,18 +130,30 @@ tests:
       - isNull:
           path: spec.endpoints[0].tlsConfig
 
-  - it: should honor an explicit scheme over the secure default
+  - it: should fail when metrics.secure and scheme is http
     set:
       metrics.secure: true
       metrics.serviceMonitor.enabled: true
       metrics.serviceMonitor.scheme: http
+    asserts:
+      - failedTemplate:
+          errorMessage: "metrics.serviceMonitor.scheme cannot be http when metrics.secure is true (would send scrape credentials over cleartext)"
+
+  - it: should honor an explicit non-http scheme when secure
+    set:
+      metrics.secure: true
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.scheme: https
     asserts:
       - equal:
           path: spec.endpoints[0].port
           value: https
       - equal:
           path: spec.endpoints[0].scheme
-          value: http
+          value: https
+      - equal:
+          path: spec.endpoints[0].bearerTokenFile
+          value: /var/run/secrets/kubernetes.io/serviceaccount/token
 
   - it: should inject insecureSkipVerify when secure and opt-in without tlsConfig
     set:

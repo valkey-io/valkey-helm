@@ -73,7 +73,7 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `metrics.serviceMonitor.annotations` | Annotations for the ServiceMonitor | `{}` |
 | `metrics.serviceMonitor.interval` | Scrape interval | `""` |
 | `metrics.serviceMonitor.scrapeTimeout` | Scrape timeout | `""` |
-| `metrics.serviceMonitor.scheme` | Scrape scheme. Empty: `https` when `metrics.secure` is true, else Prometheus default (`http`) | `""` |
+| `metrics.serviceMonitor.scheme` | Scrape scheme. Empty: `https` when `metrics.secure` is true, else Prometheus default (`http`). `http` is rejected when `metrics.secure` is true | `""` |
 | `metrics.serviceMonitor.bearerTokenFile` | When `metrics.secure` is true and `authorization` / `bearerTokenSecret` are unset, path to the scrape token (default: scraper SA token). Empty disables this field | SA token path |
 | `metrics.serviceMonitor.bearerTokenSecret` | Optional SecretKeySelector for the scrape token (wins over `bearerTokenFile`) | `{}` |
 | `metrics.serviceMonitor.authorization` | Optional Prometheus Operator `authorization` block (wins over bearer fields) | `{}` |
@@ -183,6 +183,8 @@ Service: `http` when `metrics.secure` is `false`, `https` when it is `true`.
 When `metrics.secure` is `true`:
 
 - If `serviceMonitor.scheme` is empty, the chart sets `scheme: https`.
+  Setting `scheme: http` with secure metrics **fails template render** (would
+  send scrape credentials over cleartext).
 - The endpoint authenticates with the **scraper's ServiceAccount token** by
   default (`bearerTokenFile` under the Prometheus pod). That SA must be bound
   to `metrics-reader` or scrapes return **401**. Override with
@@ -193,6 +195,10 @@ When `metrics.secure` is `true`:
     `tlsConfig.insecureSkipVerify`), or
   - set `serviceMonitor.tlsConfig` yourself (e.g. a CA). Explicit `tlsConfig` wins
     over `insecureSkipVerify`.
+
+  Defaulting skip-verify to true would make “secure” also mean “do not verify
+  the server cert.” That stays opt-in; see the example below for the common
+  self-signed case.
 
 Example with secure metrics, reader binding, and self-signed cert skip-verify:
 
@@ -213,11 +219,16 @@ metrics:
     # bearerTokenFile defaults to the Prometheus SA token
 ```
 
-Example with a custom CA instead of skip-verify:
+Example with a custom CA instead of skip-verify (still needs reader binding):
 
 ```yaml
 metrics:
   secure: true
+  reader:
+    binding:
+      create: true
+      serviceAccountName: prometheus
+      namespace: monitoring
   serviceMonitor:
     enabled: true
     tlsConfig:
