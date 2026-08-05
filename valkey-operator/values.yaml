@@ -236,7 +236,8 @@ metrics:
     # Scrape timeout (defaults to the Prometheus global timeout when empty)
     scrapeTimeout: ""
     # HTTP scheme used for scraping. When empty: https if metrics.secure is true,
-    # otherwise Prometheus defaults to http.
+    # otherwise Prometheus defaults to http. Cannot be "http" when metrics.secure
+    # is true (would send scrape credentials over cleartext).
     scheme: ""
     # When metrics.secure is true: auth for the protected /metrics endpoint.
     # Precedence: authorization > bearerTokenSecret > bearerTokenFile.
