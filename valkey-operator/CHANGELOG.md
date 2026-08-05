@@ -16,6 +16,13 @@
   `metrics.secure` is true and `serviceMonitor.tlsConfig` is empty, injects
   `tlsConfig.insecureSkipVerify` for the operator's self-signed metrics cert.
   Explicit `serviceMonitor.tlsConfig` always wins.
+- Secure ServiceMonitor auth: when `metrics.secure` is true, the endpoint sends
+  the scraper's ServiceAccount token by default
+  (`bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token`).
+  Override with `serviceMonitor.authorization` or `bearerTokenSecret`. Bind the
+  scraper SA to `metrics-reader` or scrapes return 401.
+- Helm unittest coverage for secure ServiceMonitor port, scheme, TLS precedence,
+  skip-verify, and bearer token rendering.
 
 ## 0.5.0
 

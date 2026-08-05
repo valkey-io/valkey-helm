@@ -74,6 +74,9 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `metrics.serviceMonitor.interval` | Scrape interval | `""` |
 | `metrics.serviceMonitor.scrapeTimeout` | Scrape timeout | `""` |
 | `metrics.serviceMonitor.scheme` | Scrape scheme. Empty: `https` when `metrics.secure` is true, else Prometheus default (`http`) | `""` |
+| `metrics.serviceMonitor.bearerTokenFile` | When `metrics.secure` is true and `authorization` / `bearerTokenSecret` are unset, path to the scrape token (default: scraper SA token). Empty disables this field | SA token path |
+| `metrics.serviceMonitor.bearerTokenSecret` | Optional SecretKeySelector for the scrape token (wins over `bearerTokenFile`) | `{}` |
+| `metrics.serviceMonitor.authorization` | Optional Prometheus Operator `authorization` block (wins over bearer fields) | `{}` |
 | `metrics.serviceMonitor.insecureSkipVerify` | When `metrics.secure` is true and `tlsConfig` is empty, set `tlsConfig.insecureSkipVerify` for the self-signed metrics cert (opt-in) | `false` |
 | `metrics.serviceMonitor.tlsConfig` | Full scrape TLS config; when set, overrides `insecureSkipVerify` | `{}` |
 | `metrics.serviceMonitor.honorLabels` | Keep labels from the scraped target on collision | `false` |
@@ -180,6 +183,10 @@ Service: `http` when `metrics.secure` is `false`, `https` when it is `true`.
 When `metrics.secure` is `true`:
 
 - If `serviceMonitor.scheme` is empty, the chart sets `scheme: https`.
+- The endpoint authenticates with the **scraper's ServiceAccount token** by
+  default (`bearerTokenFile` under the Prometheus pod). That SA must be bound
+  to `metrics-reader` or scrapes return **401**. Override with
+  `serviceMonitor.authorization` or `serviceMonitor.bearerTokenSecret`.
 - The operator's metrics cert is self-signed by default. Scrapes will fail TLS
   verification until you either:
   - set `serviceMonitor.insecureSkipVerify: true` (opt-in; injects
@@ -187,7 +194,7 @@ When `metrics.secure` is `true`:
   - set `serviceMonitor.tlsConfig` yourself (e.g. a CA). Explicit `tlsConfig` wins
     over `insecureSkipVerify`.
 
-Example with secure metrics and a ServiceMonitor that accepts the self-signed cert:
+Example with secure metrics, reader binding, and self-signed cert skip-verify:
 
 ```yaml
 metrics:
@@ -203,6 +210,7 @@ metrics:
       # match your Prometheus serviceMonitorSelector
       release: prometheus
     insecureSkipVerify: true
+    # bearerTokenFile defaults to the Prometheus SA token
 ```
 
 Example with a custom CA instead of skip-verify:
