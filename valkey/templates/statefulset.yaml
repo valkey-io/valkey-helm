@@ -24,7 +24,9 @@ spec:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
   volumeClaimTemplates:
-  - metadata:
+  - apiVersion: v1	
+    kind: PersistentVolumeClaim
+    metadata:
       name: valkey-data
     spec:
       accessModes: {{ toYaml .Values.replica.persistence.accessModes | nindent 8 }}
@@ -58,6 +60,9 @@ spec:
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
+      {{- if .Values.runtimeClassName }}
+      runtimeClassName: {{ .Values.runtimeClassName | quote }}
       {{- end }}
       securityContext:
       {{- toYaml .Values.podSecurityContext | nindent 8 }}
@@ -127,26 +132,15 @@ spec:
             - name: {{ $key }}
               value: "{{ $val }}"
             {{- end }}
-            - name: VALKEY_LOGLEVEL
+            - name: VALKEY_LOG_LEVEL
               value: "{{ .Values.valkeyLogLevel }}"
           ports:
             - name: tcp
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-          startupProbe:
-            exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
-              {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
-              {{- end }}
-          livenessProbe:
-            exec:
-              {{- if .Values.tls.enabled }}
-              command: [ "sh", "-c", "valkey-cli --cacert /tls/{{ .Values.tls.caPublicKey }} --tls ping" ]
-              {{- else }}
-              command: [ "sh", "-c", "valkey-cli ping" ]
-              {{- end }}
+          {{- with (include "valkey.healthProbes" .) }}
+          {{- . | nindent 10 }}
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
@@ -218,7 +212,7 @@ spec:
                   {{- if .Values.auth.usersExistingSecret }}
                   {{- $defaultUser := index .Values.auth.aclUsers "default" | default dict }}
                   {{- $passwordKey := $defaultUser.passwordKey | default "default" }}
-                  name: {{ .Values.auth.usersExistingSecret }}
+                  name: {{ tpl .Values.auth.usersExistingSecret . }}
                   key: {{ $passwordKey }}
                   {{- else }}
                   name: {{ include "valkey.fullname" . }}-auth
@@ -278,7 +272,7 @@ spec:
         {{- if .Values.auth.usersExistingSecret }}
         - name: valkey-users-secret
           secret:
-            secretName: {{ .Values.auth.usersExistingSecret }}
+            secretName: {{ tpl .Values.auth.usersExistingSecret . }}
             defaultMode: 0400
         {{- end }}
         {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}

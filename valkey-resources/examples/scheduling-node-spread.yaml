@@ -1,0 +1,25 @@
+# Shard-aware placement on kubernetes.io/hostname via scheduling.node.spread.
+# Prefer this over hand-written hostname topologySpreadConstraints.
+#
+# Modes: Disabled | Preferred | Required
+# - shard: same-shard pods (primary + replicas) not co-located (pod anti-affinity)
+# - primaries: spreads each shard's node-index-0 pod (creation-time primary), not live role after failover
+# - pods: spreads all cluster pods
+#
+# Do not set primaries and pods to the same non-Disabled mode (admission rejects).
+# Production: set shard to at least Preferred so one node loss cannot wipe a whole shard.
+cluster:
+  spec:
+    shards: 3
+    replicas: 1
+    podDisruptionBudget:
+      mode: Cluster
+    scheduling:
+      node:
+        spread:
+          shard:
+            mode: Required
+          primaries:
+            mode: Preferred
+          pods:
+            mode: Disabled

@@ -1,0 +1,67 @@
+# Override the default name of resources
+nameOverride: ""
+# Override the full name of resources (ValkeyCluster metadata.name)
+fullnameOverride: ""
+
+# Labels added to all rendered resources
+commonLabels: {}
+
+# Free-form values for use inside templated strings (see cluster.spec tpl).
+# Not rendered as a Kubernetes object by itself.
+# Example:
+#   extraValues:
+#     tlsSecret: my-tls
+#   cluster:
+#     spec:
+#       tls:
+#         certificate:
+#           secretName: "{{ .Values.extraValues.tlsSecret }}"
+extraValues: {}
+
+# Scrape ValkeyNode metrics-exporter sidecars (port name "metrics", default 9121).
+# Requires Prometheus Operator CRDs. Operator enables the exporter by default
+# (cluster.spec.exporter.enabled); disable the exporter there if you do not want metrics.
+metrics:
+  podMonitor:
+    enabled: false
+    # Container port name on the metrics-exporter sidecar
+    port: metrics
+    # Namespace for the PodMonitor (defaults to release namespace)
+    namespace: ""
+    # Extra labels on the PodMonitor object (e.g. prometheus release selector)
+    labels: {}
+    annotations: {}
+    interval: ""
+    scrapeTimeout: ""
+    honorLabels: false
+    scheme: ""
+    tlsConfig: {}
+    relabelings: []
+    metricRelabelings: []
+    podTargetLabels: []
+    sampleLimit: null
+    targetLimit: null
+    # Additional matchLabels merged into the pod selector (default selects
+    # valkey.io/cluster=<ValkeyCluster name> in the release namespace)
+    selector: {}
+
+# ValkeyCluster resource. Nested so future CR kinds (e.g. standalone, sentinel)
+# can sit beside this as valkey / sentinel without a generic top-level "spec".
+# v0.1: one ValkeyCluster per release. Later kinds stay one logical workload
+# per release (enable at most one primary CR kind, or document if that changes).
+cluster:
+  # Annotations on the ValkeyCluster object
+  annotations: {}
+  # Labels on the ValkeyCluster object (in addition to chart labels)
+  labels: {}
+
+  # ValkeyCluster.spec drop-in (any CRD field allowed). Tested against operator
+  # appVersion (v0.4.0): scheduling under spec.scheduling, PDB as {mode: ...},
+  # node.spread.shard|primaries|pods. See CHANGELOG.md.
+  # Rendered via tpl so string values may use Helm templates, e.g.
+  #   image: "valkey/valkey:{{ .Chart.AppVersion }}"
+  #   tls.certificate.secretName: "{{ .Release.Name }}-tls"
+  # API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
+  spec:
+    shards: 3
+    replicas: 1

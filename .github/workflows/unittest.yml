@@ -2,9 +2,16 @@ name: Test Charts
 
 on:
   pull_request:
+    paths:
+      - "valkey/**"
+      - ".github/workflows/unittest.yml"
   push:
     branches:
       - main
+    paths:
+      - "valkey/**"
+      - ".github/workflows/unittest.yml"
+  workflow_dispatch:
 
 jobs:
   test:

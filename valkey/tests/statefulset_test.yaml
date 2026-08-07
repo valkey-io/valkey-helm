@@ -287,6 +287,27 @@ tests:
           path: metadata.annotations["custom.annotation"]
           value: "custom-value"
 
+  - it: should render users-secret volume with templated usersExistingSecret
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret-{{ .Release.Name }}"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-users-secret
+            secret:
+              secretName: my-custom-secret-RELEASE-NAME
+              defaultMode: 0400
+
   - it: should not have REDIS_PASSWORD env in metrics exporter when auth is disabled
     set:
       replica.enabled: true
@@ -348,6 +369,29 @@ tests:
                 name: my-custom-secret
                 key: default
 
+  - it: should render templated usersExistingSecret in metrics exporter
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret-{{ .Release.Name }}"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+      metrics.enabled: true
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-custom-secret-RELEASE-NAME
+                key: default
+
   - it: should set REDIS_PASSWORD using custom passwordKey in metrics exporter when usersExistingSecret is set
     set:
       replica.enabled: true
@@ -371,3 +415,27 @@ tests:
               secretKeyRef:
                 name: my-custom-secret
                 key: my-password-key
+  - it: should not set runtimeClassName when empty
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      runtimeClassName: ""
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - notExists:
+          path: spec.template.spec.runtimeClassName
+
+  - it: should set runtimeClassName when provided
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      runtimeClassName: "kata-containers"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.runtimeClassName
+          value: "kata-containers"

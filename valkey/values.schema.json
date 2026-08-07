@@ -361,6 +361,9 @@
         "priorityClassName": {
             "type": "string"
         },
+        "runtimeClassName": {
+            "type": "string"
+        },
         "replica": {
             "type": "object",
             "properties": {

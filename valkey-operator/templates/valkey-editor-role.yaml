@@ -1,0 +1,33 @@
+{{- if .Values.rbac.create -}}
+# Aggregated ClusterRole granting read/write access to the Valkey CRDs.
+# Rolls up into the built-in "edit" ClusterRole so users can create and modify
+# valkeyclusters/valkeynodes; status subresources stay read-only (controller-owned).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "valkey-operator.fullname" . }}-valkey-editor
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    {{- include "valkey-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - valkey.io
+  resources:
+  - valkeyclusters
+  - valkeynodes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - valkey.io
+  resources:
+  - valkeyclusters/status
+  - valkeynodes/status
+  verbs:
+  - get
+{{- end }}

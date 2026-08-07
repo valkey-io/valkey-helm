@@ -1,0 +1,23 @@
+suite: operator priorityClassName configuration
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should not render priorityClassName by default
+    asserts:
+      - notExists:
+          path: spec.template.spec.priorityClassName
+
+  - it: should render priorityClassName when set
+    set:
+      priorityClassName: system-cluster-critical
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: system-cluster-critical
+
+  - it: should not render priorityClassName when set to empty string
+    set:
+      priorityClassName: ""
+    asserts:
+      - notExists:
+          path: spec.template.spec.priorityClassName

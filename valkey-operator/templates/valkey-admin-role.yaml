@@ -1,0 +1,34 @@
+{{- if .Values.rbac.create -}}
+# Aggregated ClusterRole granting full management of the Valkey CRDs.
+# Rolls up into the built-in "admin" ClusterRole so namespace admins can
+# manage valkeyclusters/valkeynodes without the operator's controller permissions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "valkey-operator.fullname" . }}-valkey-admin
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    {{- include "valkey-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - valkey.io
+  resources:
+  - valkeyclusters
+  - valkeynodes
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - valkey.io
+  resources:
+  - valkeyclusters/status
+  - valkeynodes/status
+  verbs:
+  - get
+{{- end }}

@@ -1,0 +1,17 @@
+The valkey-operator has been installed.
+
+To verify the operator is running:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+To create a ValkeyCluster:
+
+kubectl apply -f - <<EOF
+apiVersion: valkey.io/v1alpha1
+kind: ValkeyCluster
+metadata:
+  name: my-cluster
+spec:
+  shards: 3
+  replicas: 1
+EOF

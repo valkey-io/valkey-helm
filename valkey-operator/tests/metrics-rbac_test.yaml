@@ -1,0 +1,194 @@
+suite: operator metrics auth RBAC
+templates:
+  - templates/metrics-rbac.yaml
+tests:
+  - it: should render the metrics RBAC objects when rbac.create and secure metrics are enabled
+    set:
+      rbac.create: true
+      metrics.enabled: true
+      metrics.secure: true
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: should omit the metrics RBAC objects when rbac.create is false
+    set:
+      rbac.create: false
+      metrics.secure: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should omit the metrics RBAC objects when metrics.secure is false
+    set:
+      rbac.create: true
+      metrics.enabled: true
+      metrics.secure: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should omit the metrics RBAC objects when metrics.enabled is false
+    set:
+      rbac.create: true
+      metrics.enabled: false
+      metrics.secure: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create the metrics-auth ClusterRole with TokenReview and SubjectAccessReview rules
+    set:
+      metrics.secure: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-operator-metrics-auth
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - authentication.k8s.io
+            resources:
+              - tokenreviews
+            verbs:
+              - create
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - authorization.k8s.io
+            resources:
+              - subjectaccessreviews
+            verbs:
+              - create
+
+  - it: should bind the metrics-auth ClusterRole to the operator ServiceAccount
+    set:
+      metrics.secure: true
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-operator-metrics-auth
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-valkey-operator-metrics-auth
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+      - contains:
+          path: subjects
+          content:
+            kind: ServiceAccount
+            name: RELEASE-NAME-valkey-operator
+            namespace: NAMESPACE
+
+  - it: should create the metrics-reader ClusterRole granting get on /metrics
+    set:
+      metrics.secure: true
+    documentIndex: 2
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-operator-metrics-reader
+      - contains:
+          path: rules
+          content:
+            nonResourceURLs:
+              - /metrics
+            verbs:
+              - get
+
+  - it: should include standard labels on the metrics-auth ClusterRole
+    set:
+      metrics.secure: true
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey-operator
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - isNotNull:
+          path: metadata.labels["helm.sh/chart"]
+
+  - it: should not create the metrics-reader binding by default
+    set:
+      metrics.secure: true
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: should fail when binding.create is true but serviceAccountName is empty
+    set:
+      metrics.secure: true
+      metrics.reader.binding.create: true
+      metrics.reader.binding.serviceAccountName: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: metrics.reader.binding.serviceAccountName is required when metrics.reader.binding.create is true
+
+  - it: should create the metrics-reader binding when enabled with a scraper SA
+    set:
+      metrics.secure: true
+      metrics.reader.binding.create: true
+      metrics.reader.binding.serviceAccountName: prometheus
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-operator-metrics-reader
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-valkey-operator-metrics-reader
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+      - equal:
+          path: subjects[0].name
+          value: prometheus
+      - equal:
+          path: subjects[0].namespace
+          value: NAMESPACE
+
+  - it: should template the scraper SA name and namespace
+    set:
+      metrics.secure: true
+      metrics.reader.binding.create: true
+      metrics.reader.binding.serviceAccountName: "{{ .Release.Name }}-prometheus"
+      metrics.reader.binding.namespace: "monitoring-{{ .Release.Name }}"
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-prometheus
+      - equal:
+          path: subjects[0].namespace
+          value: monitoring-RELEASE-NAME
+
+  - it: should not create the metrics-reader binding when rbac.create is false
+    set:
+      rbac.create: false
+      metrics.secure: true
+      metrics.reader.binding.create: true
+      metrics.reader.binding.serviceAccountName: prometheus
+    asserts:
+      - hasDocuments:
+          count: 0

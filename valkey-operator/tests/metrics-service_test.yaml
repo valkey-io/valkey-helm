@@ -1,0 +1,31 @@
+suite: operator metrics service
+templates:
+  - templates/metrics-service.yaml
+tests:
+  - it: should not render the service when metrics are disabled
+    set:
+      metrics.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should name the port http when metrics are insecure
+    set:
+      metrics.secure: false
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.ports[0].name
+          value: http
+      - equal:
+          path: spec.ports[0].targetPort
+          value: metrics
+
+  - it: should name the port https when metrics are secure
+    set:
+      metrics.secure: true
+    asserts:
+      - equal:
+          path: spec.ports[0].name
+          value: https
