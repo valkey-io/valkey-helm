@@ -232,7 +232,7 @@ Validate sentinel configuration
 Returns the HAProxy container image
 */}}
 {{- define "valkey.haproxy.image" -}}
-{{- include "common.image" (dict "image" .Values.haproxy.image "global" .Values.global) }}
+{{- include "valkey.common.image" (dict "image" .Values.haproxy.image "global" .Values.global) }}
 {{- end -}}
 
 {{/*
