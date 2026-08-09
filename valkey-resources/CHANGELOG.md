@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.3
+
+### Added
+
+- Example values under [`examples/`](examples/): minimal topology, `scheduling.node.spread`, zone topology spread, TLS secret ref, persistence, PodMonitor, and ACL users.
+- Index and usage notes in [`examples/README.md`](examples/README.md).
+
+### Notes
+
+- Helm unittest smoke renders for the examples directory are deferred to a follow-up.
+
 ## 0.1.2
 
 ### Changed

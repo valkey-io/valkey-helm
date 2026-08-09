@@ -1,0 +1,11 @@
+# Durable storage per ValkeyNode. Requires workloadType StatefulSet (default).
+# persistence cannot be added or removed after create; size may only grow.
+# storageClassName is immutable once set.
+cluster:
+  spec:
+    shards: 3
+    replicas: 1
+    workloadType: StatefulSet
+    persistence:
+      size: 1Gi
+      # storageClassName: standard
