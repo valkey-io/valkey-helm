@@ -112,6 +112,11 @@ spec:
               mountPath: /data
             - name: scripts
               mountPath: /scripts
+            {{- if .Values.replica.sentinel.enabled }}
+            - name: sentinel-auth
+              mountPath: /sentinel-auth
+              readOnly: true
+            {{- end }}
             {{- if .Values.valkeyConfig }}
             - name: valkey-config
               mountPath: /usr/local/etc/valkey/valkey.conf
@@ -182,6 +187,9 @@ spec:
             {{- if and .Values.replica.sentinel.enabled .Values.replica.sentinel.preStopFailover }}
             - name: sentinel-scripts
               mountPath: /sentinel-scripts
+            - name: sentinel-auth
+              mountPath: /sentinel-auth
+              readOnly: true
             {{- end }}
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
@@ -254,6 +262,9 @@ spec:
               mountPath: /sentinel-data
             - name: sentinel-scripts
               mountPath: /sentinel-scripts
+            - name: sentinel-auth
+              mountPath: /sentinel-auth
+              readOnly: true
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
@@ -343,6 +354,26 @@ spec:
           configMap:
             name: {{ include "valkey.fullname" . }}-sentinel-scripts
             defaultMode: 0555
+        - name: sentinel-auth
+          projected:
+            defaultMode: 0400
+            sources:
+              {{- if .Values.auth.usersExistingSecret }}
+              - secret:
+                  name: {{ tpl .Values.auth.usersExistingSecret . }}
+                  optional: true
+                  items:
+                    - key: {{ .Values.replica.sentinel.passwordKey }}
+                      path: existing-password
+              {{- end }}
+              {{- if .Values.replica.sentinel.password }}
+              - secret:
+                  name: {{ include "valkey.fullname" . }}-auth
+                  optional: true
+                  items:
+                    - key: sentinel-password
+                      path: inline-password
+              {{- end }}
         {{- if not .Values.replica.sentinel.persistence.enabled }}
         - name: sentinel-data
           emptyDir: {}

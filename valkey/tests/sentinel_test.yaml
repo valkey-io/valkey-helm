@@ -11,6 +11,7 @@ set:
   replica.enabled: true
   replica.persistence.size: "5Gi"
   replica.sentinel.enabled: true
+  replica.sentinel.password: "sentinelpw"
 tests:
   - it: should fail when sentinel is enabled without replication
     set:
@@ -58,13 +59,9 @@ tests:
       - failedTemplate:
           errorPattern: "Sentinel monitor user 'missing-user' must be defined in auth.aclUsers.*"
 
-  - it: should require a dedicated sentinel password when auth is enabled
+  - it: should require a dedicated sentinel password
     set:
-      auth.enabled: true
-      auth.aclUsers:
-        default:
-          permissions: "~* &* +@all"
-          password: "pw"
+      replica.sentinel.password: ""
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
@@ -198,12 +195,21 @@ tests:
           path: data["sentinel-start.sh"]
           pattern: 'DEFAULT_MASTER_HOST="RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local"'
 
-  - it: should not configure authentication when auth is disabled
+  - it: should secure the sentinel port when valkey auth is disabled
     template: templates/sentinel-configmap.yaml
     asserts:
       - notMatchRegex:
           path: data["sentinel-start.sh"]
           pattern: 'sentinel auth-pass'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'user sentinel on #\$\{SENTINEL_PASSHASH\}'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel sentinel-user sentinel'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'protected-mode no'
 
   - it: should authenticate to the nodes and secure the sentinel port
     set:
@@ -318,6 +324,21 @@ tests:
       - matchRegex:
           path: data["init.sh"]
           pattern: 'sentinel get-master-addr-by-name mymaster'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*elif \[ "\$HAS_PREVIOUS_CONFIG" = "true" \]'
+
+  - it: should mount the dedicated sentinel credential in every script container
+    template: templates/statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      - exists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      - exists:
+          path: spec.template.spec.containers[1].volumeMounts[?(@.name == "sentinel-auth")]
+      - exists:
+          path: spec.template.spec.volumes[?(@.name == "sentinel-auth")].projected.sources[0].secret.items[0].path
 
   - it: should reject an incomplete answer from a peer sentinel
     template: templates/sentinel-configmap.yaml

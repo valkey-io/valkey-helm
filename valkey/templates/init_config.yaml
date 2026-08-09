@@ -187,14 +187,12 @@ data:
     # Without this, a pod that lost its volume would fall back to the pod index
     # and pod-0 would come back as a second writable master after a failover.
     master_from_sentinels() {
-      {{- if .Values.auth.enabled }}
-      sentinel_password=$(get_user_password "sentinel" "{{ .Values.replica.sentinel.passwordKey }}") || return 1
-      {{- end }}
+      sentinel_password=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null) || return 1
       i=0
       while [ "$i" -lt {{ add (int .Values.replica.replicas) 1 }} ]; do
         peer="{{ include "valkey.fullname" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
         if [ "$peer" != "$SELF_HOST" ]; then
-          addr=$({{ if .Values.auth.enabled }}REDISCLI_AUTH="$sentinel_password" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} {{ if .Values.auth.enabled }}--user sentinel {{ end }}\
+          addr=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
             -t 2 -h "$peer" -p {{ .Values.replica.sentinel.port }} \
             sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null || true)
           host=$(echo "$addr" | sed -n 1p)
@@ -219,13 +217,9 @@ data:
       # Sentinel owns the topology: keep whatever it last wrote.
       log "Restoring replication target chosen by Sentinel: $SAVED_REPLICAOF"
       REPLICATION_TARGET="$SAVED_REPLICAOF"
-    elif [ "$HAS_PREVIOUS_CONFIG" = "true" ]; then
-      # A complete config from a previous run without a replicaof directive:
-      # this pod was the master and stays the master.
-      log "This pod (index $POD_INDEX) was the master before the restart, staying MASTER"
     else
-      # No usable local state: this is either a first boot or a pod that lost
-      # its volume.
+      # A persisted master role may be stale after this pod was unavailable, so
+      # ask the running Sentinels before trusting it or bootstrapping by index.
       DISCOVERED=$(master_from_sentinels || true)
       if [ -n "$DISCOVERED" ]; then
         FOUND_HOST=${DISCOVERED% *}
@@ -236,6 +230,8 @@ data:
           log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
           REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
         fi
+      elif [ "$HAS_PREVIOUS_CONFIG" = "true" ]; then
+        log "No Sentinel answered; this pod was the master before the restart, staying MASTER"
       elif [ "$POD_INDEX" = "0" ]; then
         log "Bootstrapping cluster, this pod (index $POD_INDEX) starts as MASTER"
       else

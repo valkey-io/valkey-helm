@@ -320,8 +320,7 @@ replica:
   # master through Sentinel (SENTINEL get-master-addr-by-name).
   sentinel:
     # Enable Sentinel (requires replica.enabled and at least 3 pods).
-    # When auth.enabled is false the Sentinel port accepts commands such as
-    # SENTINEL FAILOVER from anything that can reach it, like the Valkey port.
+    # The Sentinel endpoint always requires its dedicated password, independently of whether authentication is enabled for the Valkey data endpoint.
     enabled: false
 
     # Port on which Sentinel listens
@@ -353,11 +352,11 @@ replica:
     # and, because the same user replicates, +psync +replconf
     monitorUser: ""
 
-    # Dedicated password for Sentinel's own ACL. Do not reuse a Valkey user
-    # password: Sentinel permissions are independent from Valkey ACLs.
-    # When auth.usersExistingSecret is set, passwordKey is looked up in that
-    # Secret first and this inline value is only used if the key is missing,
-    # the same priority the other ACL users follow.
+    # Dedicated password for Sentinel's own ACL.
+    # Do not reuse a Valkey user password because Sentinel permissions are independent from Valkey ACLs.
+    # This password is required whenever Sentinel is enabled.
+    # When auth.usersExistingSecret is set, passwordKey is looked up in that Secret first.
+    # This inline value is used as a fallback when the key is missing.
     password: ""
     passwordKey: "sentinel"
 

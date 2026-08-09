@@ -222,10 +222,10 @@ Validate sentinel configuration
   {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
     {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than replica.terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
   {{- end }}
+  {{- if and (not .Values.replica.sentinel.password) (not .Values.auth.usersExistingSecret) }}
+    {{- fail "replica.sentinel.password is required when Sentinel is enabled, unless auth.usersExistingSecret supplies replica.sentinel.passwordKey." }}
+  {{- end }}
   {{- if .Values.auth.enabled }}
-    {{- if and (not .Values.replica.sentinel.password) (not .Values.auth.usersExistingSecret) }}
-      {{- fail "replica.sentinel.password is required when Sentinel authentication is enabled, unless auth.usersExistingSecret supplies replica.sentinel.passwordKey." }}
-    {{- end }}
     {{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
     {{- if not (hasKey .Values.auth.aclUsers $monitorUser) }}
       {{- fail (printf "Sentinel monitor user '%s' must be defined in auth.aclUsers. Sentinel needs it to reach the monitored Valkey nodes." $monitorUser) }}

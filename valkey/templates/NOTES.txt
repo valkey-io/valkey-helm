@@ -28,12 +28,13 @@ ask Sentinel for the current master instead of connecting to a fixed pod:
 {{- $sentinelHost := printf "%s-sentinel" (include "valkey.fullname" .) }}
 {{- $sentinelPort := .Values.replica.sentinel.service.port }}
 
-  $ valkey-cli -h {{ $sentinelHost }} -p {{ $sentinelPort }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} -a <default password>{{ end }} \
+  $ valkey-cli -h {{ $sentinelHost }} -p {{ $sentinelPort }}{{ if .Values.tls.enabled }} --tls{{- end }} --user sentinel -a <sentinel password> \
       SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }}
 
 Most client libraries do this for you, e.g. in Python:
 
-  Sentinel([("{{ $sentinelHost }}", {{ $sentinelPort }})]).master_for("{{ .Values.replica.sentinel.masterSet }}")
+  Sentinel([("{{ $sentinelHost }}", {{ $sentinelPort }})],
+           sentinel_kwargs={"username": "sentinel", "password": "<sentinel password>"}).master_for("{{ .Values.replica.sentinel.masterSet }}")
 {{- else }}
 
 The Sentinel service is disabled (replica.sentinel.service.enabled), so address
