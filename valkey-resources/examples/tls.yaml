@@ -1,0 +1,12 @@
+# TLS material is a Secret you create. Chart only references the name.
+# Secret keys: ca.crt, tls.crt, tls.key
+extraValues:
+  tlsSecret: valkey-tls
+
+cluster:
+  spec:
+    shards: 3
+    replicas: 1
+    tls:
+      certificate:
+        secretName: "{{ .Values.extraValues.tlsSecret }}"

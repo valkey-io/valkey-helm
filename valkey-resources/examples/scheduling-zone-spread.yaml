@@ -1,0 +1,19 @@
+# Zone-level topology spread (escape hatch). Operator renders TSC verbatim;
+# you must supply labelSelector. Prefer node.spread for hostname / node HA.
+#
+# fullnameOverride pins ValkeyCluster metadata.name so valkey.io/cluster matches
+# the selector. Change both together if you rename the cluster.
+fullnameOverride: my-cluster
+
+cluster:
+  spec:
+    shards: 3
+    replicas: 1
+    scheduling:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              valkey.io/cluster: my-cluster
