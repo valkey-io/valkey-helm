@@ -201,7 +201,7 @@ data:
     {{- if .Values.auth.enabled }}
     # Sentinel has a dedicated identity. Valkey application credentials must
     # never gain Sentinel administration privileges as a side effect.
-    SENTINEL_PASSHASH=$(echo -n "$SENTINEL_PASSWORD" | sha256sum | cut -f 1 -d " ")
+    SENTINEL_PASSHASH=$(printf '%s' "$SENTINEL_PASSWORD" | sha256sum | cut -f 1 -d " ")
     cat >> "$SENTINEL_CONF" << EOF
 
     user default off

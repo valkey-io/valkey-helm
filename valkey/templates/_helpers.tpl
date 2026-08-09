@@ -128,6 +128,9 @@ Check if there are any users with inline passwords
     {{- $hasInlinePasswords = true -}}
   {{- end -}}
 {{- end -}}
+{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.password -}}
+  {{- $hasInlinePasswords = true -}}
+{{- end -}}
 {{- $hasInlinePasswords -}}
 {{- end -}}
 

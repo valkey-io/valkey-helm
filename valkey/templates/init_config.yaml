@@ -58,7 +58,7 @@ data:
       fi
       {{- end }}
 
-      echo "$password"
+      printf '%s' "$password"
     }
     {{- end }}
 
@@ -143,8 +143,8 @@ data:
     PASSWORD=$(get_user_password "{{ $username }}" "{{ $passwordKey }}") || exit 1
 
     # Hash the password and write ACL entry
-    PASSHASH=$(echo -n "$PASSWORD" | sha256sum | cut -f 1 -d " ")
-    echo "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> /etc/valkey/users.acl
+    PASSHASH=$(printf '%s' "$PASSWORD" | sha256sum | cut -f 1 -d " ")
+    printf '%s\n' "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> /etc/valkey/users.acl
 
     {{- end }}
     {{- end }}
@@ -293,7 +293,7 @@ data:
       {
         echo ""
         echo "# Master authentication"
-        echo "masterauth $REPL_PASSWORD"
+        printf '%s\n' "masterauth $REPL_PASSWORD"
         echo "masteruser {{ $replUsername }}"
       } >>"$VALKEY_CONFIG_TMP"
       log "Configured masterauth with user {{ $replUsername }}"

@@ -404,6 +404,58 @@ tests:
           path: spec.loadBalancerSourceRanges
           value: [ "10.0.0.0/8", "10.1.0.0/16" ]
 
+  - it: should hash the sentinel password byte for byte
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+      replica.sentinel.password: "sentinelpw"
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'echo -n .* \| sha256sum'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: "printf '%s' .* \\| sha256sum"
+
+  - it: should hash the acl user passwords byte for byte
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+      replica.sentinel.password: "sentinelpw"
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'echo -n .* \| sha256sum'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "printf '%s' .* \\| sha256sum"
+
+  - it: should still create the auth secret when only the sentinel password is inline
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+      replica.sentinel.password: "sentinelpw"
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-auth-secret
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 0400
+
   - it: should not render any sentinel resource when sentinel is disabled
     set:
       replica.sentinel.enabled: false
