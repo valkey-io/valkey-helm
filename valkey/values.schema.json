@@ -129,6 +129,9 @@
                         "checkTimeout": {
                             "type": "string"
                         },
+                        "healthPort": {
+                            "type": "integer"
+                        },
                         "maxconn": {
                             "type": "integer"
                         },

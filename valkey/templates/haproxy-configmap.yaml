@@ -47,6 +47,16 @@ data:
       bind *:{{ .Values.haproxy.service.readPort }}
       default_backend valkey_replicas
 
+    # Endpoint for the Kubernetes probes. HAProxy answers it itself, so the
+    # probes never open a connection that gets proxied to a Valkey node. Probing
+    # the proxy ports instead made every probe reach the master, which logged an
+    # "Error accepting a client connection" for each one.
+    frontend health
+      bind *:{{ .Values.haproxy.config.healthPort }}
+      mode http
+      monitor-uri /healthz
+      option dontlog-normal
+
     # Only the node that answers "role:master" receives traffic. The health
     # check is the failover mechanism, so no Sentinel watcher is needed.
     backend valkey_master
@@ -68,6 +78,10 @@ data:
       tcp-check send info\ replication\r\n
       tcp-check send QUIT\r\n
       tcp-check expect string role:master
+      # Drain the QUIT reply so the node closes the connection first. Without
+      # this HAProxy hangs up mid-stream on every successful check and the node
+      # logs an "Error accepting a client connection" each time.
+      tcp-check expect string +OK
       timeout check {{ .Values.haproxy.config.checkTimeout }}
       # init-state down keeps a node out of rotation until a check has proven it
       # is the master, otherwise a starting HAProxy would forward writes to a
@@ -89,6 +103,8 @@ data:
       tcp-check send PING\r\n
       tcp-check send QUIT\r\n
       tcp-check expect string +PONG
+      # See the master backend: let the node close the connection first.
+      tcp-check expect string +OK
       timeout check {{ .Values.haproxy.config.checkTimeout }}
       balance {{ .Values.haproxy.config.readBalance }}
       default-server check inter {{ .Values.haproxy.config.checkInterval }} fall 2 rise 1 init-addr last,libc,none init-state down resolvers kubernetes{{ include "valkey.haproxy.serverTlsOptions" . }}

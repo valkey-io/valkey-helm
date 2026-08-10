@@ -76,15 +76,24 @@ spec:
             - name: valkey-read
               containerPort: {{ .Values.haproxy.service.readPort }}
               protocol: TCP
+            - name: health
+              containerPort: {{ .Values.haproxy.config.healthPort }}
+              protocol: TCP
+          # Probes hit HAProxy's own monitor endpoint. They deliberately do not
+          # depend on a backend being up: during a failover every HAProxy pod
+          # would otherwise go unready at once, exactly when clients need it.
           startupProbe:
-            tcpSocket:
-              port: valkey-write
+            httpGet:
+              path: /healthz
+              port: health
           livenessProbe:
-            tcpSocket:
-              port: valkey-write
+            httpGet:
+              path: /healthz
+              port: health
           readinessProbe:
-            tcpSocket:
-              port: valkey-write
+            httpGet:
+              path: /healthz
+              port: health
           resources:
             {{- toYaml .Values.haproxy.resources | nindent 12 }}
           volumeMounts:
