@@ -184,11 +184,17 @@ tests:
           path: spec.ports[0].port
           value: 6379
       - equal:
+          path: spec.ports[0].targetPort
+          value: valkey-write
+      - equal:
           path: spec.ports[1].name
           value: valkey-read
       - equal:
           path: spec.ports[1].port
           value: 6380
+      - equal:
+          path: spec.ports[1].targetPort
+          value: valkey-read
 
   - it: should send writes to a single node if two ever look like the master
     template: templates/haproxy-configmap.yaml
@@ -286,14 +292,27 @@ tests:
     template: templates/haproxy-deployment.yaml
     asserts:
       - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.port
+          value: health
+      - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
           value: /healthz
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.port
           value: health
       - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /healthz
+      - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.port
           value: health
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe.tcpSocket
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket
       - notExists:
           path: spec.template.spec.containers[0].livenessProbe.tcpSocket
       - contains:
@@ -308,10 +327,10 @@ tests:
     asserts:
       - matchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'tcp-check expect string role:master\n(.*\n)*?  tcp-check expect string \+OK'
+          pattern: '\nbackend valkey_master\n(.*\n)*?  tcp-check send QUIT\\r\\n\n  tcp-check expect string role:master\n(  #.*\n)*  tcp-check expect string \+OK'
       - matchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'tcp-check expect string \+PONG\n(.*\n)*?  tcp-check expect string \+OK'
+          pattern: '\nbackend valkey_replicas\n(.*\n)*?  tcp-check send QUIT\\r\\n\n  tcp-check expect string \+PONG\n(  #.*\n)*  tcp-check expect string \+OK'
 
   - it: should not render anything when haproxy is disabled
     set:
