@@ -34,8 +34,6 @@ data:
     }
 
     {{- if .Values.auth.enabled }}
-    {{- $defaultUser := index .Values.auth.aclUsers "default" }}
-    {{- $defaultPasswordKey := $defaultUser.passwordKey | default "default" }}
     {{- $monitorUserObj := index .Values.auth.aclUsers $monitorUser }}
     {{- $monitorPasswordKey := $monitorUserObj.passwordKey | default $monitorUser }}
 
@@ -59,7 +57,7 @@ data:
       return 1
     }
 
-    DEFAULT_PASSWORD=$(get_user_password "default" "{{ $defaultPasswordKey }}") || exit 1
+    SENTINEL_PASSWORD=$(get_user_password "sentinel" "{{ .Values.replica.sentinel.passwordKey }}") || exit 1
     MONITOR_PASSWORD=$(get_user_password "{{ $monitorUser }}" "{{ $monitorPasswordKey }}") || exit 1
     {{- end }}
 
@@ -67,10 +65,14 @@ data:
     # it does not show up in the process list of the pod.
     sentinel_cli() {
       {{- if .Values.auth.enabled }}
-      REDISCLI_AUTH="$DEFAULT_PASSWORD" \
-      {{- end }}
+      REDISCLI_AUTH="$SENTINEL_PASSWORD" \
+      valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+        --user sentinel \
+        -t 2 -p "{{ $sentinelPort }}" "$@"
+      {{- else }}
       valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
         -t 2 -p "{{ $sentinelPort }}" "$@"
+      {{- end }}
     }
 
     valkey_cli() {
@@ -197,14 +199,15 @@ data:
     EOF
 
     {{- if .Values.auth.enabled }}
-    # Sentinel's own ACL. It mirrors the Valkey 'default' user password so that
-    # the Sentinel port is never left unauthenticated, and the same credentials
-    # secure the Sentinel-to-Sentinel gossip.
-    DEFAULT_PASSHASH=$(echo -n "$DEFAULT_PASSWORD" | sha256sum | cut -f 1 -d " ")
+    # Sentinel has a dedicated identity. Valkey application credentials must
+    # never gain Sentinel administration privileges as a side effect.
+    SENTINEL_PASSHASH=$(printf '%s' "$SENTINEL_PASSWORD" | sha256sum | cut -f 1 -d " ")
     cat >> "$SENTINEL_CONF" << EOF
 
-    user default on #${DEFAULT_PASSHASH} ~* &* +@all
-    sentinel sentinel-pass ${DEFAULT_PASSWORD}
+    user default off
+    user sentinel on #${SENTINEL_PASSHASH} ~* &* +@all
+    sentinel sentinel-user sentinel
+    sentinel sentinel-pass ${SENTINEL_PASSWORD}
 
     # Credentials Sentinel uses to reach the monitored Valkey nodes.
     sentinel auth-pass ${MASTER_SET} ${MONITOR_PASSWORD}
@@ -232,20 +235,18 @@ data:
     set -eu
 
     {{- if .Values.auth.enabled }}
-    {{- $defaultUser := index .Values.auth.aclUsers "default" }}
-    {{- $defaultPasswordKey := $defaultUser.passwordKey | default "default" }}
     PASSWORD=""
     {{- if .Values.auth.usersExistingSecret }}
-    if [ -f "/valkey-users-secret/{{ $defaultPasswordKey }}" ]; then
-      PASSWORD=$(cat "/valkey-users-secret/{{ $defaultPasswordKey }}")
+    if [ -f "/valkey-users-secret/{{ .Values.replica.sentinel.passwordKey }}" ]; then
+      PASSWORD=$(cat "/valkey-users-secret/{{ .Values.replica.sentinel.passwordKey }}")
     fi
     {{- end }}
-    if [ -z "$PASSWORD" ] && [ -f "/valkey-auth-secret/default-password" ]; then
-      PASSWORD=$(cat "/valkey-auth-secret/default-password")
+    if [ -z "$PASSWORD" ] && [ -f "/valkey-auth-secret/sentinel-password" ]; then
+      PASSWORD=$(cat "/valkey-auth-secret/sentinel-password")
     fi
     {{- end }}
 
-    REPLY=$({{ if .Values.auth.enabled }}REDISCLI_AUTH="$PASSWORD" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+    REPLY=$({{ if .Values.auth.enabled }}REDISCLI_AUTH="$PASSWORD" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} {{ if .Values.auth.enabled }}--user sentinel {{ end }}\
       -t 2 -p {{ $sentinelPort }} ping)
 
     [ "$REPLY" = "PONG" ]
@@ -263,8 +264,6 @@ data:
     }
 
     {{- if .Values.auth.enabled }}
-    {{- $defaultUser := index .Values.auth.aclUsers "default" }}
-    {{- $defaultPasswordKey := $defaultUser.passwordKey | default "default" }}
     {{- $monitorUserObj := index .Values.auth.aclUsers $monitorUser }}
     {{- $monitorPasswordKey := $monitorUserObj.passwordKey | default $monitorUser }}
 
@@ -285,7 +284,7 @@ data:
       return 1
     }
 
-    DEFAULT_PASSWORD=$(get_user_password "default" "{{ $defaultPasswordKey }}") || exit 0
+    SENTINEL_PASSWORD=$(get_user_password "sentinel" "{{ .Values.replica.sentinel.passwordKey }}") || exit 0
     MONITOR_PASSWORD=$(get_user_password "{{ $monitorUser }}" "{{ $monitorPasswordKey }}") || exit 0
     {{- end }}
 
@@ -306,7 +305,7 @@ data:
     fi
 
     log "This pod is the master, asking Sentinel to fail over before shutting down"
-    {{ if .Values.auth.enabled }}REDISCLI_AUTH="$DEFAULT_PASSWORD" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+    {{ if .Values.auth.enabled }}REDISCLI_AUTH="$SENTINEL_PASSWORD" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} {{ if .Values.auth.enabled }}--user sentinel {{ end }}\
       -t 2 -p {{ $sentinelPort }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
         log "WARN: the failover request failed, continuing with the shutdown"
         exit 0

@@ -96,7 +96,9 @@ Writes sent to the `valkey` service directly may land on a replica and fail with
 
 **Authentication:**
 
-When `auth.enabled` is true, Sentinel reuses the `default` user password to secure its own port and the Sentinel-to-Sentinel gossip.
+When `auth.enabled` is true, set `replica.sentinel.password` to a credential used only for the Sentinel endpoint.
+With `auth.usersExistingSecret`, store that credential under `replica.sentinel.passwordKey` (default: `sentinel`) instead.
+Valkey user passwords are deliberately not accepted by Sentinel, so restrictions on application ACL users cannot be bypassed through Sentinel commands.
 Sentinel reaches the Valkey nodes as `replica.sentinel.monitorUser`, which defaults to `replica.replicationUser`.
 That user must be allowed to promote a replica, otherwise every failover aborts with `-failover-abort-slave-timeout`.
 The minimum permissions are:
@@ -489,6 +491,8 @@ tls:
 | replica.sentinel.failoverTimeout | int | `60000` |  |
 | replica.sentinel.parallelSyncs | int | `1` |  |
 | replica.sentinel.monitorUser | string | `""` | Defaults to replica.replicationUser |
+| replica.sentinel.password | string | `""` | Dedicated Sentinel ACL password; required with auth unless supplied by auth.usersExistingSecret |
+| replica.sentinel.passwordKey | string | `"sentinel"` | Key containing the Sentinel password in auth.usersExistingSecret |
 | replica.sentinel.preStopFailover | bool | `true` | Fail over before a master pod is terminated |
 | replica.sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
 | replica.sentinel.startupTimeoutSeconds | int | `60` |  |

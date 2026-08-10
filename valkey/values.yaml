@@ -353,6 +353,14 @@ replica:
     # and, because the same user replicates, +psync +replconf
     monitorUser: ""
 
+    # Dedicated password for Sentinel's own ACL. Do not reuse a Valkey user
+    # password: Sentinel permissions are independent from Valkey ACLs.
+    # When auth.usersExistingSecret is set, passwordKey is looked up in that
+    # Secret first and this inline value is only used if the key is missing,
+    # the same priority the other ACL users follow.
+    password: ""
+    passwordKey: "sentinel"
+
     # Ask Sentinel to promote a replica before this pod shuts down, so that a
     # rolling update does not leave clients writing to a terminating master.
     preStopFailover: true

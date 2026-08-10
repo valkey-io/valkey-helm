@@ -47,6 +47,7 @@ tests:
   - it: should fail when the monitor user is missing from aclUsers
     set:
       auth.enabled: true
+      replica.sentinel.password: "sentinelpw"
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
@@ -56,6 +57,18 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "Sentinel monitor user 'missing-user' must be defined in auth.aclUsers.*"
+
+  - it: should require a dedicated sentinel password when auth is enabled
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "replica.sentinel.password is required.*"
 
   - it: should add a sentinel container to every valkey pod
     template: templates/statefulset.yaml
@@ -195,6 +208,7 @@ tests:
   - it: should authenticate to the nodes and secure the sentinel port
     set:
       auth.enabled: true
+      replica.sentinel.password: "sentinelpw"
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
@@ -207,10 +221,16 @@ tests:
     asserts:
       - matchRegex:
           path: data["sentinel-start.sh"]
-          pattern: 'user default on #\$\{DEFAULT_PASSHASH\}'
+          pattern: 'user default off'
       - matchRegex:
           path: data["sentinel-start.sh"]
-          pattern: 'sentinel sentinel-pass \$\{DEFAULT_PASSWORD\}'
+          pattern: 'user sentinel on #\$\{SENTINEL_PASSHASH\} ~\* &\* \+@all'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel sentinel-user sentinel'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel sentinel-pass \$\{SENTINEL_PASSWORD\}'
       - matchRegex:
           path: data["sentinel-start.sh"]
           pattern: 'sentinel auth-user \$\{MASTER_SET\} replicator'
@@ -218,6 +238,7 @@ tests:
   - it: should not emit an auth-user for the default user
     set:
       auth.enabled: true
+      replica.sentinel.password: "sentinelpw"
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
@@ -315,6 +336,7 @@ tests:
   - it: should keep the credentials out of the process list
     set:
       auth.enabled: true
+      replica.sentinel.password: "sentinelpw"
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
@@ -381,6 +403,58 @@ tests:
       - equal:
           path: spec.loadBalancerSourceRanges
           value: [ "10.0.0.0/8", "10.1.0.0/16" ]
+
+  - it: should hash the sentinel password byte for byte
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+      replica.sentinel.password: "sentinelpw"
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'echo -n .* \| sha256sum'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: "printf '%s' .* \\| sha256sum"
+
+  - it: should hash the acl user passwords byte for byte
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+      replica.sentinel.password: "sentinelpw"
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'echo -n .* \| sha256sum'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "printf '%s' .* \\| sha256sum"
+
+  - it: should still create the auth secret when only the sentinel password is inline
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+      replica.sentinel.password: "sentinelpw"
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-auth-secret
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 0400
 
   - it: should not render any sentinel resource when sentinel is disabled
     set:
