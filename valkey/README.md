@@ -156,9 +156,17 @@ The password is passed to HAProxy as an environment variable read from the exist
 
 **TLS:**
 
-HAProxy connects to the nodes over TLS when `tls.enabled` is true and validates their certificates against `tls.caPublicKey`.
+With `tls.enabled`, `haproxy.tls.mode` decides what clients speak to HAProxy.
+
+`passthrough` (the default) forwards the encrypted stream untouched, so the client completes the TLS handshake with the Valkey node itself and the connection stays encrypted end to end.
+Clients connect with TLS exactly as they would to Valkey directly.
+Because they connect to the HAProxy service name, the server certificate must also be valid for it, so add a SAN such as `valkey-haproxy.<namespace>.svc.<clusterDomain>` next to the pod names.
+
+`bridge` is for clients that cannot do TLS at all: they connect in plaintext and HAProxy speaks TLS to the nodes on their behalf.
+The client leg is then unencrypted, so only use it where that is acceptable.
+
+In both modes HAProxy health checks the nodes over TLS and validates their certificates against `tls.caPublicKey`.
 Set `haproxy.tls.verify: none` if the certificates do not cover the pod DNS names.
-Note that HAProxy itself accepts plaintext client connections.
 
 ## Cluster Mode
 
@@ -513,6 +521,7 @@ tls:
 | haproxy.config.timeout.client | string | `"1m"` |  |
 | haproxy.config.timeout.server | string | `"1m"` |  |
 | haproxy.config.timeout.tunnel | string | `"0s"` | Keeps pub/sub connections open |
+| haproxy.tls.mode | string | `"passthrough"` | passthrough keeps TLS end to end, bridge accepts plaintext clients |
 | haproxy.tls.verify | string | `"required"` | Certificate validation towards the nodes |
 | haproxy.tls.clientCertFile | string | `""` | Combined cert+key, required with tls.requireClientCertificate |
 | haproxy.resources | object | `{}` |  |

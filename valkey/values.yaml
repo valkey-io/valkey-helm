@@ -479,6 +479,18 @@ haproxy:
       tunnel: 0s
 
   tls:
+    # How HAProxy treats TLS on the client side, only used when tls.enabled.
+    #
+    #   passthrough: HAProxy forwards the encrypted stream untouched and the
+    #                client completes the TLS handshake with the Valkey node
+    #                itself, so the connection stays encrypted end to end.
+    #                Clients must connect with TLS. The server certificate has
+    #                to be valid for the HAProxy service name as well, since
+    #                that is the name clients connect to.
+    #   bridge:      clients connect in plaintext and HAProxy speaks TLS to the
+    #                nodes on their behalf. Use this for clients that cannot do
+    #                TLS at all, and keep in mind the client leg is unencrypted.
+    mode: passthrough
     # Certificate validation for the connections to the Valkey nodes, only used
     # when tls.enabled is true. Either "required" (validate against
     # tls.caPublicKey) or "none".

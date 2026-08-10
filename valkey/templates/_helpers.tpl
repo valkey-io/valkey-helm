@@ -236,10 +236,14 @@ Returns the HAProxy container image
 {{- end -}}
 
 {{/*
-Per-server TLS options for the HAProxy backends
+Per-server TLS options for the HAProxy backends.
+In passthrough mode only the health check speaks TLS (check-ssl), the client
+stream is forwarded untouched. In bridge mode HAProxy originates TLS itself
+(ssl), so the data path is encrypted between HAProxy and the nodes.
 */}}
 {{- define "valkey.haproxy.serverTlsOptions" -}}
-{{- if .Values.tls.enabled }} ssl
+{{- if .Values.tls.enabled }}
+{{- if eq .Values.haproxy.tls.mode "bridge" }} ssl{{ else }} check-ssl{{ end }}
 {{- if eq .Values.haproxy.tls.verify "required" }} ca-file /tls/{{ .Values.tls.caPublicKey }} verify required
 {{- else }} verify none
 {{- end }}

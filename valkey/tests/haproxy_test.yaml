@@ -235,6 +235,46 @@ tests:
           path: data["haproxy.cfg"]
           pattern: 'crt /tls/client.pem'
 
+  - it: should keep client TLS end to end by default
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      # check-ssl, not ssl: only the health check is encrypted by HAProxy, the
+      # client stream is forwarded untouched so the client can negotiate TLS
+      # with the node itself.
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'default-server .* check-ssl ca-file /tls/ca.crt verify required'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'default-server .* [^-]ssl ca-file'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check connect port 6379 ssl'
+
+  - it: should originate TLS itself in bridge mode
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      haproxy.tls.mode: bridge
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'default-server .* ssl ca-file /tls/ca.crt verify required'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'check-ssl'
+
+  - it: should not add TLS options when TLS is disabled
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'ssl'
+
   - it: should not render anything when haproxy is disabled
     set:
       haproxy.enabled: false

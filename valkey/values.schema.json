@@ -236,6 +236,13 @@
                         "clientCertFile": {
                             "type": "string"
                         },
+                        "mode": {
+                            "type": "string",
+                            "enum": [
+                                "passthrough",
+                                "bridge"
+                            ]
+                        },
                         "verify": {
                             "type": "string",
                             "enum": [
