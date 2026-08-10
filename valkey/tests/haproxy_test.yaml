@@ -275,6 +275,44 @@ tests:
           path: data["haproxy.cfg"]
           pattern: 'ssl'
 
+  - it: should probe haproxy itself instead of proxying probes to the nodes
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'frontend health\n  bind \*:8404\n  mode http\n  monitor-uri /healthz'
+
+  - it: should point the kubernetes probes at the monitor endpoint
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: health
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: health
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: health
+            containerPort: 8404
+            protocol: TCP
+
+  - it: should drain the quit reply so checks close cleanly
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check expect string role:master\n(.*\n)*?  tcp-check expect string \+OK'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check expect string \+PONG\n(.*\n)*?  tcp-check expect string \+OK'
+
   - it: should not render anything when haproxy is disabled
     set:
       haproxy.enabled: false

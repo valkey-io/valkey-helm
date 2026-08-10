@@ -520,6 +520,7 @@ tls:
 | haproxy.config.maxconn | int | `4096` |  |
 | haproxy.config.checkInterval | string | `"2s"` | Time for HAProxy to notice a new master, on top of Sentinel's own detection |
 | haproxy.config.checkTimeout | string | `"5s"` |  |
+| haproxy.config.healthPort | int | `8404` | Serves /healthz for the Kubernetes probes, not published |
 | haproxy.config.readBalance | string | `"roundrobin"` |  |
 | haproxy.config.timeout.connect | string | `"5s"` |  |
 | haproxy.config.timeout.client | string | `"1m"` |  |

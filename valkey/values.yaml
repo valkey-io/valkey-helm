@@ -471,6 +471,10 @@ haproxy:
   config:
     # Maximum number of concurrent connections
     maxconn: 4096
+    # Port serving /healthz for the Kubernetes probes. HAProxy answers it
+    # itself, so probing does not open connections towards the Valkey nodes.
+    # Not published through the service.
+    healthPort: 8404
     # How often each Valkey node is health checked. This is also how long a
     # failover takes to be reflected in the routing.
     checkInterval: 2s
