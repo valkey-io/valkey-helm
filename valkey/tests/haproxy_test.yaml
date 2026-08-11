@@ -3,6 +3,7 @@ templates:
   - templates/haproxy-configmap.yaml
   - templates/haproxy-deployment.yaml
   - templates/haproxy-service.yaml
+  - templates/haproxy-pdb.yaml
 set:
   replica.enabled: true
   replica.persistence.size: "5Gi"
@@ -332,13 +333,65 @@ tests:
           path: data["haproxy.cfg"]
           pattern: '\nbackend valkey_replicas\n(.*\n)*?  tcp-check send QUIT\\r\\n\n  tcp-check expect string \+PONG\n(  #.*\n)*  tcp-check expect string \+OK'
 
+  - it: should not budget disruptions unless asked to
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should keep haproxy replicas available across a node drain
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-haproxy
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      # The selector has to match the deployment's, a PDB that selects nothing
+      # is silently no protection at all.
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app.kubernetes.io/name: valkey
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/component: haproxy
+
+  - it: should prefer minAvailable over maxUnavailable, they are mutually exclusive
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+      haproxy.podDisruptionBudget.minAvailable: 2
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 2
+      - notExists:
+          path: spec.maxUnavailable
+
+  - it: should set the unhealthy pod eviction policy when given
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+      haproxy.podDisruptionBudget.unhealthyPodEvictionPolicy: AlwaysAllow
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: AlwaysAllow
+
   - it: should not render anything when haproxy is disabled
     set:
       haproxy.enabled: false
+      haproxy.podDisruptionBudget.enabled: true
     templates:
       - templates/haproxy-configmap.yaml
       - templates/haproxy-deployment.yaml
       - templates/haproxy-service.yaml
+      - templates/haproxy-pdb.yaml
     asserts:
       - hasDocuments:
           count: 0
