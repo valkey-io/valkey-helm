@@ -513,6 +513,19 @@ haproxy:
     # hold both of them concatenated.
     clientCertFile: ""
 
+  # PodDisruptionBudget for the HAProxy pods. Without one, a node drain can
+  # evict every replica at once and take the endpoint down entirely.
+  podDisruptionBudget:
+    # Enable the PodDisruptionBudget
+    enabled: false
+    # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
+    minAvailable: null
+    # Maximum number of pods that can be unavailable during disruptions
+    maxUnavailable: 1
+    # Unhealthy pod eviction policy (optional)
+    # Valid values: IfHealthyBudget, AlwaysAllow
+    unhealthyPodEvictionPolicy: ""
+
   # Resource limits/requests for the HAProxy container
   resources: {}
     # Example:

@@ -529,6 +529,10 @@ tls:
 | haproxy.tls.mode | string | `"passthrough"` | passthrough keeps TLS end to end, bridge accepts plaintext clients |
 | haproxy.tls.verify | string | `"required"` | Certificate validation towards the nodes |
 | haproxy.tls.clientCertFile | string | `""` | Combined cert+key, required with tls.requireClientCertificate |
+| haproxy.podDisruptionBudget.enabled | bool | `false` | Keep HAProxy replicas available across node drains |
+| haproxy.podDisruptionBudget.minAvailable | int | `null` | Takes precedence over maxUnavailable |
+| haproxy.podDisruptionBudget.maxUnavailable | int | `1` |  |
+| haproxy.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
 | haproxy.resources | object | `{}` |  |
 | haproxy.podSecurityContext | object | see values.yaml |  |
 | haproxy.securityContext | object | see values.yaml |  |
