@@ -373,6 +373,40 @@ tests:
       - notExists:
           path: spec.maxUnavailable
 
+  - it: should honour minAvailable of zero rather than falling back
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+      haproxy.podDisruptionBudget.minAvailable: 0
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 0
+      - notExists:
+          path: spec.maxUnavailable
+
+  - it: should honour maxUnavailable of zero, which forbids every eviction
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+      haproxy.podDisruptionBudget.maxUnavailable: 0
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 0
+      - notExists:
+          path: spec.minAvailable
+
+  - it: should fail when the budget would constrain nothing
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+      haproxy.podDisruptionBudget.minAvailable: null
+      haproxy.podDisruptionBudget.maxUnavailable: null
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "haproxy.podDisruptionBudget needs either minAvailable or maxUnavailable.*"
+
   - it: should set the unhealthy pod eviction policy when given
     set:
       haproxy.podDisruptionBudget.enabled: true

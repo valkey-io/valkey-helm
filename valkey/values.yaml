@@ -520,7 +520,8 @@ haproxy:
     enabled: false
     # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
     minAvailable: null
-    # Maximum number of pods that can be unavailable during disruptions
+    # Maximum number of pods that can be unavailable during disruptions.
+    # 0 is honoured and forbids every voluntary eviction, which blocks node drains.
     maxUnavailable: 1
     # Unhealthy pod eviction policy (optional)
     # Valid values: IfHealthyBudget, AlwaysAllow
