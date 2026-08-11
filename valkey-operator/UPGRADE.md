@@ -2,6 +2,8 @@
 
 ## From 0.4.x to 0.5.0
 
+There are breaking changes in `ValkeyCluster` migrating from `spec.tls` to `spec.networking.tls`. See the [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.5.0) for steps on how to mitigate them.
+
 This version updates the CRDs to match the valkey-operator release bundled in this chart.
 Helm does not upgrade CRDs during `helm upgrade`, so you must apply them manually before upgrading.
 
