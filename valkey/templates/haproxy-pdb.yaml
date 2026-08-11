@@ -1,4 +1,5 @@
 {{- if and .Values.haproxy.enabled .Values.haproxy.podDisruptionBudget.enabled }}
+{{- include "valkey.validateHaproxyConfig" . }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -7,9 +8,12 @@ metadata:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/component: haproxy
 spec:
-  {{- if .Values.haproxy.podDisruptionBudget.minAvailable }}
+  {{- /* Tested for null rather than truthiness: 0 is a meaningful value here,
+         maxUnavailable: 0 forbids every voluntary eviction, and a truthiness
+         check would silently drop it. */}}
+  {{- if not (kindIs "invalid" .Values.haproxy.podDisruptionBudget.minAvailable) }}
   minAvailable: {{ .Values.haproxy.podDisruptionBudget.minAvailable }}
-  {{- else if .Values.haproxy.podDisruptionBudget.maxUnavailable }}
+  {{- else if not (kindIs "invalid" .Values.haproxy.podDisruptionBudget.maxUnavailable) }}
   maxUnavailable: {{ .Values.haproxy.podDisruptionBudget.maxUnavailable }}
   {{- end }}
   selector:
