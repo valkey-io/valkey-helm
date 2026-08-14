@@ -163,6 +163,9 @@ tests:
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: 'ssl ca-file /tls/ca.crt verify required'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-0 .* verifyhost RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local'
 
   - it: should skip certificate verification when asked to
     set:
@@ -174,6 +177,9 @@ tests:
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: 'ssl verify none'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'verifyhost| sni '
 
   - it: should expose a write and a read port
     template: templates/haproxy-service.yaml
@@ -260,6 +266,9 @@ tests:
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: 'tcp-check connect port 6379 ssl'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: ' sni '
 
   - it: should originate TLS itself in bridge mode
     set:
@@ -274,6 +283,9 @@ tests:
       - notMatchRegex:
           path: data["haproxy.cfg"]
           pattern: 'check-ssl'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-0 .* verifyhost RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local sni str\(RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local\)'
 
   - it: should not add TLS options when TLS is disabled
     template: templates/haproxy-configmap.yaml
