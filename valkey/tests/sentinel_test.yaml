@@ -316,21 +316,18 @@ tests:
       - exists:
           path: spec.template.metadata.annotations["checksum/sentinelconfig"]
 
-  - it: should retain the saved replication target as a fallback on restart
+  - it: should fail closed when sentinel cannot verify a previous configuration
     template: templates/init_config.yaml
     asserts:
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: 'SAVED_REPLICAOF=\$\(grep -E "\^\[\[:space:\]\]\*\(replicaof\|slaveof\)'
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*elif \[ -n "\$SAVED_REPLICAOF" \][\s\S]*REPLICATION_TARGET="\$SAVED_REPLICAOF"'
       - matchRegex:
           path: data["init.sh"]
           pattern: 'HAS_PREVIOUS_CONFIG=true'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'mv "\$VALKEY_CONFIG_TMP" "\$VALKEY_CONFIG"'
+          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*elif \[ "\$HAS_PREVIOUS_CONFIG" = "true" \]; then[\s\S]*refusing to start with a potentially stale replication role[\s\S]*exit 1[\s\S]*elif \[ "\$POD_INDEX" = "0" \]'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'SAVED_REPLICAOF'
 
   - it: should pin non-zero pods to pod-0 without sentinel
     set:
@@ -365,13 +362,6 @@ tests:
       - matchRegex:
           path: data["init.sh"]
           pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*elif \[ "\$HAS_PREVIOUS_CONFIG" = "true" \]'
-
-  - it: should prefer the master reported by sentinel over a saved replica target
-    template: templates/init_config.yaml
-    asserts:
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*if \[ -n "\$DISCOVERED" \][\s\S]*elif \[ -n "\$SAVED_REPLICAOF" \]'
 
   - it: should mount the dedicated sentinel credential in the valkey script containers
     template: templates/statefulset.yaml

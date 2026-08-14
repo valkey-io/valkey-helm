@@ -78,15 +78,11 @@ data:
     log "Creating configuration in $DATA_DIR..."
     {{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
 
-    # Sentinel rewrites valkey.conf via CONFIG REWRITE whenever the topology
-    # changes, so the replication target on disk is the source of truth. Capture
-    # it before the config is regenerated, otherwise every restart would reset
-    # the cluster to "pod-0 is master" and fight Sentinel.
-    SAVED_REPLICAOF=""
+    # A previous configuration means this pod may have missed a failover while
+    # it was offline, so Sentinel must confirm its role before it starts again.
     HAS_PREVIOUS_CONFIG=false
     if [ -f "$VALKEY_CONFIG" ]; then
       HAS_PREVIOUS_CONFIG=true
-      SAVED_REPLICAOF=$(grep -E "^[[:space:]]*(replicaof|slaveof)[[:space:]]" "$VALKEY_CONFIG" | tail -n 1 || true)
     fi
     {{- end }}
 
@@ -220,12 +216,9 @@ data:
         log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
         REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
       fi
-    elif [ -n "$SAVED_REPLICAOF" ]; then
-      # If no Sentinel answers, retain the last topology it persisted.
-      log "No Sentinel answered; restoring the saved replication target: $SAVED_REPLICAOF"
-      REPLICATION_TARGET="$SAVED_REPLICAOF"
     elif [ "$HAS_PREVIOUS_CONFIG" = "true" ]; then
-      log "No Sentinel answered; this pod was the master before the restart, staying MASTER"
+      log "No Sentinel answered; refusing to start with a potentially stale replication role"
+      exit 1
     elif [ "$POD_INDEX" = "0" ]; then
       log "Bootstrapping cluster, this pod (index $POD_INDEX) starts as MASTER"
     else

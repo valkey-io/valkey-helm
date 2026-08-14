@@ -130,7 +130,8 @@ Changing `replica.sentinel.persistence.enabled` later changes the Sentinel State
 
 A master that stops responding for `replica.sentinel.downAfterMilliseconds` is replaced within a few seconds.
 When a master pod is terminated by a rolling update, its `preStop` hook asks Sentinel to promote a replica first, so the failover happens before the pod goes away rather than after.
-The replication topology survives a full restart of the StatefulSet: each pod restores the replication target Sentinel last wrote, and each Sentinel rediscovers the current master instead of assuming it is pod-0.
+The replication topology survives a full restart of the StatefulSet: each pod asks Sentinel for the current master instead of assuming it is pod-0.
+To avoid starting with a stale role, a restarted pod with existing state waits for Sentinel discovery to become available.
 
 ## Cluster Mode
 
