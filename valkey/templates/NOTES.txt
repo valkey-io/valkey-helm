@@ -34,7 +34,7 @@ ask Sentinel for the current master instead of connecting to a fixed pod:
 Most client libraries do this for you, e.g. in Python:
 
   Sentinel([("{{ $sentinelHost }}", {{ $sentinelPort }})],
-           sentinel_kwargs={"username": "sentinel", "password": "<sentinel password>"}).master_for("{{ .Values.replica.sentinel.masterSet }}")
+           sentinel_kwargs={"username": "sentinel", "password": "<sentinel password>"}).master_for("{{ .Values.replica.sentinel.masterSet }}"{{ if .Values.auth.enabled }}, username="<Valkey user>", password="<Valkey password>"{{ end }})
 {{- else }}
 
 The Sentinel service is disabled (replica.sentinel.service.enabled), so address

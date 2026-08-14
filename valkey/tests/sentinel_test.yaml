@@ -316,7 +316,7 @@ tests:
       - exists:
           path: spec.template.metadata.annotations["checksum/sentinelconfig"]
 
-  - it: should restore the replication target chosen by sentinel on restart
+  - it: should retain the saved replication target as a fallback on restart
     template: templates/init_config.yaml
     asserts:
       - matchRegex:
@@ -324,7 +324,7 @@ tests:
           pattern: 'SAVED_REPLICAOF=\$\(grep -E "\^\[\[:space:\]\]\*\(replicaof\|slaveof\)'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'REPLICATION_TARGET="\$SAVED_REPLICAOF"'
+          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*elif \[ -n "\$SAVED_REPLICAOF" \][\s\S]*REPLICATION_TARGET="\$SAVED_REPLICAOF"'
       - matchRegex:
           path: data["init.sh"]
           pattern: 'HAS_PREVIOUS_CONFIG=true'
@@ -365,6 +365,13 @@ tests:
       - matchRegex:
           path: data["init.sh"]
           pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*elif \[ "\$HAS_PREVIOUS_CONFIG" = "true" \]'
+
+  - it: should prefer the master reported by sentinel over a saved replica target
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*if \[ -n "\$DISCOVERED" \][\s\S]*elif \[ -n "\$SAVED_REPLICAOF" \]'
 
   - it: should mount the dedicated sentinel credential in the valkey script containers
     template: templates/statefulset.yaml
