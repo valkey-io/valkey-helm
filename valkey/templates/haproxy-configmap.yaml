@@ -90,7 +90,7 @@ data:
       # reconnect to the new master instead of holding a read-only one.
       default-server check inter {{ .Values.haproxy.config.checkInterval }} fall 1 rise 1 init-addr last,libc,none init-state down resolvers kubernetes on-marked-down shutdown-sessions{{ include "valkey.haproxy.serverTlsOptions" . }}
       {{- range $i := until $pods }}
-      server {{ include "valkey.fullname" $ }}-{{ $i }} {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $port }}
+      server {{ include "valkey.fullname" $ }}-{{ $i }} {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $port }}{{ include "valkey.haproxy.serverTlsIdentityOptions" (dict "root" $ "index" $i) }}
       {{- end }}
 
     backend valkey_replicas
@@ -109,6 +109,6 @@ data:
       balance {{ .Values.haproxy.config.readBalance }}
       default-server check inter {{ .Values.haproxy.config.checkInterval }} fall 2 rise 1 init-addr last,libc,none init-state down resolvers kubernetes{{ include "valkey.haproxy.serverTlsOptions" . }}
       {{- range $i := until $pods }}
-      server {{ include "valkey.fullname" $ }}-{{ $i }} {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $port }}
+      server {{ include "valkey.fullname" $ }}-{{ $i }} {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $port }}{{ include "valkey.haproxy.serverTlsIdentityOptions" (dict "root" $ "index" $i) }}
       {{- end }}
 {{- end }}

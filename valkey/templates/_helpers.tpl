@@ -259,6 +259,18 @@ stream is forwarded untouched. In bridge mode HAProxy originates TLS itself
 {{- end -}}
 
 {{/*
+Per-server certificate identity options for an HAProxy backend.
+*/}}
+{{- define "valkey.haproxy.serverTlsIdentityOptions" -}}
+{{- $root := .root -}}
+{{- if and $root.Values.tls.enabled (eq $root.Values.haproxy.tls.verify "required") -}}
+{{- $host := printf "%s-%d.%s.%s.svc.%s" (include "valkey.fullname" $root) .index (include "valkey.headlessServiceName" $root) $root.Release.Namespace $root.Values.clusterDomain -}}
+{{- printf " verifyhost %s" $host -}}
+{{- if eq $root.Values.haproxy.tls.mode "bridge" }}{{ printf " sni str(%s)" $host }}{{ end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Validate haproxy configuration
 */}}
 {{- define "valkey.validateHaproxyConfig" -}}
