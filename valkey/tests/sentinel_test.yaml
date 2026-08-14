@@ -1,9 +1,11 @@
 suite: sentinel configuration
 templates:
   - templates/statefulset.yaml
+  - templates/sentinel-statefulset.yaml
   - templates/init_config.yaml
   - templates/sentinel-configmap.yaml
   - templates/sentinel-service.yaml
+  - templates/sentinel-headless-service.yaml
   - templates/service.yaml
   - templates/service-headless.yaml
   - templates/deploy_valkey.yaml
@@ -21,13 +23,21 @@ tests:
       - failedTemplate:
           errorPattern: "Sentinel requires replication.*"
 
-  - it: should fail when there are fewer than three pods
+  - it: should fail when there are fewer than three sentinels
     set:
-      replica.replicas: 1
+      replica.sentinel.replicas: 2
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "Sentinel requires at least 3 pods.*"
+          errorPattern: "Sentinel requires at least 3 instances.*"
+
+  - it: should fail without a valkey replica to promote
+    set:
+      replica.replicas: 0
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Sentinel requires at least one Valkey replica.*"
 
   - it: should fail when the quorum exceeds the number of sentinels
     set:
@@ -35,7 +45,7 @@ tests:
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "quorum \\(4\\) cannot be greater than the number of Sentinels \\(3\\).*"
+          errorPattern: "quorum \\(4\\) cannot be greater than replica.sentinel.replicas \\(3\\).*"
 
   - it: should fail when the quorum allows a single sentinel to fail over
     set:
@@ -67,21 +77,39 @@ tests:
       - failedTemplate:
           errorPattern: "replica.sentinel.password is required.*"
 
-  - it: should add a sentinel container to every valkey pod
-    template: templates/statefulset.yaml
+  - it: should deploy sentinel in an independent statefulset
+    template: templates/sentinel-statefulset.yaml
     asserts:
+      - isKind:
+          of: StatefulSet
       - equal:
-          path: spec.template.spec.containers[1].name
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel
+      - equal:
+          path: spec.replicas
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].name
           value: sentinel
       - equal:
-          path: spec.template.spec.containers[1].command
+          path: spec.template.spec.containers[0].command
           value: [ "/sentinel-scripts/sentinel-start.sh" ]
       - equal:
-          path: spec.template.spec.containers[1].ports[0].containerPort
+          path: spec.template.spec.containers[0].ports[0].containerPort
           value: 26379
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: valkey-sentinel
 
-  - it: should start the pods in parallel so that the quorum can form
+  - it: should not add sentinel to the valkey pods
     template: templates/statefulset.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+
+  - it: should start the sentinel pods in parallel so that the quorum can form
+    template: templates/sentinel-statefulset.yaml
     asserts:
       - equal:
           path: spec.podManagementPolicy
@@ -97,28 +125,27 @@ tests:
           value: OrderedReady
 
   - it: should mount an emptyDir for the sentinel state by default
-    template: templates/statefulset.yaml
+    template: templates/sentinel-statefulset.yaml
     asserts:
       - contains:
           path: spec.template.spec.volumes
           content:
             name: sentinel-data
             emptyDir: {}
-      - lengthEqual:
+      - notExists:
           path: spec.volumeClaimTemplates
-          count: 1
 
   - it: should claim a volume for the sentinel state when persistence is enabled
     set:
       replica.sentinel.persistence.enabled: true
       replica.sentinel.persistence.size: "200Mi"
-    template: templates/statefulset.yaml
+    template: templates/sentinel-statefulset.yaml
     asserts:
       - equal:
-          path: spec.volumeClaimTemplates[1].metadata.name
+          path: spec.volumeClaimTemplates[0].metadata.name
           value: sentinel-data
       - equal:
-          path: spec.volumeClaimTemplates[1].spec.resources.requests.storage
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
           value: "200Mi"
       - notContains:
           path: spec.template.spec.volumes
@@ -156,16 +183,18 @@ tests:
           path: spec.selector["statefulset.kubernetes.io/pod-name"]
           value: RELEASE-NAME-valkey-0
 
-  - it: should expose the sentinel port on the headless service
-    template: templates/service-headless.yaml
+  - it: should expose a dedicated headless service for sentinel peers
+    template: templates/sentinel-headless-service.yaml
     asserts:
-      - contains:
-          path: spec.ports
-          content:
-            name: sentinel
-            port: 26379
-            targetPort: sentinel
-            protocol: TCP
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-sentinel-headless
+      - equal:
+          path: spec.clusterIP
+          value: None
+      - equal:
+          path: spec.ports[0].port
+          value: 26379
 
   - it: should expose a sentinel service for client discovery
     template: templates/sentinel-service.yaml
@@ -278,8 +307,8 @@ tests:
           path: data["sentinel-start.sh"]
           pattern: 'sentinel deny-scripts-reconfig yes'
 
-  - it: should roll the pods when the sentinel scripts change
-    template: templates/statefulset.yaml
+  - it: should roll the sentinel pods when the scripts change
+    template: templates/sentinel-statefulset.yaml
     asserts:
       - exists:
           path: spec.template.metadata.annotations["checksum/sentinelconfig"]
@@ -326,9 +355,15 @@ tests:
           pattern: 'sentinel get-master-addr-by-name mymaster'
       - matchRegex:
           path: data["init.sh"]
+          pattern: 'peer="RELEASE-NAME-valkey-sentinel-headless\.NAMESPACE\.svc\.cluster\.local"'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'replica\.sentinel\.replicas'
+      - matchRegex:
+          path: data["init.sh"]
           pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*elif \[ "\$HAS_PREVIOUS_CONFIG" = "true" \]'
 
-  - it: should mount the dedicated sentinel credential in every script container
+  - it: should mount the dedicated sentinel credential in the valkey script containers
     template: templates/statefulset.yaml
     asserts:
       - exists:
@@ -336,7 +371,13 @@ tests:
       - exists:
           path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
       - exists:
-          path: spec.template.spec.containers[1].volumeMounts[?(@.name == "sentinel-auth")]
+          path: spec.template.spec.volumes[?(@.name == "sentinel-auth")].projected.sources[0].secret.items[0].path
+
+  - it: should mount the dedicated sentinel credential in the sentinel statefulset
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
       - exists:
           path: spec.template.spec.volumes[?(@.name == "sentinel-auth")].projected.sources[0].secret.items[0].path
 
@@ -377,6 +418,13 @@ tests:
           path: data["sentinel-ping.sh"]
           pattern: ' -a "\$'
 
+  - it: should contact the independent sentinel service during graceful shutdown
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: '-h RELEASE-NAME-valkey-sentinel -p 26379 sentinel failover mymaster'
+
   - it: should render the listen port from service.port
     set:
       service.port: 7000
@@ -403,15 +451,6 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "preStopFailoverTimeoutSeconds \\(30\\) must be lower than replica.terminationGracePeriodSeconds \\(30\\).*"
-
-  - it: should let an existing release keep its pod management policy
-    set:
-      replica.podManagementPolicy: OrderedReady
-    template: templates/statefulset.yaml
-    asserts:
-      - equal:
-          path: spec.podManagementPolicy
-          value: OrderedReady
 
   - it: should render loadBalancerSourceRanges as a yaml list
     set:
@@ -483,6 +522,8 @@ tests:
     templates:
       - templates/sentinel-configmap.yaml
       - templates/sentinel-service.yaml
+      - templates/sentinel-headless-service.yaml
+      - templates/sentinel-statefulset.yaml
     asserts:
       - hasDocuments:
           count: 0

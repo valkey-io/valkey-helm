@@ -18,14 +18,14 @@ App version:  {{ .Chart.AppVersion }}
 
 Your Valkey deployment is running in REPLICATION mode with Sentinel:
 - {{ add (int .Values.replica.replicas) 1 }} Valkey pods, 1 of them the master at any time
-- {{ add (int .Values.replica.replicas) 1 }} Sentinels (one per pod), quorum {{ .Values.replica.sentinel.quorum }}
+- {{ .Values.replica.sentinel.replicas }} Sentinels in a separate StatefulSet, quorum {{ .Values.replica.sentinel.quorum }}
 
 Sentinel promotes a replica when the master stops responding for
 {{ .Values.replica.sentinel.downAfterMilliseconds }}ms, so the master can be any pod. Clients must therefore
 ask Sentinel for the current master instead of connecting to a fixed pod:
 
 {{- if .Values.replica.sentinel.service.enabled }}
-{{- $sentinelHost := printf "%s-sentinel" (include "valkey.fullname" .) }}
+{{- $sentinelHost := include "valkey.sentinel.fullname" . }}
 {{- $sentinelPort := .Values.replica.sentinel.service.port }}
 
   $ valkey-cli -h {{ $sentinelHost }} -p {{ $sentinelPort }}{{ if .Values.tls.enabled }} --tls{{- end }} --user sentinel -a <sentinel password> \
@@ -39,8 +39,8 @@ Most client libraries do this for you, e.g. in Python:
 
 The Sentinel service is disabled (replica.sentinel.service.enabled), so address
 the Sentinels through the headless service instead:
-{{- range $i := until (add (int .Values.replica.replicas) 1 | int) }}
-  {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $.Values.replica.sentinel.port }}
+{{- range $i := until (int .Values.replica.sentinel.replicas) }}
+  {{ include "valkey.sentinel.fullname" $ }}-{{ $i }}.{{ include "valkey.sentinel.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $.Values.replica.sentinel.port }}
 {{- end }}
 {{- end }}
 

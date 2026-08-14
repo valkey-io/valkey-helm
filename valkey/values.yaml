@@ -244,13 +244,6 @@ replica:
   # Number of replica instances (total pods = replicas + 1 master)
   replicas: 2
 
-  # Pod management policy for the StatefulSet. Empty means OrderedReady, or
-  # Parallel when Sentinel is enabled so that the quorum can form without
-  # waiting for pod-0. This field is immutable: setting it explicitly to
-  # OrderedReady lets an existing release enable Sentinel without recreating
-  # the StatefulSet.
-  podManagementPolicy: ""
-
   # Grace period for a terminating pod. It must be longer than
   # sentinel.preStopFailoverTimeoutSeconds, otherwise Kubernetes sends SIGKILL
   # while the graceful failover is still running.
@@ -313,15 +306,19 @@ replica:
   persistentVolumeClaimRetentionPolicy: {}
 
   # Valkey Sentinel for automatic failover.
-  # Sentinel runs as a sidecar in every Valkey pod, monitors the master and
+  # Sentinel runs in an independent StatefulSet, monitors the master and
   # promotes a replica when the master becomes unreachable.
   # NOTE: with Sentinel enabled the Valkey service load balances across all pods,
   # because the master can move at any time. Clients must therefore discover the
   # master through Sentinel (SENTINEL get-master-addr-by-name).
   sentinel:
-    # Enable Sentinel (requires replica.enabled and at least 3 pods).
+    # Enable Sentinel (requires replica.enabled and at least one replica).
     # The Sentinel endpoint always requires its dedicated password, independently of whether authentication is enabled for the Valkey data endpoint.
     enabled: false
+
+    # Number of Sentinel instances. Keep this at 3 or more so a majority can
+    # authorize failover while one Sentinel is unavailable.
+    replicas: 3
 
     # Port on which Sentinel listens
     port: 26379
@@ -367,7 +364,7 @@ replica:
     # Keep it below terminationGracePeriodSeconds.
     preStopFailoverTimeoutSeconds: 20
 
-    # How long Sentinel waits for the local Valkey server on startup before it
+    # How long Sentinel waits for a peer or Valkey node on startup before it
     # gives up on discovering the current master and assumes pod-0 is the master
     startupTimeoutSeconds: 60
 
@@ -421,6 +418,9 @@ replica:
       # Access modes for the PVC
       accessModes:
         - ReadWriteOnce
+
+    # PersistentVolumeClaim retention policy for the Sentinel StatefulSet.
+    persistentVolumeClaimRetentionPolicy: {}
 
 tls:
   # Enable TLS

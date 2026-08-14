@@ -1,5 +1,5 @@
-# Valkey in high availability mode: 3 pods, each running a Valkey server and a
-# Sentinel. Sentinel promotes a replica automatically when the master fails.
+# Valkey in high availability mode: one Valkey StatefulSet and an independent
+# three-pod Sentinel StatefulSet. Sentinel promotes a replica automatically.
 #
 #   helm install valkey ./valkey -f valkey/examples/ha-sentinel.yaml
 #
@@ -17,7 +17,7 @@
 
 replica:
   enabled: true
-  # 2 replicas + 1 master = 3 pods, the minimum for a Sentinel quorum
+  # 2 replicas + 1 master
   replicas: 2
   persistence:
     size: 1Gi
@@ -27,6 +27,7 @@ replica:
 
   sentinel:
     enabled: true
+    replicas: 3
     # Use a distinct credential for the Sentinel endpoint. In production,
     # prefer auth.usersExistingSecret and set passwordKey instead.
     password: "replace-with-a-sentinel-password"

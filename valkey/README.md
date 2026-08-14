@@ -63,21 +63,23 @@ If fewer than `minReplicasToWrite` replicas are available, the master will rejec
 ### High Availability Mode (Sentinel)
 
 Replication mode alone does not recover from a master failure: the master is always pod-0 and a client keeps writing to it until an operator intervenes.
-Enabling Sentinel adds a `valkey-sentinel` container to every Valkey pod.
+Enabling Sentinel creates a separate StatefulSet with three Sentinel pods by default.
 The Sentinels monitor each other and the Valkey nodes, and promote a replica automatically when the master stops responding.
 
 ```bash
 helm install valkey valkey/valkey -f examples/ha-sentinel.yaml
 ```
 
-Sentinel needs at least three pods to form a quorum, so `replica.replicas` must be 2 or more.
+Sentinel needs at least three instances to form a quorum, independently of the Valkey pod count.
+Valkey still needs at least one replica to provide a failover target.
 See [examples/ha-sentinel.yaml](examples/ha-sentinel.yaml) for a complete values file.
 
 **Services:**
 
 * `valkey`: load balances across all pods, the master can be any of them
 * `valkey-sentinel`: Sentinel endpoints, used by clients to resolve the current master
-* `valkey-headless`: headless service for pod and Sentinel discovery
+* `valkey-headless`: headless service for Valkey pod discovery
+* `valkey-sentinel-headless`: headless service for Sentinel peer discovery
 
 **Connecting:**
 
@@ -108,17 +110,8 @@ The minimum permissions are:
 +config|rewrite +client|setname +client|kill +script|kill +psync +replconf
 ```
 
-**Enabling Sentinel on an existing release:**
-
-`podManagementPolicy` is immutable, and the chart switches it to `Parallel` when Sentinel is enabled, so `helm upgrade` on an existing replication release is rejected by Kubernetes.
-Either set `replica.podManagementPolicy: OrderedReady` to keep the current value, or recreate the StatefulSet while keeping the pods and volumes:
-
-```bash
-kubectl delete statefulset <release>-valkey --cascade=orphan
-helm upgrade <release> valkey/valkey -f your-values.yaml
-```
-
-The same applies to `replica.sentinel.persistence.enabled`, which adds a `volumeClaimTemplates` entry.
+Sentinel can be enabled on an existing replication release without changing the Valkey StatefulSet's immutable fields.
+Changing `replica.sentinel.persistence.enabled` later changes the Sentinel StatefulSet's `volumeClaimTemplates` and therefore requires recreating that StatefulSet.
 
 **Failover behaviour:**
 
@@ -440,6 +433,7 @@ tls:
 | replica.persistence.storageClass | string | `""` |  |
 | replica.persistence.accessModes | list | `""` |  |
 | replica.sentinel.enabled | bool | `false` | Run Valkey Sentinel for automatic failover |
+| replica.sentinel.replicas | int | `3` | Number of independently deployed Sentinel pods |
 | replica.sentinel.port | int | `26379` |  |
 | replica.sentinel.masterSet | string | `"mymaster"` |  |
 | replica.sentinel.quorum | int | `2` | Sentinels that must agree before a failover starts |
@@ -462,6 +456,7 @@ tls:
 | replica.sentinel.persistence.enabled | bool | `false` |  |
 | replica.sentinel.persistence.size | string | `"100Mi"` |  |
 | replica.sentinel.persistence.storageClass | string | `""` |  |
+| replica.sentinel.persistentVolumeClaimRetentionPolicy | object | `{}` | PVC retention policy for the Sentinel StatefulSet |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |

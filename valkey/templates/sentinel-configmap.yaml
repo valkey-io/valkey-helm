@@ -1,7 +1,7 @@
 {{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
 {{- $sentinelPort := .Values.replica.sentinel.port }}
 {{- $masterSet := .Values.replica.sentinel.masterSet }}
-{{- $totalPods := add (int .Values.replica.replicas) 1 }}
+{{- $valkeyPods := add (int .Values.replica.replicas) 1 }}
 {{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
 apiVersion: v1
 kind: ConfigMap
@@ -15,17 +15,16 @@ data:
     #!/bin/sh
     # Generates sentinel.conf and starts Sentinel.
     #
-    # This runs as the Sentinel container entrypoint rather than as an init
-    # container on purpose: discovering the current master requires the local
-    # Valkey server to be running, which is only true once the init containers
-    # have finished.
+    # This runs as the Sentinel container entrypoint so it can discover the
+    # current master from running Sentinel peers or the Valkey nodes.
     set -eu
 
     SENTINEL_CONF="/sentinel-data/sentinel.conf"
     MASTER_SET="{{ $masterSet }}"
     MASTER_PORT="{{ .Values.service.port }}"
-    TOTAL_PODS="{{ $totalPods }}"
-    SELF_HOST="${POD_NAME}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    VALKEY_PODS="{{ $valkeyPods }}"
+    SELF_HOST="${POD_NAME}.{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    SENTINEL_HOST="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
     DEFAULT_MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
 
     # Logging goes to stderr so that command substitutions stay clean.
@@ -85,56 +84,48 @@ data:
     # view of the topology, which matters when this pod joins or rejoins a
     # cluster that has already failed over away from pod-0.
     master_from_peers() {
+      addr=$(sentinel_cli -h "$SENTINEL_HOST" sentinel get-master-addr-by-name "$MASTER_SET" 2>/dev/null || true)
+      host=$(echo "$addr" | sed -n 1p)
+      port=$(echo "$addr" | sed -n 2p)
+      # A peer that does not know this master set answers with an error or a
+      # single line, which would otherwise become a broken monitor directive.
+      [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$" || return 1
+      log "A Sentinel peer reports the master as $host:$port"
+      printf '%s\n%s\n' "$host" "$port"
+    }
+
+    # After a full Sentinel restart, inspect the Valkey pods. Their persisted
+    # replication configuration records the topology from the last failover.
+    master_from_valkey_nodes() {
       i=0
-      while [ "$i" -lt "$TOTAL_PODS" ]; do
-        peer="{{ include "valkey.fullname" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-        if [ "$peer" != "$SELF_HOST" ]; then
-          addr=$(sentinel_cli -h "$peer" sentinel get-master-addr-by-name "$MASTER_SET" 2>/dev/null || true)
-          host=$(echo "$addr" | sed -n 1p)
-          port=$(echo "$addr" | sed -n 2p)
-          # A peer that does not know this master set answers with an error or a
-          # single line, which would otherwise become a broken monitor directive.
-          if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
-            log "Sentinel $peer reports the master as $host:$port"
-            printf '%s\n%s\n' "$host" "$port"
-            return 0
-          fi
+      while [ "$i" -lt "$VALKEY_PODS" ]; do
+        node="{{ include "valkey.fullname" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        info=$(valkey_cli -h "$node" info replication 2>/dev/null | tr -d '\r' || true)
+        role=$(echo "$info" | sed -n 's/^role://p')
+        if [ "$role" = "master" ]; then
+          log "Valkey node $node is the master"
+          printf '%s\n%s\n' "$node" "$MASTER_PORT"
+          return 0
+        fi
+
+        host=$(echo "$info" | sed -n 's/^master_host://p')
+        port=$(echo "$info" | sed -n 's/^master_port://p')
+        if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
+          log "Valkey node $node reports the master as $host:$port"
+          printf '%s\n%s\n' "$host" "$port"
+          return 0
         fi
         i=$((i + 1))
       done
       return 1
     }
 
-    # Fall back to the local Valkey server. After a full cluster restart no
-    # Sentinel is up yet, but every Valkey node has restored the replication
-    # target Sentinel last wrote, so the local node knows who the master is.
-    master_from_local_node() {
-      info=$(valkey_cli -h 127.0.0.1 info replication 2>/dev/null | tr -d '\r' || true)
-      if [ -z "$info" ]; then
-        return 1
-      fi
-
-      role=$(echo "$info" | sed -n 's/^role://p')
-      if [ "$role" = "master" ]; then
-        log "The local Valkey node is the master"
-        printf '%s\n%s\n' "$SELF_HOST" "$MASTER_PORT"
-        return 0
-      fi
-
-      host=$(echo "$info" | sed -n 's/^master_host://p')
-      port=$(echo "$info" | sed -n 's/^master_port://p')
-      if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
-        log "The local Valkey node replicates from $host:$port"
-        printf '%s\n%s\n' "$host" "$port"
-        return 0
-      fi
-      return 1
-    }
-
-    # The local Valkey container starts in parallel with this one.
+    # Give the Valkey StatefulSet time to start during a fresh installation.
     WAITED=0
+    DISCOVERED=""
     while [ "$WAITED" -lt "{{ .Values.replica.sentinel.startupTimeoutSeconds }}" ]; do
-      if valkey_cli -h 127.0.0.1 ping >/dev/null 2>&1; then
+      DISCOVERED=$(master_from_peers || master_from_valkey_nodes || true)
+      if [ -n "$DISCOVERED" ]; then
         break
       fi
       sleep 1
@@ -142,14 +133,13 @@ data:
     done
 
     MASTER_HOST="$DEFAULT_MASTER_HOST"
-    DISCOVERED=$(master_from_peers || master_from_local_node || true)
     DISCOVERED_HOST=$(echo "$DISCOVERED" | sed -n 1p)
     DISCOVERED_PORT=$(echo "$DISCOVERED" | sed -n 2p)
     if [ -n "$DISCOVERED_HOST" ] && [ -n "$DISCOVERED_PORT" ]; then
       MASTER_HOST="$DISCOVERED_HOST"
       MASTER_PORT="$DISCOVERED_PORT"
     else
-      log "No Sentinel peer or Valkey node answered, bootstrapping with $MASTER_HOST as master"
+      log "No Sentinel peer or Valkey node answered within ${WAITED}s, bootstrapping with $MASTER_HOST as master"
     fi
 
     log "Writing $SENTINEL_CONF monitoring $MASTER_HOST:$MASTER_PORT"
@@ -285,7 +275,7 @@ data:
 
     log "This pod is the master, asking Sentinel to fail over before shutting down"
     REDISCLI_AUTH="$SENTINEL_PASSWORD" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
-      -t 2 -p {{ $sentinelPort }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
+      -t 2 -h {{ include "valkey.sentinel.fullname" . }} -p {{ $sentinelPort }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
         log "WARN: the failover request failed, continuing with the shutdown"
         exit 0
       }
