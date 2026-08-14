@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- Valkey Operator version defaults to v0.5.0. See the [v0.5.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.5.0) for the upstream changes.
+
+> **Note:** CRDs are not upgraded automatically by Helm. See [UPGRADE.md](UPGRADE.md) for manual steps required before upgrading to this version.
+
 ## 0.4.1
 
 ### Changed
