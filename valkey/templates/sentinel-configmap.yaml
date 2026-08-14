@@ -177,17 +177,26 @@ data:
 
     # Sentinel has a dedicated identity. Valkey application credentials must
     # never gain Sentinel administration privileges as a side effect.
+    escape_config_arg() {
+      printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+    }
+
     SENTINEL_PASSHASH=$(printf '%s' "$SENTINEL_PASSWORD" | sha256sum | cut -f 1 -d " ")
+    SENTINEL_PASSHASH_ESCAPED=$(escape_config_arg "$SENTINEL_PASSHASH")
+    SENTINEL_PASSWORD_ESCAPED=$(escape_config_arg "$SENTINEL_PASSWORD")
+    {{- if .Values.auth.enabled }}
+    MONITOR_PASSWORD_ESCAPED=$(escape_config_arg "$MONITOR_PASSWORD")
+    {{- end }}
     cat >> "$SENTINEL_CONF" << EOF
 
     user default off
-    user sentinel on #${SENTINEL_PASSHASH} ~* &* +@all
+    user sentinel on "#${SENTINEL_PASSHASH_ESCAPED}" ~* &* +@all
     sentinel sentinel-user sentinel
-    sentinel sentinel-pass ${SENTINEL_PASSWORD}
+    sentinel sentinel-pass "${SENTINEL_PASSWORD_ESCAPED}"
 
     {{- if .Values.auth.enabled }}
     # Credentials Sentinel uses to reach the monitored Valkey nodes.
-    sentinel auth-pass ${MASTER_SET} ${MONITOR_PASSWORD}
+    sentinel auth-pass ${MASTER_SET} "${MONITOR_PASSWORD_ESCAPED}"
     {{- end }}
     EOF
     {{- if .Values.auth.enabled }}
@@ -275,7 +284,7 @@ data:
 
     log "This pod is the master, asking Sentinel to fail over before shutting down"
     REDISCLI_AUTH="$SENTINEL_PASSWORD" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
-      -t 2 -h {{ include "valkey.sentinel.fullname" . }} -p {{ $sentinelPort }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
+      -t 2 -h {{ include "valkey.sentinel.headlessServiceName" . }} -p {{ .Values.replica.sentinel.port }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
         log "WARN: the failover request failed, continuing with the shutdown"
         exit 0
       }

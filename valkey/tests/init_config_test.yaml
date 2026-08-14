@@ -120,6 +120,9 @@ tests:
       - matchRegex:
           path: data["init.sh"]
           pattern: 'REPL_PASSWORD=\$\(get_user_password "default" "valkey-password"\)'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'masterauth \\"\$REPL_PASSWORD_ESCAPED\\"'
 
   - it: should default to username for replica authentication when passwordKey not configured
     set:

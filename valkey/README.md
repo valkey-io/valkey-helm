@@ -74,6 +74,19 @@ Sentinel needs at least three instances to form a quorum, independently of the V
 Valkey still needs at least one replica to provide a failover target.
 See [examples/ha-sentinel.yaml](examples/ha-sentinel.yaml) for a complete values file.
 
+Spread Sentinel pods across failure domains so one node or zone cannot remove the quorum.
+The existing global `topologySpreadConstraints` value applies to both StatefulSets, and a selector for the Sentinel component limits the rule to Sentinel pods:
+
+```yaml
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/component: sentinel
+```
+
 **Services:**
 
 * `valkey`: load balances across all pods, the master can be any of them

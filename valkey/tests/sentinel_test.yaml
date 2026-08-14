@@ -232,7 +232,7 @@ tests:
           pattern: 'sentinel auth-pass'
       - matchRegex:
           path: data["sentinel-start.sh"]
-          pattern: 'user sentinel on #\$\{SENTINEL_PASSHASH\}'
+          pattern: 'user sentinel on "#\$\{SENTINEL_PASSHASH_ESCAPED\}"'
       - matchRegex:
           path: data["sentinel-start.sh"]
           pattern: 'sentinel sentinel-user sentinel'
@@ -259,13 +259,16 @@ tests:
           pattern: 'user default off'
       - matchRegex:
           path: data["sentinel-start.sh"]
-          pattern: 'user sentinel on #\$\{SENTINEL_PASSHASH\} ~\* &\* \+@all'
+          pattern: 'user sentinel on "#\$\{SENTINEL_PASSHASH_ESCAPED\}" ~\* &\* \+@all'
       - matchRegex:
           path: data["sentinel-start.sh"]
           pattern: 'sentinel sentinel-user sentinel'
       - matchRegex:
           path: data["sentinel-start.sh"]
-          pattern: 'sentinel sentinel-pass \$\{SENTINEL_PASSWORD\}'
+          pattern: 'sentinel sentinel-pass "\$\{SENTINEL_PASSWORD_ESCAPED\}"'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel auth-pass \$\{MASTER_SET\} "\$\{MONITOR_PASSWORD_ESCAPED\}"'
       - matchRegex:
           path: data["sentinel-start.sh"]
           pattern: 'sentinel auth-user \$\{MASTER_SET\} replicator'
@@ -423,7 +426,17 @@ tests:
     asserts:
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: '-h RELEASE-NAME-valkey-sentinel -p 26379 sentinel failover mymaster'
+          pattern: '-h RELEASE-NAME-valkey-sentinel-headless -p 26379 sentinel failover mymaster'
+
+  - it: should escape sentinel configuration credentials
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'escape_config_arg\(\) \{'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'SENTINEL_PASSWORD_ESCAPED=\$\(escape_config_arg "\$SENTINEL_PASSWORD"\)'
 
   - it: should render the listen port from service.port
     set:

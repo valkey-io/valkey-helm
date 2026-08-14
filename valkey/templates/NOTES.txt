@@ -93,7 +93,24 @@ Direct Pod Access:
 {{- end }}
 {{- end }}
 
-{{ if .Values.replica.sentinel.enabled }}WRITE Operations (resolve the master via Sentinel first):{{ else }}WRITE Operations (Master only):{{ end }}
+{{- if .Values.replica.sentinel.enabled }}
+WRITE Operations (resolve the master via Sentinel first):
+
+1) In-cluster access:
+  $ MASTER=$(valkey-cli -h {{ include "valkey.sentinel.fullname" . }} -p {{ .Values.replica.sentinel.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} --user sentinel -a <sentinel password> --raw \
+      SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} | tr '\n' ' ')
+  $ set -- $MASTER
+  $ valkey-cli -h "$1" -p "$2"{{ if .Values.tls.enabled }} --tls{{- end }} PING
+
+2) Local access:
+  $ MASTER=$(kubectl -n {{ .Release.Namespace }} exec {{ include "valkey.sentinel.fullname" . }}-0 -- \
+      env REDISCLI_AUTH=<sentinel password> valkey-cli{{ if .Values.tls.enabled }} --tls{{- end }} --user sentinel -p {{ .Values.replica.sentinel.port }} --raw \
+      SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} | tr '\n' ' ')
+  $ set -- $MASTER
+  $ kubectl -n {{ .Release.Namespace }} port-forward "pod/${1%%.*}" "6379:$2"
+  $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} SET key value
+{{- else }}
+WRITE Operations (Master only):
   Service: {{ include "valkey.fullname" . }}
   Type:    {{ .Values.service.type }}
   Port:    {{ .Values.service.port }}
@@ -104,6 +121,7 @@ Direct Pod Access:
 2) Local access:
   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }} 6379:{{ .Values.service.port }}
   $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} SET key value
+{{- end }}
 {{- else }}
 ================================================================================
 📦 STANDALONE MODE
@@ -142,7 +160,12 @@ Port:         {{ .Values.service.port }}
 {{ end }}
 
 ✅ Quick test
+{{- if .Values.replica.sentinel.enabled }}
+Resolve the current master using the WRITE Operations commands above, then run:
+$ valkey-cli -h <master host> -p <master port>{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
+{{- else }}
 $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
+{{- end }}
 valkey> SET foo bar
 valkey> GET foo
 "bar"

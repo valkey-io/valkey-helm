@@ -60,6 +60,10 @@ data:
 
       printf '%s' "$password"
     }
+
+    escape_config_arg() {
+      printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+    }
     {{- end }}
 
     # Clean old log if requested
@@ -275,12 +279,13 @@ data:
       {{- $replUser := index .Values.auth.aclUsers $replUsername }}
       {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
       REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
+      REPL_PASSWORD_ESCAPED=$(escape_config_arg "$REPL_PASSWORD")
 
       # Write masterauth configuration
       {
         echo ""
         echo "# Master authentication"
-        printf '%s\n' "masterauth $REPL_PASSWORD"
+        printf '%s\n' "masterauth \"$REPL_PASSWORD_ESCAPED\""
         echo "masteruser {{ $replUsername }}"
       } >>"$VALKEY_CONFIG_TMP"
       log "Configured masterauth with user {{ $replUsername }}"

@@ -47,3 +47,12 @@ auth:
         +replicaof +config|rewrite +client|setname +client|kill +script|kill
         +psync +replconf
       password: "REPLACE-ME-TOO"
+
+# Spread the Sentinel quorum across nodes when the cluster has capacity.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/component: sentinel
