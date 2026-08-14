@@ -316,18 +316,15 @@ tests:
       - exists:
           path: spec.template.metadata.annotations["checksum/sentinelconfig"]
 
-  - it: should fail closed when sentinel cannot verify a previous configuration
+  - it: should fail closed when sentinel cannot confirm the topology
     template: templates/init_config.yaml
     asserts:
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'HAS_PREVIOUS_CONFIG=true'
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*elif \[ "\$HAS_PREVIOUS_CONFIG" = "true" \]; then[\s\S]*refusing to start with a potentially stale replication role[\s\S]*exit 1[\s\S]*elif \[ "\$POD_INDEX" = "0" \]'
+          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*if \[ -n "\$DISCOVERED" \]; then[\s\S]*else[\s\S]*refusing to start without a confirmed replication role[\s\S]*exit 1'
       - notMatchRegex:
           path: data["init.sh"]
-          pattern: 'SAVED_REPLICAOF'
+          pattern: 'HAS_PREVIOUS_CONFIG|SAVED_REPLICAOF|Bootstrapping cluster'
 
   - it: should pin non-zero pods to pod-0 without sentinel
     set:
@@ -341,7 +338,7 @@ tests:
           path: data["init.sh"]
           pattern: 'REPLICATION_TARGET="replicaof \$MASTER_HOST \$MASTER_PORT"'
 
-  - it: should ask the running sentinels before falling back to the pod index
+  - it: should ask the running sentinels for the current topology
     template: templates/init_config.yaml
     asserts:
       - matchRegex:
@@ -359,10 +356,6 @@ tests:
       - notMatchRegex:
           path: data["init.sh"]
           pattern: 'replica\.sentinel\.replicas'
-      - matchRegex:
-          path: data["init.sh"]
-          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*elif \[ "\$HAS_PREVIOUS_CONFIG" = "true" \]'
-
   - it: should mount the dedicated sentinel credential in the valkey script containers
     template: templates/statefulset.yaml
     asserts:
