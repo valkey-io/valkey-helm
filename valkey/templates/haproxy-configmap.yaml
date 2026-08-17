@@ -7,8 +7,7 @@ kind: ConfigMap
 metadata:
   name: {{ include "valkey.fullname" . }}-haproxy
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
-    app.kubernetes.io/component: haproxy
+    {{- include "valkey.haproxy.labels" . | nindent 4 }}
 data:
   haproxy.cfg: |
     global

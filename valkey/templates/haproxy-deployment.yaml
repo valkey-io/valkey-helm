@@ -5,8 +5,7 @@ kind: Deployment
 metadata:
   name: {{ include "valkey.fullname" . }}-haproxy
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
-    app.kubernetes.io/component: haproxy
+    {{- include "valkey.haproxy.labels" . | nindent 4 }}
   {{- with .Values.workloadAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -15,13 +14,11 @@ spec:
   replicas: {{ .Values.haproxy.replicas }}
   selector:
     matchLabels:
-      {{- include "valkey.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: haproxy
+      {{- include "valkey.haproxy.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "valkey.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: haproxy
+        {{- include "valkey.haproxy.selectorLabels" . | nindent 8 }}
         {{- with .Values.commonLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
