@@ -235,6 +235,32 @@ Validate sentinel configuration
 {{- end -}}
 
 {{/*
+Selector labels for the HAProxy pods.
+
+The name deliberately differs from the Valkey one. Every Valkey side selector,
+the PodDisruptionBudget and the headless service among them, matches on
+app.kubernetes.io/name plus instance without a component, so sharing the Valkey
+name would make those select the proxy pods as well.
+*/}}
+{{- define "valkey.haproxy.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "valkey.name" . }}-haproxy
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: haproxy
+{{- end -}}
+
+{{/*
+Common labels for the HAProxy resources
+*/}}
+{{- define "valkey.haproxy.labels" -}}
+helm.sh/chart: {{ include "valkey.chart" . }}
+{{ include "valkey.haproxy.selectorLabels" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.commonLabels }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Returns the HAProxy container image
 */}}
 {{- define "valkey.haproxy.image" -}}

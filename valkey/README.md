@@ -143,6 +143,12 @@ The health check is the failover mechanism, so no sidecar, no runtime package in
 * `valkey-haproxy:6379`: reads and writes, always routed to the current master
 * `valkey-haproxy:6380`: reads, load balanced across all healthy nodes
 
+**Labels:**
+
+The HAProxy pods are labelled `app.kubernetes.io/name: valkey-haproxy`, not `valkey`.
+The Valkey PodDisruptionBudget and the headless and Sentinel services select on the name and instance without a component, so sharing the Valkey name would put the proxy pods behind all of them: the budget would count six pods instead of three, and the headless service would resolve to proxy addresses.
+Select the proxy pods with `app.kubernetes.io/name=valkey-haproxy` or `app.kubernetes.io/component=haproxy`.
+
 **Failover behaviour:**
 
 A failover has two steps, and HAProxy only covers the second one.

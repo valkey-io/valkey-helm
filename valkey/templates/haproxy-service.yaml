@@ -4,8 +4,7 @@ kind: Service
 metadata:
   name: {{ include "valkey.fullname" . }}-haproxy
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
-    app.kubernetes.io/component: haproxy
+    {{- include "valkey.haproxy.labels" . | nindent 4 }}
   {{- with .Values.haproxy.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -37,6 +36,5 @@ spec:
       nodePort: {{ .Values.haproxy.service.readNodePort }}
       {{- end }}
   selector:
-    {{- include "valkey.selectorLabels" . | nindent 4 }}
-    app.kubernetes.io/component: haproxy
+    {{- include "valkey.haproxy.selectorLabels" . | nindent 4 }}
 {{- end }}

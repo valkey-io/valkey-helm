@@ -5,8 +5,7 @@ kind: PodDisruptionBudget
 metadata:
   name: {{ include "valkey.fullname" . }}-haproxy
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
-    app.kubernetes.io/component: haproxy
+    {{- include "valkey.haproxy.labels" . | nindent 4 }}
 spec:
   {{- /* Tested for null rather than truthiness: 0 is a meaningful value here,
          maxUnavailable: 0 forbids every voluntary eviction, and a truthiness
@@ -18,8 +17,7 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "valkey.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: haproxy
+      {{- include "valkey.haproxy.selectorLabels" . | nindent 6 }}
   {{- with .Values.haproxy.podDisruptionBudget.unhealthyPodEvictionPolicy }}
   unhealthyPodEvictionPolicy: {{ . }}
   {{- end }}
