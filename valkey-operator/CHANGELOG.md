@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.5.1
+
+### Fixed
+
+- Align ServiceMonitor endpoint port name and scrape scheme with `metrics.secure`.
+  When secure metrics are enabled the metrics Service exposes port `https`, but
+  the ServiceMonitor previously always targeted port `http`, so scrapes failed.
+  Defaults `scheme: https` when `metrics.secure` is true and
+  `serviceMonitor.scheme` is unset.
+
+### Added
+
+- `metrics.serviceMonitor.insecureSkipVerify` (default `false`). When true and
+  `metrics.secure` is true and `serviceMonitor.tlsConfig` is empty, injects
+  `tlsConfig.insecureSkipVerify` for the operator's self-signed metrics cert.
+  Explicit `serviceMonitor.tlsConfig` always wins.
+- Secure ServiceMonitor auth: when `metrics.secure` is true, the endpoint sends
+  the scraper's ServiceAccount token by default
+  (`bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token`).
+  Override with `serviceMonitor.authorization` or `bearerTokenSecret`. Bind the
+  scraper SA to `metrics-reader` or scrapes return 401.
+- Helm unittest coverage for secure ServiceMonitor port, scheme, TLS precedence,
+  skip-verify, and bearer token rendering.
+- Template fails if `metrics.secure` is true and `serviceMonitor.scheme` is
+  `http` (prevents sending scrape credentials over cleartext).
+
 ## 0.5.0
 
 - Valkey Operator version defaults to v0.5.0. See the [v0.5.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.5.0) for the upstream changes.

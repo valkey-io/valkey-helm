@@ -1,6 +1,6 @@
 # valkey-operator
 
-![Version: 0.5.0](https://img.shields.io/badge/Version-0.5.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.5.0](https://img.shields.io/badge/AppVersion-v0.5.0-informational?style=flat-square)
+![Version: 0.5.1](https://img.shields.io/badge/Version-0.5.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.5.0](https://img.shields.io/badge/AppVersion-v0.5.0-informational?style=flat-square)
 
 A Helm chart for deploying the [Valkey Operator](https://github.com/valkey-io/valkey-operator) on Kubernetes.
 
@@ -73,8 +73,12 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `metrics.serviceMonitor.annotations` | Annotations for the ServiceMonitor | `{}` |
 | `metrics.serviceMonitor.interval` | Scrape interval | `""` |
 | `metrics.serviceMonitor.scrapeTimeout` | Scrape timeout | `""` |
-| `metrics.serviceMonitor.scheme` | HTTP scheme used for scraping | `""` |
-| `metrics.serviceMonitor.tlsConfig` | TLS configuration used when scraping | `{}` |
+| `metrics.serviceMonitor.scheme` | Scrape scheme. Empty: `https` when `metrics.secure` is true, else Prometheus default (`http`). `http` is rejected when `metrics.secure` is true | `""` |
+| `metrics.serviceMonitor.bearerTokenFile` | When `metrics.secure` is true and `authorization` / `bearerTokenSecret` are unset, path to the scrape token (default: scraper SA token). Empty disables this field | SA token path |
+| `metrics.serviceMonitor.bearerTokenSecret` | Optional SecretKeySelector for the scrape token (wins over `bearerTokenFile`) | `{}` |
+| `metrics.serviceMonitor.authorization` | Optional Prometheus Operator `authorization` block (wins over bearer fields) | `{}` |
+| `metrics.serviceMonitor.insecureSkipVerify` | When `metrics.secure` is true and `tlsConfig` is empty, set `tlsConfig.insecureSkipVerify` for the self-signed metrics cert (opt-in) | `false` |
+| `metrics.serviceMonitor.tlsConfig` | Full scrape TLS config; when set, overrides `insecureSkipVerify` | `{}` |
 | `metrics.serviceMonitor.honorLabels` | Keep labels from the scraped target on collision | `false` |
 | `metrics.serviceMonitor.relabelings` | relabelings applied before scraping | `[]` |
 | `metrics.serviceMonitor.metricRelabelings` | metricRelabelings applied before ingestion | `[]` |
@@ -169,6 +173,70 @@ metrics:
 `serviceAccountName` is required when `binding.create` is `true`; rendering fails otherwise.
 Both `metrics.secure` and `metrics.reader.binding.create` default to `false`, so existing
 installs keep serving metrics over insecure HTTP unless you opt in.
+
+### ServiceMonitor
+
+Set `metrics.serviceMonitor.enabled: true` to create a Prometheus Operator ServiceMonitor
+for the operator metrics Service. The endpoint **port name** always matches the metrics
+Service: `http` when `metrics.secure` is `false`, `https` when it is `true`.
+
+When `metrics.secure` is `true`:
+
+- If `serviceMonitor.scheme` is empty, the chart sets `scheme: https`.
+  Setting `scheme: http` with secure metrics **fails template render** (would
+  send scrape credentials over cleartext).
+- The endpoint authenticates with the **scraper's ServiceAccount token** by
+  default (`bearerTokenFile` under the Prometheus pod). That SA must be bound
+  to `metrics-reader` or scrapes return **401**. Override with
+  `serviceMonitor.authorization` or `serviceMonitor.bearerTokenSecret`.
+- The operator's metrics cert is self-signed by default. Scrapes will fail TLS
+  verification until you either:
+  - set `serviceMonitor.insecureSkipVerify: true` (opt-in; injects
+    `tlsConfig.insecureSkipVerify`), or
+  - set `serviceMonitor.tlsConfig` yourself (e.g. a CA). Explicit `tlsConfig` wins
+    over `insecureSkipVerify`.
+
+  Defaulting skip-verify to true would make “secure” also mean “do not verify
+  the server cert.” That stays opt-in; see the example below for the common
+  self-signed case.
+
+Example with secure metrics, reader binding, and self-signed cert skip-verify:
+
+```yaml
+metrics:
+  secure: true
+  reader:
+    binding:
+      create: true
+      serviceAccountName: prometheus
+      namespace: monitoring
+  serviceMonitor:
+    enabled: true
+    labels:
+      # match your Prometheus serviceMonitorSelector
+      release: prometheus
+    insecureSkipVerify: true
+    # bearerTokenFile defaults to the Prometheus SA token
+```
+
+Example with a custom CA instead of skip-verify (still needs reader binding):
+
+```yaml
+metrics:
+  secure: true
+  reader:
+    binding:
+      create: true
+      serviceAccountName: prometheus
+      namespace: monitoring
+  serviceMonitor:
+    enabled: true
+    tlsConfig:
+      ca:
+        secret:
+          name: operator-metrics-ca
+          key: ca.crt
+```
 
 ## Source Code
 
