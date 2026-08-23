@@ -124,14 +124,15 @@ tests:
           path: spec.podManagementPolicy
           value: OrderedReady
 
-  - it: should mount an emptyDir for the sentinel state by default
+  - it: should mount a memory backed emptyDir for the sentinel state by default
     template: templates/sentinel-statefulset.yaml
     asserts:
       - contains:
           path: spec.template.spec.volumes
           content:
             name: sentinel-data
-            emptyDir: {}
+            emptyDir:
+              medium: Memory
       - notExists:
           path: spec.volumeClaimTemplates
 
@@ -151,7 +152,8 @@ tests:
           path: spec.template.spec.volumes
           content:
             name: sentinel-data
-            emptyDir: {}
+            emptyDir:
+              medium: Memory
 
   - it: should fail over gracefully before a pod is terminated
     template: templates/statefulset.yaml
@@ -518,6 +520,42 @@ tests:
             secret:
               secretName: RELEASE-NAME-valkey-auth
               defaultMode: 0400
+
+  - it: should keep the config and its credentials off the data volume
+    template: templates/statefulset.yaml
+    asserts:
+      # valkey.conf carries masterauth in plain text and CONFIG REWRITE puts it
+      # back on every failover, so the file has to live on a memory backed
+      # volume rather than on the PVC.
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [ "/valkey-conf/valkey.conf" ]
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-conf
+            emptyDir:
+              medium: Memory
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-conf
+            mountPath: /valkey-conf
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: valkey-conf
+            mountPath: /valkey-conf
+
+  - it: should write the config outside the data directory
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'VALKEY_CONFIG=\$\{VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf\}'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'VALKEY_CONFIG_PATH:-/data/'
 
   - it: should not render any sentinel resource when sentinel is disabled
     set:

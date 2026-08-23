@@ -10,7 +10,11 @@ data:
     set -eu
 
     # Default config paths
-    VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
+    # The config lives on a memory backed emptyDir, not on the data volume: it
+    # carries the replication credentials in plain text, and CONFIG REWRITE puts
+    # them back on every failover even if this script never wrote them, so the
+    # file itself has to stay off persistent storage.
+    VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf}
     # The config is assembled in a temporary file and moved into place at the
     # very end, so that an interrupted run can never leave a half written config
     # behind. The restart logic below reads the previous config to decide the
@@ -18,7 +22,7 @@ data:
     VALKEY_CONFIG_TMP="${VALKEY_CONFIG}.tmp"
 
     LOGFILE="/data/init.log"
-    DATA_DIR="/data/conf"
+    DATA_DIR="$(dirname "$VALKEY_CONFIG")"
 
     # Logging function (outputs to stderr and file)
     log() {

@@ -85,6 +85,8 @@ spec:
           volumeMounts:
             - name: valkey-data
               mountPath: /data
+            - name: valkey-conf
+              mountPath: /valkey-conf
             - name: scripts
               mountPath: /scripts
             {{- if .Values.replica.sentinel.enabled }}
@@ -127,7 +129,7 @@ spec:
           image: {{ include "valkey.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: [ "valkey-server" ]
-          args: [ "/data/conf/valkey.conf" ]
+          args: [ "/valkey-conf/valkey.conf" ]
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
@@ -159,6 +161,8 @@ spec:
           volumeMounts:
             - name: valkey-data
               mountPath: /data
+            - name: valkey-conf
+              mountPath: /valkey-conf
             {{- if and .Values.replica.sentinel.enabled .Values.replica.sentinel.preStopFailover }}
             - name: sentinel-scripts
               mountPath: /sentinel-scripts
@@ -260,6 +264,12 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       volumes:
+        # Holds valkey.conf. Memory backed because the file carries the
+        # replication credentials in plain text, and CONFIG REWRITE rewrites
+        # them into it whenever Sentinel changes the topology.
+        - name: valkey-conf
+          emptyDir:
+            medium: Memory
         - name: scripts
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts

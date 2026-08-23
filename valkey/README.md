@@ -126,6 +126,16 @@ The minimum permissions are:
 Sentinel can be enabled on an existing replication release without changing the Valkey StatefulSet's immutable fields.
 Changing `replica.sentinel.persistence.enabled` later changes the Sentinel StatefulSet's `volumeClaimTemplates` and therefore requires recreating that StatefulSet.
 
+**Credentials on disk:**
+
+Valkey needs the replication password in plain text in its configuration, and `CONFIG REWRITE` writes it back on every failover even if the chart does not.
+The configuration therefore lives on a memory backed `emptyDir` rather than on the data volume, so no credential is written to persistent storage.
+The ACL file is hashed and also memory backed, and the Sentinel state is memory backed for the same reason, since Sentinel rewrites `auth-pass` and `sentinel-pass` into `sentinel.conf`.
+Only the RDB or AOF and the init log stay on the data volume.
+
+Enabling `replica.sentinel.persistence` opts out of this and puts `sentinel.conf`, credentials included, on a PersistentVolume.
+It is off by default and not needed, because each Sentinel rediscovers the current master on startup.
+
 **Failover behaviour:**
 
 A master that stops responding for `replica.sentinel.downAfterMilliseconds` is replaced within a few seconds.

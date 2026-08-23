@@ -406,8 +406,10 @@ replica:
       # Restricts traffic through the cloud-provider load balancer to these client IPs
       loadBalancerSourceRanges: []
 
-    # Persistence for the Sentinel state directory. Optional: the chart
-    # rediscovers the current master on every start, so an emptyDir is enough.
+    # Persistence for the Sentinel state directory. Optional, and off for a
+    # reason: Sentinel rewrites its own credentials into sentinel.conf, so
+    # enabling this writes them to persistent storage. With it disabled the
+    # state sits on a memory backed emptyDir instead.
     persistence:
       # Enable a PVC for the Sentinel state instead of an emptyDir
       enabled: false

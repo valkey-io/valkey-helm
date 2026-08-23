@@ -125,8 +125,11 @@ spec:
             {{- end }}
       volumes:
         {{- if not .Values.replica.sentinel.persistence.enabled }}
+        # Memory backed: Sentinel rewrites its own credentials into
+        # sentinel.conf, so a disk backed emptyDir would put them on the node.
         - name: sentinel-data
-          emptyDir: {}
+          emptyDir:
+            medium: Memory
         {{- end }}
         - name: sentinel-scripts
           configMap:
