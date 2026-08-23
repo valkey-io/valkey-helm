@@ -100,7 +100,7 @@ WRITE Operations (resolve the master via Sentinel first):
   $ MASTER=$(valkey-cli -h {{ include "valkey.sentinel.fullname" . }} -p {{ .Values.replica.sentinel.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} --user sentinel -a <sentinel password> --raw \
       SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} | tr '\n' ' ')
   $ set -- $MASTER
-  $ valkey-cli -h "$1" -p "$2"{{ if .Values.tls.enabled }} --tls{{- end }} PING
+  $ valkey-cli -h "$1" -p "$2"{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <Valkey user> -a <Valkey password>{{ end }} PING
 
 2) Local access:
   $ MASTER=$(kubectl -n {{ .Release.Namespace }} exec {{ include "valkey.sentinel.fullname" . }}-0 -- \
@@ -108,7 +108,7 @@ WRITE Operations (resolve the master via Sentinel first):
       SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} | tr '\n' ' ')
   $ set -- $MASTER
   $ kubectl -n {{ .Release.Namespace }} port-forward "pod/${1%%.*}" "6379:$2"
-  $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} SET key value
+  $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <Valkey user> -a <Valkey password>{{ end }} SET key value
 {{- else }}
 WRITE Operations (Master only):
   Service: {{ include "valkey.fullname" . }}

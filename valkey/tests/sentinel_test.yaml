@@ -557,6 +557,45 @@ tests:
           path: data["init.sh"]
           pattern: 'VALKEY_CONFIG_PATH:-/data/'
 
+  - it: should fall back to the recorded master when no sentinel answers
+    template: templates/init_config.yaml
+    asserts:
+      # On a cold start every Sentinel is starting too, and a Sentinel cannot
+      # name a master until a Valkey node is up. Without this fallback the two
+      # wait for each other until Sentinel assumes pod-0, which demotes the node
+      # that really was the master.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'MASTER_MARKER="/data/conf/last-master"'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'No Sentinel answered; last recorded master is'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'No Sentinel answered and no recorded topology; refusing to start'
+
+  - it: should record the master without writing a credential
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '> "\$MASTER_MARKER"'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'PASSWORD.*> "\$MASTER_MARKER"'
+
+  - it: should refresh the recorded master from the local node on shutdown
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      # Kubernetes stops every pod at once, so a Sentinel may already be gone
+      # while preStop runs; the local server is still up.
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'trap record_master EXIT'
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: '> /data/conf/last-master'
+
   - it: should not render any sentinel resource when sentinel is disabled
     set:
       replica.sentinel.enabled: false

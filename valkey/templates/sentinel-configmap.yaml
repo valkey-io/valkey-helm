@@ -266,7 +266,10 @@ data:
     MONITOR_PASSWORD=$(get_user_password "{{ $monitorUser }}" "{{ $monitorPasswordKey }}") || exit 0
     {{- end }}
 
-    local_role() {
+    # HOSTNAME is the pod name for a StatefulSet pod.
+    SELF_HOST="${HOSTNAME}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+
+    local_info() {
       {{- if .Values.auth.enabled }}
       REDISCLI_AUTH="$MONITOR_PASSWORD" \
       {{- end }}
@@ -274,8 +277,34 @@ data:
         {{- if .Values.auth.enabled }}
         --user "{{ $monitorUser }}" \
         {{- end }}
-        -t 2 -p {{ .Values.service.port }} info replication 2>/dev/null | sed -n 's/^role://p' | tr -d '\r' || true
+        -t 2 -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true
     }
+
+    local_role() {
+      local_info | sed -n 's/^role://p'
+    }
+
+    # Refresh the credential free master marker on the way out, whichever path
+    # this script takes, so a cold start has an accurate record to fall back
+    # on. This asks the local server rather than Sentinel: Kubernetes stops
+    # every pod at once, so a Sentinel may already be gone, while the local
+    # server is still up until preStop returns.
+    record_master() {
+      info=$(local_info)
+      role=$(echo "$info" | sed -n 's/^role://p')
+      if [ "$role" = "master" ]; then
+        host="$SELF_HOST"
+        port="{{ .Values.service.port }}"
+      else
+        host=$(echo "$info" | sed -n 's/^master_host://p')
+        port=$(echo "$info" | sed -n 's/^master_port://p')
+      fi
+      if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
+        mkdir -p /data/conf 2>/dev/null || true
+        printf '%s %s\n' "$host" "$port" > /data/conf/last-master 2>/dev/null || true
+      fi
+    }
+    trap record_master EXIT
 
     if [ "$(local_role)" != "master" ]; then
       log "This pod is not the master, shutting down"

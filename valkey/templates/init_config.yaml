@@ -22,6 +22,12 @@ data:
     VALKEY_CONFIG_TMP="${VALKEY_CONFIG}.tmp"
 
     LOGFILE="/data/init.log"
+    {{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
+    # Credential free record of the master this pod last followed. It is the
+    # only durable topology left once the config moved to a memory backed
+    # volume, and it is what breaks the cold start deadlock below.
+    MASTER_MARKER="/data/conf/last-master"
+    {{- end }}
     DATA_DIR="$(dirname "$VALKEY_CONFIG")"
 
     # Logging function (outputs to stderr and file)
@@ -211,8 +217,38 @@ data:
         REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
       fi
     else
-      log "No Sentinel answered; refusing to start without a confirmed replication role"
-      exit 1
+      # Nothing answered. On a whole cluster cold start every Sentinel is also
+      # starting, and a Sentinel cannot name a master until a Valkey node is
+      # up, so waiting for one here deadlocks until Sentinel gives up and
+      # assumes pod-0, which discards the writes of the node that really was
+      # the master. Come up in the last role recorded on the data volume
+      # instead: the Sentinels are still scanning and will find the master.
+      MARKED=""
+      if [ -f "$MASTER_MARKER" ]; then
+        MARKED=$(head -n 1 "$MASTER_MARKER" | tr -d '\r')
+      fi
+      MARKED_HOST=${MARKED%% *}
+      MARKED_PORT=${MARKED##* }
+      if [ -n "$MARKED_HOST" ] && echo "$MARKED_PORT" | grep -qE "^[0-9]+$"; then
+        if [ "$MARKED_HOST" = "$SELF_HOST" ]; then
+          log "No Sentinel answered; last recorded master is this pod, starting as MASTER"
+        else
+          log "No Sentinel answered; last recorded master is $MARKED_HOST:$MARKED_PORT, starting as REPLICA"
+          REPLICATION_TARGET="replicaof $MARKED_HOST $MARKED_PORT"
+        fi
+      else
+        log "No Sentinel answered and no recorded topology; refusing to start without a confirmed replication role"
+        exit 1
+      fi
+    fi
+
+    # Record the master this pod is about to follow. Host and port only, never
+    # a credential, so it is safe to keep on the data volume.
+    mkdir -p "$(dirname "$MASTER_MARKER")"
+    if [ -n "$REPLICATION_TARGET" ]; then
+      printf '%s %s\n' "$(echo "$REPLICATION_TARGET" | awk '{print $2}')" "$(echo "$REPLICATION_TARGET" | awk '{print $3}')" > "$MASTER_MARKER"
+    else
+      printf '%s %s\n' "$SELF_HOST" "$MASTER_PORT" > "$MASTER_MARKER"
     fi
     {{- else }}
     if [ "$POD_INDEX" = "0" ]; then
