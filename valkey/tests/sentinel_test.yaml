@@ -596,6 +596,55 @@ tests:
           path: data["sentinel-prestop.sh"]
           pattern: '> /data/conf/last-master'
 
+  - it: should keep the master record in step with runtime failovers
+    template: templates/init_config.yaml
+    asserts:
+      # Written only at start and stop, the record would still name the old
+      # master after a promotion, and an abrupt restart would then hand writes
+      # back to a node Sentinel had already demoted.
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'track_master &'
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'exec valkey-server "\$@"'
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: '\(replicaof\|slaveof\)'
+      # It reads the config Valkey maintains, so it needs no credentials.
+      - notMatchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'REDISCLI_AUTH|valkey-cli'
+
+  - it: should run the tracker only when sentinel is enabled
+    set:
+      replica.sentinel.enabled: false
+    template: templates/init_config.yaml
+    asserts:
+      - notExists:
+          path: data["valkey-start.sh"]
+
+  - it: should exec the server through the tracker wrapper
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: [ "/scripts/valkey-start.sh" ]
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: scripts
+            mountPath: /scripts
+
+  - it: should start the server directly without sentinel
+    set:
+      replica.sentinel.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: [ "valkey-server" ]
+
   - it: should not render any sentinel resource when sentinel is disabled
     set:
       replica.sentinel.enabled: false

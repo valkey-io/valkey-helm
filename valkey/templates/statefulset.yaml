@@ -128,7 +128,14 @@ spec:
         - name: {{ include "valkey.fullname" . }}
           image: {{ include "valkey.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.replica.sentinel.enabled }}
+          # A wrapper that keeps the credential free master record on the data
+          # volume in step with the config Sentinel makes the server rewrite.
+          # It execs the server, so valkey-server is still PID 1.
+          command: [ "/scripts/valkey-start.sh" ]
+          {{- else }}
           command: [ "valkey-server" ]
+          {{- end }}
           args: [ "/valkey-conf/valkey.conf" ]
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
@@ -163,6 +170,10 @@ spec:
               mountPath: /data
             - name: valkey-conf
               mountPath: /valkey-conf
+            {{- if .Values.replica.sentinel.enabled }}
+            - name: scripts
+              mountPath: /scripts
+            {{- end }}
             {{- if and .Values.replica.sentinel.enabled .Values.replica.sentinel.preStopFailover }}
             - name: sentinel-scripts
               mountPath: /sentinel-scripts

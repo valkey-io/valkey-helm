@@ -141,7 +141,11 @@ It is off by default and not needed, because each Sentinel rediscovers the curre
 A master that stops responding for `replica.sentinel.downAfterMilliseconds` is replaced within a few seconds.
 When a master pod is terminated by a rolling update, its `preStop` hook asks Sentinel to promote a replica first, so the failover happens before the pod goes away rather than after.
 The replication topology survives a full restart of the StatefulSet: each pod asks Sentinel for the current master instead of assuming it is pod-0.
-To avoid starting with a stale role, every Valkey pod waits for Sentinel discovery to become available before it starts.
+
+On a cold start the Sentinels are restarting too, and a Sentinel cannot name a master until a Valkey node is up, so waiting for one would leave both halves waiting for each other.
+Each pod therefore mirrors the current master onto its data volume, as a host and a port with no credential in it, every `replica.sentinel.masterRecordRefreshSeconds`.
+A pod that finds no Sentinel comes back in that recorded role instead of refusing to start, which puts nodes on the network for the Sentinels to find.
+A pod with neither a Sentinel nor a record still refuses to start rather than guess.
 
 ### HAProxy Front-End
 
@@ -510,6 +514,7 @@ tls:
 | replica.sentinel.replicas | int | `3` | Number of independently deployed Sentinel pods |
 | replica.sentinel.port | int | `26379` |  |
 | replica.sentinel.masterSet | string | `"mymaster"` |  |
+| replica.sentinel.masterRecordRefreshSeconds | int | `10` | How stale the cold-start topology record can be |
 | replica.sentinel.quorum | int | `2` | Sentinels that must agree before a failover starts |
 | replica.sentinel.downAfterMilliseconds | int | `5000` |  |
 | replica.sentinel.failoverTimeout | int | `60000` |  |
