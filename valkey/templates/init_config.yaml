@@ -10,7 +10,11 @@ data:
     set -eu
 
     # Default config paths
-    VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
+    # The config lives on a memory backed emptyDir, not on the data volume: it
+    # carries the replication credentials in plain text, and CONFIG REWRITE puts
+    # them back on every failover even if this script never wrote them, so the
+    # file itself has to stay off persistent storage.
+    VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf}
     # The config is assembled in a temporary file and moved into place at the
     # very end, so that an interrupted run can never leave a half written config
     # behind. The restart logic below reads the previous config to decide the
@@ -18,7 +22,7 @@ data:
     VALKEY_CONFIG_TMP="${VALKEY_CONFIG}.tmp"
 
     LOGFILE="/data/init.log"
-    DATA_DIR="/data/conf"
+    DATA_DIR="$(dirname "$VALKEY_CONFIG")"
 
     # Logging function (outputs to stderr and file)
     log() {
@@ -60,6 +64,10 @@ data:
 
       printf '%s' "$password"
     }
+
+    escape_config_arg() {
+      printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+    }
     {{- end }}
 
     # Clean old log if requested
@@ -72,20 +80,6 @@ data:
     fi
 
     log "Creating configuration in $DATA_DIR..."
-    {{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
-
-    # Sentinel rewrites valkey.conf via CONFIG REWRITE whenever the topology
-    # changes, so the replication target on disk is the source of truth. Capture
-    # it before the config is regenerated, otherwise every restart would reset
-    # the cluster to "pod-0 is master" and fight Sentinel.
-    SAVED_REPLICAOF=""
-    HAS_PREVIOUS_CONFIG=false
-    if [ -f "$VALKEY_CONFIG" ]; then
-      HAS_PREVIOUS_CONFIG=true
-      SAVED_REPLICAOF=$(grep -E "^[[:space:]]*(replicaof|slaveof)[[:space:]]" "$VALKEY_CONFIG" | tail -n 1 || true)
-    fi
-    {{- end }}
-
     mkdir -p "$DATA_DIR"
     rm -f "$VALKEY_CONFIG_TMP"
 
@@ -187,61 +181,38 @@ data:
     # Without this, a pod that lost its volume would fall back to the pod index
     # and pod-0 would come back as a second writable master after a failover.
     master_from_sentinels() {
-      {{- if .Values.auth.enabled }}
-      sentinel_password=$(get_user_password "sentinel" "{{ .Values.replica.sentinel.passwordKey }}") || return 1
-      {{- end }}
-      i=0
-      while [ "$i" -lt {{ add (int .Values.replica.replicas) 1 }} ]; do
-        peer="{{ include "valkey.fullname" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-        if [ "$peer" != "$SELF_HOST" ]; then
-          addr=$({{ if .Values.auth.enabled }}REDISCLI_AUTH="$sentinel_password" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} {{ if .Values.auth.enabled }}--user sentinel {{ end }}\
-            -t 2 -h "$peer" -p {{ .Values.replica.sentinel.port }} \
-            sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null || true)
-          host=$(echo "$addr" | sed -n 1p)
-          port=$(echo "$addr" | sed -n 2p)
-          # Reject anything that is not a complete host/port pair, an error
-          # reply would otherwise be turned into a bogus replication target.
-          if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
-            printf '%s %s\n' "$host" "$port"
-            return 0
-          fi
-        fi
-        i=$((i + 1))
-      done
-      return 1
+      sentinel_password=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null) || return 1
+      peer="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+      addr=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+        -t 2 -h "$peer" -p {{ .Values.replica.sentinel.port }} \
+        sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null || true)
+      host=$(echo "$addr" | sed -n 1p)
+      port=$(echo "$addr" | sed -n 2p)
+      # Reject anything that is not a complete host/port pair, an error reply
+      # would otherwise be turned into a bogus replication target.
+      [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$" || return 1
+      printf '%s %s\n' "$host" "$port"
     }
     {{- end }}
 
     # Determine the replication target for this pod.
     REPLICATION_TARGET=""
     {{- if .Values.replica.sentinel.enabled }}
-    if [ -n "$SAVED_REPLICAOF" ]; then
-      # Sentinel owns the topology: keep whatever it last wrote.
-      log "Restoring replication target chosen by Sentinel: $SAVED_REPLICAOF"
-      REPLICATION_TARGET="$SAVED_REPLICAOF"
-    elif [ "$HAS_PREVIOUS_CONFIG" = "true" ]; then
-      # A complete config from a previous run without a replicaof directive:
-      # this pod was the master and stays the master.
-      log "This pod (index $POD_INDEX) was the master before the restart, staying MASTER"
-    else
-      # No usable local state: this is either a first boot or a pod that lost
-      # its volume.
-      DISCOVERED=$(master_from_sentinels || true)
-      if [ -n "$DISCOVERED" ]; then
-        FOUND_HOST=${DISCOVERED% *}
-        FOUND_PORT=${DISCOVERED#* }
-        if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
-          log "Sentinel reports this pod as the master, starting as MASTER"
-        else
-          log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
-          REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
-        fi
-      elif [ "$POD_INDEX" = "0" ]; then
-        log "Bootstrapping cluster, this pod (index $POD_INDEX) starts as MASTER"
+    # Persisted topology may be stale if this pod was offline during failover,
+    # so prefer the current master reported by Sentinel.
+    DISCOVERED=$(master_from_sentinels || true)
+    if [ -n "$DISCOVERED" ]; then
+      FOUND_HOST=${DISCOVERED% *}
+      FOUND_PORT=${DISCOVERED#* }
+      if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
+        log "Sentinel reports this pod as the master, starting as MASTER"
       else
-        log "Bootstrapping cluster, this pod (index $POD_INDEX) starts as REPLICA of $MASTER_HOST:$MASTER_PORT"
-        REPLICATION_TARGET="replicaof $MASTER_HOST $MASTER_PORT"
+        log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
+        REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
       fi
+    else
+      log "No Sentinel answered; refusing to start without a confirmed replication role"
+      exit 1
     fi
     {{- else }}
     if [ "$POD_INDEX" = "0" ]; then
@@ -288,12 +259,13 @@ data:
       {{- $replUser := index .Values.auth.aclUsers $replUsername }}
       {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
       REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
+      REPL_PASSWORD_ESCAPED=$(escape_config_arg "$REPL_PASSWORD")
 
       # Write masterauth configuration
       {
         echo ""
         echo "# Master authentication"
-        printf '%s\n' "masterauth $REPL_PASSWORD"
+        printf '%s\n' "masterauth \"$REPL_PASSWORD_ESCAPED\""
         echo "masteruser {{ $replUsername }}"
       } >>"$VALKEY_CONFIG_TMP"
       log "Configured masterauth with user {{ $replUsername }}"

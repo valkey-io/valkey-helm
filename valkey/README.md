@@ -63,21 +63,36 @@ If fewer than `minReplicasToWrite` replicas are available, the master will rejec
 ### High Availability Mode (Sentinel)
 
 Replication mode alone does not recover from a master failure: the master is always pod-0 and a client keeps writing to it until an operator intervenes.
-Enabling Sentinel adds a `valkey-sentinel` container to every Valkey pod.
+Enabling Sentinel creates a separate StatefulSet with three Sentinel pods by default.
 The Sentinels monitor each other and the Valkey nodes, and promote a replica automatically when the master stops responding.
 
 ```bash
 helm install valkey valkey/valkey -f examples/ha-sentinel.yaml
 ```
 
-Sentinel needs at least three pods to form a quorum, so `replica.replicas` must be 2 or more.
+Sentinel needs at least three instances to form a quorum, independently of the Valkey pod count.
+Valkey still needs at least one replica to provide a failover target.
 See [examples/ha-sentinel.yaml](examples/ha-sentinel.yaml) for a complete values file.
+
+Spread Sentinel pods across failure domains so one node or zone cannot remove the quorum.
+The existing global `topologySpreadConstraints` value applies to both StatefulSets, and a selector for the Sentinel component limits the rule to Sentinel pods:
+
+```yaml
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/component: sentinel
+```
 
 **Services:**
 
 * `valkey`: load balances across all pods, the master can be any of them
 * `valkey-sentinel`: Sentinel endpoints, used by clients to resolve the current master
-* `valkey-headless`: headless service for pod and Sentinel discovery
+* `valkey-headless`: headless service for Valkey pod discovery
+* `valkey-sentinel-headless`: headless service for Sentinel peer discovery
 
 **Connecting:**
 
@@ -96,7 +111,7 @@ Writes sent to the `valkey` service directly may land on a replica and fail with
 
 **Authentication:**
 
-When `auth.enabled` is true, set `replica.sentinel.password` to a credential used only for the Sentinel endpoint.
+Set `replica.sentinel.password` to a credential used only for the Sentinel endpoint, even when Valkey authentication is disabled.
 With `auth.usersExistingSecret`, store that credential under `replica.sentinel.passwordKey` (default: `sentinel`) instead.
 Valkey user passwords are deliberately not accepted by Sentinel, so restrictions on application ACL users cannot be bypassed through Sentinel commands.
 Sentinel reaches the Valkey nodes as `replica.sentinel.monitorUser`, which defaults to `replica.replicationUser`.
@@ -108,23 +123,25 @@ The minimum permissions are:
 +config|rewrite +client|setname +client|kill +script|kill +psync +replconf
 ```
 
-**Enabling Sentinel on an existing release:**
+Sentinel can be enabled on an existing replication release without changing the Valkey StatefulSet's immutable fields.
+Changing `replica.sentinel.persistence.enabled` later changes the Sentinel StatefulSet's `volumeClaimTemplates` and therefore requires recreating that StatefulSet.
 
-`podManagementPolicy` is immutable, and the chart switches it to `Parallel` when Sentinel is enabled, so `helm upgrade` on an existing replication release is rejected by Kubernetes.
-Either set `replica.podManagementPolicy: OrderedReady` to keep the current value, or recreate the StatefulSet while keeping the pods and volumes:
+**Credentials on disk:**
 
-```bash
-kubectl delete statefulset <release>-valkey --cascade=orphan
-helm upgrade <release> valkey/valkey -f your-values.yaml
-```
+Valkey needs the replication password in plain text in its configuration, and `CONFIG REWRITE` writes it back on every failover even if the chart does not.
+The configuration therefore lives on a memory backed `emptyDir` rather than on the data volume, so no credential is written to persistent storage.
+The ACL file is hashed and also memory backed, and the Sentinel state is memory backed for the same reason, since Sentinel rewrites `auth-pass` and `sentinel-pass` into `sentinel.conf`.
+Only the RDB or AOF and the init log stay on the data volume.
 
-The same applies to `replica.sentinel.persistence.enabled`, which adds a `volumeClaimTemplates` entry.
+Enabling `replica.sentinel.persistence` opts out of this and puts `sentinel.conf`, credentials included, on a PersistentVolume.
+It is off by default and not needed, because each Sentinel rediscovers the current master on startup.
 
 **Failover behaviour:**
 
 A master that stops responding for `replica.sentinel.downAfterMilliseconds` is replaced within a few seconds.
 When a master pod is terminated by a rolling update, its `preStop` hook asks Sentinel to promote a replica first, so the failover happens before the pod goes away rather than after.
-The replication topology survives a full restart of the StatefulSet: each pod restores the replication target Sentinel last wrote, and each Sentinel rediscovers the current master instead of assuming it is pod-0.
+The replication topology survives a full restart of the StatefulSet: each pod asks Sentinel for the current master instead of assuming it is pod-0.
+To avoid starting with a stale role, every Valkey pod waits for Sentinel discovery to become available before it starts.
 
 ### HAProxy Front-End
 
@@ -490,6 +507,7 @@ tls:
 | replica.persistence.storageClass | string | `""` |  |
 | replica.persistence.accessModes | list | `""` |  |
 | replica.sentinel.enabled | bool | `false` | Run Valkey Sentinel for automatic failover |
+| replica.sentinel.replicas | int | `3` | Number of independently deployed Sentinel pods |
 | replica.sentinel.port | int | `26379` |  |
 | replica.sentinel.masterSet | string | `"mymaster"` |  |
 | replica.sentinel.quorum | int | `2` | Sentinels that must agree before a failover starts |
@@ -497,7 +515,7 @@ tls:
 | replica.sentinel.failoverTimeout | int | `60000` |  |
 | replica.sentinel.parallelSyncs | int | `1` |  |
 | replica.sentinel.monitorUser | string | `""` | Defaults to replica.replicationUser |
-| replica.sentinel.password | string | `""` | Dedicated Sentinel ACL password; required with auth unless supplied by auth.usersExistingSecret |
+| replica.sentinel.password | string | `""` | Dedicated Sentinel ACL password; required with Sentinel unless supplied by auth.usersExistingSecret |
 | replica.sentinel.passwordKey | string | `"sentinel"` | Key containing the Sentinel password in auth.usersExistingSecret |
 | replica.sentinel.preStopFailover | bool | `true` | Fail over before a master pod is terminated |
 | replica.sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
@@ -512,6 +530,7 @@ tls:
 | replica.sentinel.persistence.enabled | bool | `false` |  |
 | replica.sentinel.persistence.size | string | `"100Mi"` |  |
 | replica.sentinel.persistence.storageClass | string | `""` |  |
+| replica.sentinel.persistentVolumeClaimRetentionPolicy | object | `{}` | PVC retention policy for the Sentinel StatefulSet |
 | haproxy.enabled | bool | `false` | Route non Sentinel-aware clients to the current master |
 | haproxy.replicas | int | `3` |  |
 | haproxy.image.registry | string | `"docker.io"` |  |

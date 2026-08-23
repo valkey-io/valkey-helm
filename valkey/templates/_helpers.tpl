@@ -170,6 +170,23 @@ Headless service name for replication
 {{- end -}}
 
 {{/*
+Stable names and selectors for the independent Sentinel StatefulSet.
+*/}}
+{{- define "valkey.sentinel.fullname" -}}
+{{- printf "%s-sentinel" (include "valkey.fullname" . | trunc 54 | trimSuffix "-") -}}
+{{- end -}}
+
+{{- define "valkey.sentinel.headlessServiceName" -}}
+{{- printf "%s-headless" (include "valkey.sentinel.fullname" . | trunc 54 | trimSuffix "-") -}}
+{{- end -}}
+
+{{- define "valkey.sentinel.selectorLabels" -}}
+app.kubernetes.io/name: {{ printf "%s-sentinel" (include "valkey.name" . | trunc 54 | trimSuffix "-") }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: sentinel
+{{- end -}}
+
+{{/*
 Validate replica persistence configuration
 */}}
 {{- define "valkey.validateReplicaPersistence" -}}
@@ -209,23 +226,26 @@ Validate sentinel configuration
   {{- if not .Values.replica.enabled }}
     {{- fail "Sentinel requires replication. Please set replica.enabled=true along with replica.sentinel.enabled=true" }}
   {{- end }}
-  {{- $pods := add (int .Values.replica.replicas) 1 }}
-  {{- if lt $pods 3 }}
-    {{- fail (printf "Sentinel requires at least 3 pods to form a quorum, replica.replicas=%d gives %d. Please set replica.replicas to 2 or more." (int .Values.replica.replicas) $pods) }}
+  {{- $sentinels := int .Values.replica.sentinel.replicas }}
+  {{- if lt (int .Values.replica.replicas) 1 }}
+    {{- fail "Sentinel requires at least one Valkey replica. Please set replica.replicas to 1 or more." }}
+  {{- end }}
+  {{- if lt $sentinels 3 }}
+    {{- fail (printf "Sentinel requires at least 3 instances to form a quorum. Please set replica.sentinel.replicas to 3 or more (currently %d)." $sentinels) }}
   {{- end }}
   {{- if lt (int .Values.replica.sentinel.quorum) 2 }}
     {{- fail "replica.sentinel.quorum must be at least 2, a quorum of 1 allows a single Sentinel to trigger a failover on its own." }}
   {{- end }}
-  {{- if gt (int .Values.replica.sentinel.quorum) $pods }}
-    {{- fail (printf "replica.sentinel.quorum (%d) cannot be greater than the number of Sentinels (%d)." (int .Values.replica.sentinel.quorum) $pods) }}
+  {{- if gt (int .Values.replica.sentinel.quorum) $sentinels }}
+    {{- fail (printf "replica.sentinel.quorum (%d) cannot be greater than replica.sentinel.replicas (%d)." (int .Values.replica.sentinel.quorum) $sentinels) }}
   {{- end }}
   {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
     {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than replica.terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
   {{- end }}
+  {{- if and (not .Values.replica.sentinel.password) (not .Values.auth.usersExistingSecret) }}
+    {{- fail "replica.sentinel.password is required when Sentinel is enabled, unless auth.usersExistingSecret supplies replica.sentinel.passwordKey." }}
+  {{- end }}
   {{- if .Values.auth.enabled }}
-    {{- if and (not .Values.replica.sentinel.password) (not .Values.auth.usersExistingSecret) }}
-      {{- fail "replica.sentinel.password is required when Sentinel authentication is enabled, unless auth.usersExistingSecret supplies replica.sentinel.passwordKey." }}
-    {{- end }}
     {{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
     {{- if not (hasKey .Values.auth.aclUsers $monitorUser) }}
       {{- fail (printf "Sentinel monitor user '%s' must be defined in auth.aclUsers. Sentinel needs it to reach the monitored Valkey nodes." $monitorUser) }}

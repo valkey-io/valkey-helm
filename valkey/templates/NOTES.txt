@@ -18,28 +18,29 @@ App version:  {{ .Chart.AppVersion }}
 
 Your Valkey deployment is running in REPLICATION mode with Sentinel:
 - {{ add (int .Values.replica.replicas) 1 }} Valkey pods, 1 of them the master at any time
-- {{ add (int .Values.replica.replicas) 1 }} Sentinels (one per pod), quorum {{ .Values.replica.sentinel.quorum }}
+- {{ .Values.replica.sentinel.replicas }} Sentinels in a separate StatefulSet, quorum {{ .Values.replica.sentinel.quorum }}
 
 Sentinel promotes a replica when the master stops responding for
 {{ .Values.replica.sentinel.downAfterMilliseconds }}ms, so the master can be any pod. Clients must therefore
 ask Sentinel for the current master instead of connecting to a fixed pod:
 
 {{- if .Values.replica.sentinel.service.enabled }}
-{{- $sentinelHost := printf "%s-sentinel" (include "valkey.fullname" .) }}
+{{- $sentinelHost := include "valkey.sentinel.fullname" . }}
 {{- $sentinelPort := .Values.replica.sentinel.service.port }}
 
-  $ valkey-cli -h {{ $sentinelHost }} -p {{ $sentinelPort }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} -a <default password>{{ end }} \
+  $ valkey-cli -h {{ $sentinelHost }} -p {{ $sentinelPort }}{{ if .Values.tls.enabled }} --tls{{- end }} --user sentinel -a <sentinel password> \
       SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }}
 
 Most client libraries do this for you, e.g. in Python:
 
-  Sentinel([("{{ $sentinelHost }}", {{ $sentinelPort }})]).master_for("{{ .Values.replica.sentinel.masterSet }}")
+  Sentinel([("{{ $sentinelHost }}", {{ $sentinelPort }})],
+           sentinel_kwargs={"username": "sentinel", "password": "<sentinel password>"}).master_for("{{ .Values.replica.sentinel.masterSet }}"{{ if .Values.auth.enabled }}, username="<Valkey user>", password="<Valkey password>"{{ end }})
 {{- else }}
 
 The Sentinel service is disabled (replica.sentinel.service.enabled), so address
 the Sentinels through the headless service instead:
-{{- range $i := until (add (int .Values.replica.replicas) 1 | int) }}
-  {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $.Values.replica.sentinel.port }}
+{{- range $i := until (int .Values.replica.sentinel.replicas) }}
+  {{ include "valkey.sentinel.fullname" $ }}-{{ $i }}.{{ include "valkey.sentinel.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $.Values.replica.sentinel.port }}
 {{- end }}
 {{- end }}
 
@@ -103,7 +104,24 @@ Direct Pod Access:
 {{- end }}
 {{- end }}
 
-{{ if .Values.replica.sentinel.enabled }}WRITE Operations (resolve the master via Sentinel first):{{ else }}WRITE Operations (Master only):{{ end }}
+{{- if .Values.replica.sentinel.enabled }}
+WRITE Operations (resolve the master via Sentinel first):
+
+1) In-cluster access:
+  $ MASTER=$(valkey-cli -h {{ include "valkey.sentinel.fullname" . }} -p {{ .Values.replica.sentinel.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }} --user sentinel -a <sentinel password> --raw \
+      SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} | tr '\n' ' ')
+  $ set -- $MASTER
+  $ valkey-cli -h "$1" -p "$2"{{ if .Values.tls.enabled }} --tls{{- end }} PING
+
+2) Local access:
+  $ MASTER=$(kubectl -n {{ .Release.Namespace }} exec {{ include "valkey.sentinel.fullname" . }}-0 -- \
+      env REDISCLI_AUTH=<sentinel password> valkey-cli{{ if .Values.tls.enabled }} --tls{{- end }} --user sentinel -p {{ .Values.replica.sentinel.port }} --raw \
+      SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} | tr '\n' ' ')
+  $ set -- $MASTER
+  $ kubectl -n {{ .Release.Namespace }} port-forward "pod/${1%%.*}" "6379:$2"
+  $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} SET key value
+{{- else }}
+WRITE Operations (Master only):
   Service: {{ include "valkey.fullname" . }}
   Type:    {{ .Values.service.type }}
   Port:    {{ .Values.service.port }}
@@ -114,6 +132,7 @@ Direct Pod Access:
 2) Local access:
   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }} 6379:{{ .Values.service.port }}
   $ valkey-cli -h 127.0.0.1 -p 6379{{ if .Values.tls.enabled }} --tls{{- end }} SET key value
+{{- end }}
 {{- else }}
 ================================================================================
 📦 STANDALONE MODE
@@ -152,7 +171,12 @@ Port:         {{ .Values.service.port }}
 {{ end }}
 
 ✅ Quick test
+{{- if .Values.replica.sentinel.enabled }}
+Resolve the current master using the WRITE Operations commands above, then run:
+$ valkey-cli -h <master host> -p <master port>{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
+{{- else }}
 $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{{ if .Values.tls.enabled }} --tls{{- end }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
+{{- end }}
 valkey> SET foo bar
 valkey> GET foo
 "bar"

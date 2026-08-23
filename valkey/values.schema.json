@@ -601,14 +601,6 @@
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"
                 },
-                "podManagementPolicy": {
-                    "type": "string",
-                    "enum": [
-                        "",
-                        "OrderedReady",
-                        "Parallel"
-                    ]
-                },
                 "terminationGracePeriodSeconds": {
                     "type": "integer"
                 },
@@ -668,6 +660,9 @@
                                 }
                             }
                         },
+                        "persistentVolumeClaimRetentionPolicy": {
+                            "type": "object"
+                        },
                         "port": {
                             "type": "integer"
                         },
@@ -678,6 +673,9 @@
                             "type": "integer"
                         },
                         "quorum": {
+                            "type": "integer"
+                        },
+                        "replicas": {
                             "type": "integer"
                         },
                         "resources": {
