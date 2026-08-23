@@ -368,6 +368,11 @@ replica:
     # gives up on discovering the current master and assumes pod-0 is the master
     startupTimeoutSeconds: 60
 
+    # How often each Valkey pod mirrors the current master onto its data volume.
+    # That record is what a cold start falls back on when no Sentinel answers,
+    # so it bounds how stale the topology can be after an abrupt restart.
+    masterRecordRefreshSeconds: 10
+
     # Raw configuration appended to the generated sentinel.conf.
     # Supports templating, e.g. "sentinel notification-script {{ .Release.Name }} /script.sh"
     extraConfig: ""

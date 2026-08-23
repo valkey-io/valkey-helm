@@ -423,6 +423,9 @@
                         "failoverTimeout": {
                             "type": "integer"
                         },
+                        "masterRecordRefreshSeconds": {
+                            "type": "integer"
+                        },
                         "masterSet": {
                             "type": "string"
                         },

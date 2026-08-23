@@ -5,6 +5,54 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
 data:
+{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
+  valkey-start.sh: |-
+    #!/bin/sh
+    # Starts the server, and keeps the credential free record of the current
+    # master fresh while it runs.
+    #
+    # Sentinel persists a promotion by making the server rewrite its config, and
+    # that config is on a memory backed volume, so nothing on disk would show a
+    # failover that happened after this pod started. An abrupt restart would
+    # then come back with the pre-failover topology and could hand writes to a
+    # node that had already been demoted. Mirroring the replicaof line onto the
+    # data volume keeps the record at most one interval behind reality.
+    #
+    # It reads the config Valkey maintains rather than asking the server, so it
+    # needs no credentials and no TLS material.
+    set -eu
+
+    CONF="${VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf}"
+    MARKER="/data/conf/last-master"
+    SELF="{{ include "valkey.fullname" . }}-${POD_INDEX:-0}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+
+    track_master() {
+      while :; do
+        sleep {{ .Values.replica.sentinel.masterRecordRefreshSeconds }}
+        [ -f "$CONF" ] || continue
+        line=$(grep -E "^[[:space:]]*(replicaof|slaveof)[[:space:]]" "$CONF" | tail -n 1 || true)
+        if [ -n "$line" ]; then
+          host=$(echo "$line" | awk '{print $2}')
+          port=$(echo "$line" | awk '{print $3}')
+        else
+          host="$SELF"
+          port="{{ .Values.service.port }}"
+        fi
+        if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
+          current=""
+          [ -f "$MARKER" ] && current=$(cat "$MARKER" 2>/dev/null || true)
+          if [ "$current" != "$host $port" ]; then
+            mkdir -p /data/conf 2>/dev/null || true
+            printf '%s %s\n' "$host" "$port" > "$MARKER" 2>/dev/null || true
+          fi
+        fi
+      done
+    }
+
+    track_master &
+    exec valkey-server "$@"
+{{- end }}
+
   init.sh: |-
     #!/bin/sh
     set -eu
