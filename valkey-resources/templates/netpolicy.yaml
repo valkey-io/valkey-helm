@@ -1,0 +1,93 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- with .Values.networkPolicy }}
+{{- $useDefaults := true }}
+{{- if hasKey . "defaultRules" }}
+{{- $useDefaults = .defaultRules }}
+{{- end }}
+{{- $valkeyPort := 6379 }}
+{{- $valkeyClusterBusPort := 16379 }}
+{{- $hasEgress := or .extraEgress $useDefaults }}
+{{- $hasIngress := or .extraIngress $useDefaults }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "valkey-resources.fullname" $ }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "valkey-resources.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      valkey.io/cluster: {{ include "valkey-resources.fullname" $ | quote }}
+  policyTypes:
+    - Ingress
+  {{- if $hasEgress }}
+    - Egress
+  {{- end }}
+
+  {{- if $hasIngress }}
+  ingress:
+    {{- if $useDefaults }}
+    # valkey-operator management
+    - from:
+        -
+          {{- toYaml .operatorSelector | nindent 10 }}
+      ports:
+        - port: {{ $valkeyPort }}
+          protocol: TCP
+    # valkey cross instance
+    - from:
+        - podSelector:
+            matchLabels:
+              valkey.io/cluster: {{ include "valkey-resources.fullname" $ | quote }}
+      ports:
+        - port: {{ $valkeyPort }}
+          protocol: TCP
+        - port: {{ $valkeyClusterBusPort }}
+          protocol: TCP
+    {{- end }}
+    {{- with .extraIngress }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
+    {{- end }}
+  {{- end }}
+
+  {{- if $hasEgress }}
+  egress:
+    {{- if $useDefaults }}
+    # DNS resolution (kube-dns / CoreDNS)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # valkey cross instance
+    - to:
+        - podSelector:
+            matchLabels:
+              valkey.io/cluster: {{ include "valkey-resources.fullname" $ | quote }}
+      ports:
+        - port: {{ $valkeyPort }}
+          protocol: TCP
+        - port: {{ $valkeyClusterBusPort }}
+          protocol: TCP
+    {{- end }}
+    {{- with .extraEgress }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}

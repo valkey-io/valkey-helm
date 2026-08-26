@@ -18,6 +18,46 @@ commonLabels: {}
 #           secretName: "{{ .Values.extraValues.tlsSecret }}"
 extraValues: {}
 
+# Network policy to control traffic to/from the instance pods.
+# Disabled by default. When enabled, the instance's required
+# rules are added automatically: Valkey operator can manage the
+# Valkey instance and cluster nodes can communicate with each other.
+# Ingress PolicyType is always set, Egress is derived from the rules in effect.
+# More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+networkPolicy:
+  # Enable creation of a NetworkPolicy for the valkey instances
+  enabled: false
+  # Inject the necessary rules for operation as described above
+  # Set false to manage all egress yourself via extra{Ingress,Egress}.
+  defaultRules: true
+  # Selector for operator pods
+  operatorSelector:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: valkey-operator-system
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/instance: valkey-operator
+        app.kubernetes.io/name: valkey-operator
+
+  # Extra labels to add to the NetworkPolicy
+  labels: {}
+  # Extra annotations to add to the NetworkPolicy
+  annotations: {}
+  # Additional ingress rules merged with the default rules if enabled (templated with tpl)
+  extraIngress: []
+  # Additional egress rules merged with the default rules if enabled (templated with tpl)
+  extraEgress: []
+  # Example (allow application to connect to Valkey):
+  #   extraIngress:
+  #     - from:
+  #         - podSelector:
+  #             matchLabels:
+  #               app.kubernetes.io/name: demo-application
+  #       ports:
+  #         - protocol: TCP
+  #           port: 6379
+
 # Scrape ValkeyNode metrics-exporter sidecars (port name "metrics", default 9121).
 # Requires Prometheus Operator CRDs. Operator enables the exporter by default
 # (cluster.spec.exporter.enabled); disable the exporter there if you do not want metrics.
