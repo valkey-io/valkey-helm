@@ -13,9 +13,11 @@ commonLabels: {}
 #     tlsSecret: my-tls
 #   cluster:
 #     spec:
-#       tls:
-#         certificate:
-#           secretName: "{{ .Values.extraValues.tlsSecret }}"
+#       networking:
+#         tls:
+#           certificates:
+#             server:
+#               secretName: "{{ .Values.extraValues.tlsSecret }}"
 extraValues: {}
 
 # Scrape ValkeyNode metrics-exporter sidecars (port name "metrics", default 9121).
@@ -56,11 +58,11 @@ cluster:
   labels: {}
 
   # ValkeyCluster.spec drop-in (any CRD field allowed). Tested against operator
-  # appVersion (v0.4.0): scheduling under spec.scheduling, PDB as {mode: ...},
+  # appVersion (v0.6.0): scheduling under spec.scheduling, PDB as {mode: ...},
   # node.spread.shard|primaries|pods. See CHANGELOG.md.
   # Rendered via tpl so string values may use Helm templates, e.g.
   #   image: "valkey/valkey:{{ .Chart.AppVersion }}"
-  #   tls.certificate.secretName: "{{ .Release.Name }}-tls"
+  #   networking.tls.certificates.server.secretName: "{{ .Release.Name }}-tls"
   # API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
   spec:
     shards: 3
