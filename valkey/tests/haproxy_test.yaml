@@ -177,9 +177,11 @@ tests:
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: 'ssl verify none'
+      # Anchored on the server lines: the comments above the check rules
+      # mention both keywords to explain why they are not used there.
       - notMatchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'verifyhost| sni '
+          pattern: '(?m)^\s*server .*(verifyhost| sni )'
 
   - it: should expose a write and a read port
     template: templates/haproxy-service.yaml
@@ -280,9 +282,11 @@ tests:
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: 'default-server .* ssl ca-file /tls/ca.crt verify required'
+      # Anchored on the default-server line: the comment above the check rules
+      # names check-ssl to explain why it is not used there.
       - notMatchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'check-ssl'
+          pattern: '(?m)^\s*default-server .*check-ssl'
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: 'server RELEASE-NAME-valkey-0 .* verifyhost RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local sni str\(RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local\)'
@@ -290,9 +294,11 @@ tests:
   - it: should not add TLS options when TLS is disabled
     template: templates/haproxy-configmap.yaml
     asserts:
+      # Anchored on the directives: the comment above the check rules explains
+      # where TLS for a check belongs, so it names the keywords.
       - notMatchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'ssl'
+          pattern: '(?m)^\s*(tcp-check connect|default-server|server) .*ssl'
 
   - it: should probe haproxy itself instead of proxying probes to the nodes
     template: templates/haproxy-configmap.yaml

@@ -66,6 +66,12 @@ data:
       # the same node instead.
       balance first
       option tcp-check
+      # This rule opens the check connection, so ssl here is what encrypts it and
+      # check-ssl or check-sni on a server line would be silently ignored. An sni
+      # would have to be set here too, where it is one value for the whole
+      # backend rather than the pod name each certificate carries. Valkey serves
+      # a single certificate and does not select one by SNI, so the check sends
+      # none and verifyhost validates the certificate it gets back.
       tcp-check connect port {{ $port }}{{ if .Values.tls.enabled }} ssl{{ end }}
       {{- if .Values.auth.enabled }}
       tcp-check send AUTH\ {{ $checkUser }}\ "${VALKEY_CHECK_PASSWORD}"\r\n
