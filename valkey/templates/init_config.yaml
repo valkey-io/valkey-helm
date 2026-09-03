@@ -161,6 +161,14 @@ data:
       fi
       {{- end }}
 
+      # An empty value in the secret would otherwise be hashed into the ACL,
+      # and the hash of an empty password is the same everywhere, so the user
+      # would be open to anyone who can reach the port.
+      if [ -z "$password" ]; then
+        log "ERROR: The password for user $username is empty"
+        return 1
+      fi
+
       printf '%s' "$password"
     }
 

@@ -695,6 +695,33 @@ tests:
             mountPath: /tls
             readOnly: true
 
+  - it: should refuse an empty sentinel password
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "defaultpw"
+        replicator:
+          permissions: "~* &* +@all"
+          password: "replicatorpw"
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      # The password is hashed into an ACL user that can run every Sentinel
+      # command, and an empty one hashes to a value shared by every
+      # installation, so it would hand that user to anyone who can reach it.
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'if \[ -z "\$SENTINEL_PASSWORD" \]; then'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'ERROR: The Sentinel password is empty'
+      # The monitor credential is read the same way and goes into
+      # sentinel auth-pass.
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'ERROR: No password, or an empty one, for user \$username'
+
   - it: should adopt a node sentinel cannot see
     template: templates/sentinel-configmap.yaml
     asserts:

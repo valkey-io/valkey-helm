@@ -33,6 +33,13 @@ data:
     }
 
     SENTINEL_PASSWORD=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null) || exit 1
+    # This password is hashed into an ACL user that can run every Sentinel
+    # command. An empty one hashes to a value that is the same in every
+    # installation, so it would hand that user to anyone who can reach the port.
+    if [ -z "$SENTINEL_PASSWORD" ]; then
+      log "ERROR: The Sentinel password is empty"
+      exit 1
+    fi
     {{- if .Values.auth.enabled }}
     {{- $monitorUserObj := index .Values.auth.aclUsers $monitorUser }}
     {{- $monitorPasswordKey := $monitorUserObj.passwordKey | default $monitorUser }}
@@ -42,19 +49,28 @@ data:
     get_user_password() {
       username="$1"
       password_key="${2:-$username}"
+      password=""
 
       {{- if .Values.auth.usersExistingSecret }}
       if [ -f "/valkey-users-secret/$password_key" ]; then
-        cat "/valkey-users-secret/$password_key"
-        return 0
+        password=$(cat "/valkey-users-secret/$password_key")
+      elif [ -f "/valkey-auth-secret/${username}-password" ]; then
+        password=$(cat "/valkey-auth-secret/${username}-password")
+      fi
+      {{- else }}
+      if [ -f "/valkey-auth-secret/${username}-password" ]; then
+        password=$(cat "/valkey-auth-secret/${username}-password")
       fi
       {{- end }}
-      if [ -f "/valkey-auth-secret/${username}-password" ]; then
-        cat "/valkey-auth-secret/${username}-password"
-        return 0
+
+      # Empty counts as missing: it would go into sentinel auth-pass, and an
+      # empty credential is one every installation shares.
+      if [ -z "$password" ]; then
+        log "ERROR: No password, or an empty one, for user $username"
+        return 1
       fi
-      log "ERROR: No password found for user $username"
-      return 1
+
+      printf '%s' "$password"
     }
 
     MONITOR_PASSWORD=$(get_user_password "{{ $monitorUser }}" "{{ $monitorPasswordKey }}") || exit 1
@@ -299,6 +315,13 @@ data:
     }
 
     SENTINEL_PASSWORD=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null) || exit 0
+    # Nothing to authenticate with. Leave without asking for a failover rather
+    # than sending Sentinel commands with an empty credential, and without
+    # holding up the shutdown.
+    if [ -z "$SENTINEL_PASSWORD" ]; then
+      log "No Sentinel password, skipping the failover request"
+      exit 0
+    fi
     {{- if .Values.auth.enabled }}
     {{- $monitorUserObj := index .Values.auth.aclUsers $monitorUser }}
     {{- $monitorPasswordKey := $monitorUserObj.passwordKey | default $monitorUser }}
@@ -306,18 +329,24 @@ data:
     get_user_password() {
       username="$1"
       password_key="${2:-$username}"
+      password=""
 
       {{- if .Values.auth.usersExistingSecret }}
       if [ -f "/valkey-users-secret/$password_key" ]; then
-        cat "/valkey-users-secret/$password_key"
-        return 0
+        password=$(cat "/valkey-users-secret/$password_key")
+      elif [ -f "/valkey-auth-secret/${username}-password" ]; then
+        password=$(cat "/valkey-auth-secret/${username}-password")
+      fi
+      {{- else }}
+      if [ -f "/valkey-auth-secret/${username}-password" ]; then
+        password=$(cat "/valkey-auth-secret/${username}-password")
       fi
       {{- end }}
-      if [ -f "/valkey-auth-secret/${username}-password" ]; then
-        cat "/valkey-auth-secret/${username}-password"
-        return 0
-      fi
-      return 1
+
+      # Empty counts as missing here too, so the caller leaves rather than
+      # authenticating to the node with a credential everyone shares.
+      [ -n "$password" ] || return 1
+      printf '%s' "$password"
     }
 
     MONITOR_PASSWORD=$(get_user_password "{{ $monitorUser }}" "{{ $monitorPasswordKey }}") || exit 0
