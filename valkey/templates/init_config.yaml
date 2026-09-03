@@ -16,10 +16,16 @@ data:
     # failover that happened after this pod started. An abrupt restart would
     # then come back with the pre-failover topology and could hand writes to a
     # node that had already been demoted. Mirroring the replicaof line onto the
-    # data volume keeps the record at most one interval behind reality.
+    # data volume keeps the record within about two intervals of reality.
     #
     # It reads the config Valkey maintains rather than asking the server, so it
     # needs no credentials and no TLS material.
+    #
+    # Valkey rewrites the config at the moment Sentinel changes this pod's role,
+    # so the loop below runs once a second by default to keep the record close
+    # to the promotion that it describes. Everything it does on a tick where
+    # nothing changed is a shell builtin, so the only process it starts per tick
+    # is the sleep itself.
     set -eu
 
     CONF="${VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf}"
@@ -27,24 +33,52 @@ data:
     SELF="{{ include "valkey.fullname" . }}-${POD_INDEX:-0}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
 
     track_master() {
+      # Word splitting is what parses each config line, so keep globbing off:
+      # an unrelated directive holding a * must not expand against the cwd.
+      set -f
+      pending=""
+      cfg_line=""
       while :; do
         sleep {{ .Values.replica.sentinel.masterRecordRefreshSeconds }}
         [ -f "$CONF" ] || continue
-        line=$(grep -E "^[[:space:]]*(replicaof|slaveof)[[:space:]]" "$CONF" | tail -n 1 || true)
-        if [ -n "$line" ]; then
-          host=$(echo "$line" | awk '{print $2}')
-          port=$(echo "$line" | awk '{print $3}')
-        else
-          host="$SELF"
-          port="{{ .Values.service.port }}"
+        # No replicaof line means this pod is the master.
+        host="$SELF"
+        port="{{ .Values.service.port }}"
+        while IFS= read -r cfg_line || [ -n "$cfg_line" ]; do
+          # The trailing "" keeps $1 defined for blank and whitespace only lines.
+          set -- $cfg_line ""
+          case "$1" in
+            replicaof|slaveof)
+              if [ "${2:-}" = "no" ] && [ "${3:-}" = "one" ]; then
+                # Valkey spells "this node is a master" as "replicaof no one".
+                host="$SELF"
+                port="{{ .Values.service.port }}"
+              else
+                host="${2:-}"
+                port="${3:-}"
+              fi
+              ;;
+          esac
+        done < "$CONF"
+        case "$port" in
+          ""|*[!0-9]*) continue ;;
+        esac
+        [ -n "$host" ] || continue
+        # A config rewrite truncates the file and fills it again, so a tick can
+        # read it mid rewrite and miss the replicaof line that is still there.
+        # Only a reading that two consecutive ticks agree on is recorded, which
+        # a torn read cannot be.
+        if [ "$pending" != "$host $port" ]; then
+          pending="$host $port"
+          continue
         fi
-        if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
-          current=""
-          [ -f "$MARKER" ] && current=$(cat "$MARKER" 2>/dev/null || true)
-          if [ "$current" != "$host $port" ]; then
-            mkdir -p /data/conf 2>/dev/null || true
-            printf '%s %s\n' "$host" "$port" > "$MARKER" 2>/dev/null || true
-          fi
+        current=""
+        if [ -f "$MARKER" ]; then
+          IFS= read -r current < "$MARKER" || current=""
+        fi
+        if [ "$current" != "$host $port" ]; then
+          mkdir -p /data/conf 2>/dev/null || true
+          printf '%s %s\n' "$host" "$port" > "$MARKER" 2>/dev/null || true
         fi
       done
     }

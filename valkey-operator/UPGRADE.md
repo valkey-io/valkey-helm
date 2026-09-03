@@ -1,5 +1,25 @@
 # Upgrade
 
+## From 0.5.x to 0.6.0
+
+There are breaking changes in `ValkeyCluster` migrating from `spec.networking.tls.certificate` to `spec.networking.tls.certificates.server`. See the [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.6.0) for steps on how to mitigate them.
+
+This version updates the CRDs to match the valkey-operator release bundled in this chart.
+Helm does not upgrade CRDs during `helm upgrade`, so you must apply them manually before upgrading.
+
+Run these commands to update the CRDs before applying the upgrade:
+
+```console
+kubectl apply --server-side -f https://raw.githubusercontent.com/valkey-io/valkey-operator/v0.6.0/config/crd/bases/valkey.io_valkeyclusters.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/valkey-io/valkey-operator/v0.6.0/config/crd/bases/valkey.io_valkeynodes.yaml
+```
+
+Then upgrade the chart:
+
+```console
+helm upgrade <release-name> valkey/valkey-operator --version 0.6.0
+```
+
 ## From 0.4.x to 0.5.0
 
 There are breaking changes in `ValkeyCluster` migrating from `spec.tls` to `spec.networking.tls`. See the [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.5.0) for steps on how to mitigate them.

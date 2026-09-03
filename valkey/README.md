@@ -147,6 +147,10 @@ Each pod therefore mirrors the current master onto its data volume, as a host an
 A pod that finds no Sentinel comes back in that recorded role instead of refusing to start, which puts nodes on the network for the Sentinels to find.
 A pod with neither a Sentinel nor a record still refuses to start rather than guess.
 
+The record is read from the config file Valkey rewrites when Sentinel changes a pod's role, so it needs no credentials, and a reading has to hold for two consecutive checks before it is written, so a read taken while Valkey is rewriting that file cannot land in it.
+It is therefore about two intervals behind reality, one second by default.
+A promotion followed inside that window by the loss of every pod at once still comes back on the pre-promotion topology: agreeing on a master when no node can be reached is a consensus problem rather than a record keeping one, and this chart does not solve it.
+
 ### HAProxy Front-End
 
 Sentinel requires a Sentinel-aware client.
@@ -514,7 +518,7 @@ tls:
 | replica.sentinel.replicas | int | `3` | Number of independently deployed Sentinel pods |
 | replica.sentinel.port | int | `26379` |  |
 | replica.sentinel.masterSet | string | `"mymaster"` |  |
-| replica.sentinel.masterRecordRefreshSeconds | int | `10` | How stale the cold-start topology record can be |
+| replica.sentinel.masterRecordRefreshSeconds | int | `1` | How often the cold-start topology record is checked against the running config |
 | replica.sentinel.quorum | int | `2` | Sentinels that must agree before a failover starts |
 | replica.sentinel.downAfterMilliseconds | int | `5000` |  |
 | replica.sentinel.failoverTimeout | int | `60000` |  |

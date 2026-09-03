@@ -371,7 +371,11 @@ replica:
     # How often each Valkey pod mirrors the current master onto its data volume.
     # That record is what a cold start falls back on when no Sentinel answers,
     # so it bounds how stale the topology can be after an abrupt restart.
-    masterRecordRefreshSeconds: 10
+    # A reading has to hold for two consecutive checks before it is written, so
+    # the record trails a failover by about twice this value. The check itself
+    # only reads a file that Valkey keeps up to date, and writes nothing when
+    # the topology has not moved.
+    masterRecordRefreshSeconds: 1
 
     # Raw configuration appended to the generated sentinel.conf.
     # Supports templating, e.g. "sentinel notification-script {{ .Release.Name }} /script.sh"
