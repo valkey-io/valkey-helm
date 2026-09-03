@@ -201,6 +201,38 @@ The client leg is then unencrypted, so only use it where that is acceptable.
 In both modes HAProxy health checks the nodes over TLS and validates their certificates against `tls.caPublicKey`.
 Set `haproxy.tls.verify: none` if the certificates do not cover the pod DNS names.
 
+**Client certificates:**
+
+With `tls.requireClientCertificate`, the nodes ask for a certificate on every connection, so HAProxy needs one of its own to health check them.
+HAProxy reads a certificate and its private key from a single file, so the separate `tls.serverPublicKey` and `tls.serverKey` entries cannot serve as one.
+Naming the key after the certificate, as `client.pem.key`, does not work either: that fallback is for `bind` lines, not for the backend `crt` used here.
+
+Add a third entry to `tls.existingSecret` holding the certificate and its key concatenated, and name it in `haproxy.tls.clientCertFile`:
+
+```bash
+# concatenate the client certificate and its key into one PEM
+cat client.crt client.key > client.pem
+
+kubectl create secret generic valkey-tls \
+  --from-file=ca.crt \
+  --from-file=server.crt \
+  --from-file=server.key \
+  --from-file=client.pem
+```
+
+```yaml
+tls:
+  enabled: true
+  existingSecret: valkey-tls
+  requireClientCertificate: true
+haproxy:
+  tls:
+    clientCertFile: client.pem
+```
+
+The same certificate is presented to every node, so it needs no SAN of its own, only a signature from `tls.caPublicKey`.
+Leaving `haproxy.tls.clientCertFile` empty fails the install rather than starting a proxy whose health checks are refused by every node.
+
 ## Cluster Mode
 
 This chart does not and will not support **Valkey cluster** mode. Managing a clustered topology is fundamentally different from standalone or replicated deployments, and the operational requirements go well beyond what this chart is designed to handle.
