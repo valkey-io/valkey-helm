@@ -147,9 +147,14 @@ Each pod therefore mirrors the current master onto its data volume, as a host an
 A pod that finds no Sentinel comes back in that recorded role instead of refusing to start, which puts nodes on the network for the Sentinels to find.
 A pod with neither a Sentinel nor a record still refuses to start rather than guess.
 
-The record is read from the config file Valkey rewrites when Sentinel changes a pod's role, so it needs no credentials, and a reading has to hold for two consecutive checks before it is written, so a read taken while Valkey is rewriting that file cannot land in it.
-It is therefore about two intervals behind reality, one second by default.
-A promotion followed inside that window by the loss of every pod at once still comes back on the pre-promotion topology: agreeing on a master when no node can be reached is a consensus problem rather than a record keeping one, and this chart does not solve it.
+The record is read from the config file Valkey rewrites when Sentinel changes a pod's role, so it needs no credentials.
+A rewrite empties that file before filling it again, and a check landing in between sees no `replicaof` line, which is indistinguishable from a promotion.
+A pod naming itself as the master therefore has to see that on two consecutive checks, while a pod that finds a master to follow records it on the first, since a partial read can drop a `replicaof` line but cannot invent one.
+The record is one interval behind a demotion and two behind a promotion, one second each by default.
+
+A promotion followed inside that window by the loss of every pod at once no longer hands writes back to the demoted node, because that node recorded its demotion on the first check.
+It comes back as a replica of a node that is not yet primary, which costs a resync once Sentinel settles the topology, not the writes.
+Agreeing on a primary when no node can be reached is a consensus problem rather than a record keeping one, and this chart does not solve it.
 
 ## Cluster Mode
 

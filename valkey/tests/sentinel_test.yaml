@@ -641,13 +641,20 @@ tests:
     template: templates/init_config.yaml
     asserts:
       # A rewrite empties the file before filling it again, so a single tick can
-      # see no replicaof line at all and record this pod as the master.
+      # see no replicaof line at all and record this pod as the master. That is
+      # the reading that has to be confirmed; a replicaof line cannot be
+      # invented by a torn read, so it is recorded on the tick that sees it.
       - matchRegex:
           path: data["valkey-start.sh"]
-          pattern: 'if \[ "\$pending" != "\$host \$port" \]; then'
+          pattern: 'if \[ "\$host" = "\$SELF" \] && \[ "\$pending" != "\$host \$port" \]; then'
       - matchRegex:
           path: data["valkey-start.sh"]
           pattern: 'pending="\$host \$port"'
+      # An unterminated last line is the tail of a file being rewritten, and a
+      # truncated port would otherwise be recorded as a real one.
+      - notMatchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'read -r cfg_line \|\|'
 
   - it: should treat replicaof no one as this pod being the master
     template: templates/init_config.yaml

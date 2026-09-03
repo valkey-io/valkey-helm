@@ -16,7 +16,8 @@ data:
     # failover that happened after this pod started. An abrupt restart would
     # then come back with the pre-failover topology and could hand writes to a
     # node that had already been demoted. Mirroring the replicaof line onto the
-    # data volume keeps the record within about two intervals of reality.
+    # data volume keeps the record one interval behind a demotion, and two
+    # behind a promotion, for the reason given at the check below.
     #
     # It reads the config Valkey maintains rather than asking the server, so it
     # needs no credentials and no TLS material.
@@ -44,7 +45,12 @@ data:
         # No replicaof line means this pod is the master.
         host="$SELF"
         port="{{ .Values.service.port }}"
-        while IFS= read -r cfg_line || [ -n "$cfg_line" ]; do
+        # A line without a closing newline is the tail of a file still being
+        # rewritten, and a truncated "replicaof host po" would record a port
+        # that was never configured, so unterminated input is left for the next
+        # tick. Valkey always ends the rewritten config with a newline, so this
+        # only ever discards a partial read.
+        while IFS= read -r cfg_line; do
           # The trailing "" keeps $1 defined for blank and whitespace only lines.
           set -- $cfg_line ""
           case "$1" in
@@ -64,14 +70,19 @@ data:
           ""|*[!0-9]*) continue ;;
         esac
         [ -n "$host" ] || continue
-        # A config rewrite truncates the file and fills it again, so a tick can
-        # read it mid rewrite and miss the replicaof line that is still there.
-        # Only a reading that two consecutive ticks agree on is recorded, which
-        # a torn read cannot be.
-        if [ "$pending" != "$host $port" ]; then
+        # A rewrite truncates the file before filling it again, so a tick can
+        # read a prefix of it and find no replicaof line, which is exactly what
+        # a promotion looks like. Recording that wrongly is the direction that
+        # loses data, because the pod would come back writable, so this pod
+        # naming itself has to hold for two ticks. A replicaof line is recorded
+        # at once: a torn read can drop it but cannot invent one, and coming
+        # back as a replica of a node that is not the master costs a resync,
+        # not the writes.
+        if [ "$host" = "$SELF" ] && [ "$pending" != "$host $port" ]; then
           pending="$host $port"
           continue
         fi
+        pending="$host $port"
         current=""
         if [ -f "$MARKER" ]; then
           IFS= read -r current < "$MARKER" || current=""
