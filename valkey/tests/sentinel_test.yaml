@@ -695,6 +695,48 @@ tests:
             mountPath: /tls
             readOnly: true
 
+  - it: should adopt a node sentinel cannot see
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      # Sentinel discovers replicas through the master, so a node replicating
+      # from another replica is invisible to it and is never reconfigured, not
+      # even by its own fix-slave-config.
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'adopt_orphans &'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel replicas "\$MASTER_SET"'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'replicaof "\$current_host" "\$current_port"'
+
+  - it: should leave the nodes sentinel is already reconfiguring alone
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      # Two guards keep the loop out of Sentinel's way: it stops unless the
+      # master is plainly up, and it only touches nodes Sentinel does not list,
+      # which are exactly the ones it cannot be reconfiguring.
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'if \[ "\$flags" != "master" \]; then'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'if echo "\$known" \| grep -qx "\$node"; then'
+      # A node answering as a master is a second writable node, not an orphan.
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'if \[ "\$role" != "slave" \]; then'
+
+  - it: should take the adoption interval from the values
+    set:
+      replica.sentinel.orphanCheckSeconds: 45
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: '(?m)^\s*sleep 45$'
+
   - it: should run the tracker only when sentinel is enabled
     set:
       replica.sentinel.enabled: false

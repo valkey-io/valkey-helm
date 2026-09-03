@@ -153,8 +153,13 @@ A pod naming itself as the master therefore has to see that on two consecutive c
 The record is one interval behind a demotion and two behind a promotion, one second each by default.
 
 A promotion followed inside that window by the loss of every pod at once no longer hands writes back to the demoted node, because that node recorded its demotion on the first check.
-It comes back as a replica of a node that is not yet primary, which costs a resync once Sentinel settles the topology, not the writes.
+What can still happen is that a pod which was down during a failover comes back following a node that has since been demoted, so it replicates through that node rather than from the primary.
 Agreeing on a primary when no node can be reached is a consensus problem rather than a record keeping one, and this chart does not solve it.
+
+Sentinel cannot repair that on its own, because it only learns which nodes are replicas by asking the primary, and a node replicating from a replica is not in that answer.
+Each Sentinel therefore checks every `replica.sentinel.orphanCheckSeconds` for a node that is replicating from something other than the current primary and that Sentinel does not list, and points it back at the primary.
+It only touches nodes Sentinel cannot see, which are exactly the ones Sentinel is not reconfiguring itself, and it stands down entirely while the primary is not plainly up.
+A node that answers as a primary is left alone and logged rather than demoted.
 
 ### HAProxy Front-End
 
@@ -561,6 +566,7 @@ tls:
 | replica.sentinel.failoverTimeout | int | `60000` |  |
 | replica.sentinel.parallelSyncs | int | `1` |  |
 | replica.sentinel.monitorUser | string | `""` | Defaults to replica.replicationUser |
+| replica.sentinel.orphanCheckSeconds | int | `30` | How often each Sentinel looks for a node replicating from something it cannot see |
 | replica.sentinel.password | string | `""` | Dedicated Sentinel ACL password; required with Sentinel unless supplied by auth.usersExistingSecret |
 | replica.sentinel.passwordKey | string | `"sentinel"` | Key containing the Sentinel password in auth.usersExistingSecret |
 | replica.sentinel.preStopFailover | bool | `true` | Fail over before a master pod is terminated |
