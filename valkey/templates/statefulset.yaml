@@ -94,6 +94,14 @@ spec:
               mountPath: /sentinel-auth
               readOnly: true
             {{- end }}
+            {{- if and .Values.tls.enabled .Values.replica.sentinel.enabled }}
+            # This container asks Sentinel which node is the master, and over
+            # TLS that query needs the CA to verify the answer. Without Sentinel
+            # it makes no connection at all, so it gets no key material.
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+              readOnly: true
+            {{- end }}
             {{- if .Values.valkeyConfig }}
             - name: valkey-config
               mountPath: /usr/local/etc/valkey/valkey.conf

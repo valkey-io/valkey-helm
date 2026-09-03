@@ -663,6 +663,38 @@ tests:
           path: data["valkey-start.sh"]
           pattern: '\[ "\$\{2:-\}" = "no" \] && \[ "\$\{3:-\}" = "one" \]'
 
+  - it: should give the init container the CA it needs to ask sentinel
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/statefulset.yaml
+    asserts:
+      # The init container queries Sentinel with valkey-cli --tls --cacert
+      # /tls/..., and without the mount that query fails, leaving a fresh pod
+      # with no topology at all.
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
+            readOnly: true
+
+  - it: should keep key material out of the init container without sentinel
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      replica.sentinel.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      # Nothing in the init container talks to Sentinel then, so it has no
+      # reason to hold the server key.
+      - notContains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
+            readOnly: true
+
   - it: should run the tracker only when sentinel is enabled
     set:
       replica.sentinel.enabled: false
