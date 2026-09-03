@@ -88,6 +88,24 @@ tests:
           path: data["init.sh"]
           pattern: "ERROR.*No password found"
 
+  - it: should refuse an empty password rather than hash it into the ACL
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "valkey-users"
+      auth.aclUsers:
+        admin:
+          permissions: "~* &* +@all"
+    asserts:
+      # A zero byte value in the secret reads back as an empty password, and
+      # the SHA of an empty password is the same in every installation, so the
+      # user would be open to anyone who can reach the port.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'if \[ -z "\$password" \]; then'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'ERROR: The password for user \$username is empty'
+
   - it: should use aclConfig only
     set:
       auth.enabled: true
