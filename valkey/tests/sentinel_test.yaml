@@ -610,11 +610,51 @@ tests:
           pattern: 'exec valkey-server "\$@"'
       - matchRegex:
           path: data["valkey-start.sh"]
-          pattern: '\(replicaof\|slaveof\)'
+          pattern: 'replicaof\|slaveof\)'
       # It reads the config Valkey maintains, so it needs no credentials.
       - notMatchRegex:
           path: data["valkey-start.sh"]
           pattern: 'REDISCLI_AUTH|valkey-cli'
+
+  - it: should check for a failover once a second by default
+    template: templates/init_config.yaml
+    asserts:
+      # The record is only useful if it names the master that was current when
+      # the pods died, so it has to follow a promotion closely.
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: '(?m)^\s*sleep 1$'
+
+  - it: should read the config with builtins so a tick costs no process
+    template: templates/init_config.yaml
+    asserts:
+      # The loop runs for the life of the pod, so parsing the config with a
+      # pipeline of grep and awk would spend processes on every tick forever.
+      - notMatchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'awk|grep|\bcat '
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'while IFS= read -r cfg_line'
+
+  - it: should ignore a config read taken during a rewrite
+    template: templates/init_config.yaml
+    asserts:
+      # A rewrite empties the file before filling it again, so a single tick can
+      # see no replicaof line at all and record this pod as the master.
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'if \[ "\$pending" != "\$host \$port" \]; then'
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'pending="\$host \$port"'
+
+  - it: should treat replicaof no one as this pod being the master
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: '\[ "\$\{2:-\}" = "no" \] && \[ "\$\{3:-\}" = "one" \]'
 
   - it: should run the tracker only when sentinel is enabled
     set:
