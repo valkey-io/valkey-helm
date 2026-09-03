@@ -378,6 +378,13 @@ replica:
     # when the topology has not moved.
     masterRecordRefreshSeconds: 1
 
+    # How often each Sentinel looks for a Valkey node that is replicating from
+    # something other than the current master and that Sentinel itself cannot
+    # see. Sentinel only discovers replicas through the master, so a node that
+    # attached to another replica is invisible to it and would never be
+    # reconfigured.
+    orphanCheckSeconds: 30
+
     # Raw configuration appended to the generated sentinel.conf.
     # Supports templating, e.g. "sentinel notification-script {{ .Release.Name }} /script.sh"
     extraConfig: ""

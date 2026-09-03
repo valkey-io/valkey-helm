@@ -432,6 +432,9 @@
                         "monitorUser": {
                             "type": "string"
                         },
+                        "orphanCheckSeconds": {
+                            "type": "integer"
+                        },
                         "password": {
                             "type": "string"
                         },
