@@ -45,6 +45,7 @@ data:
       set -f
       pending=""
       cfg_line=""
+      write_failed=""
       while :; do
         sleep {{ .Values.replica.sentinel.masterRecordRefreshSeconds }}
         [ -f "$CONF" ] || continue
@@ -94,8 +95,19 @@ data:
           IFS= read -r current < "$MARKER" || current=""
         fi
         if [ "$current" != "$host $port" ]; then
-          mkdir -p /data/conf 2>/dev/null || true
-          printf '%s %s\n' "$host" "$port" > "$MARKER" 2>/dev/null || true
+          # Write and rename, so that a cold start can never read half a record,
+          # and say so when it fails. A record that cannot be updated keeps
+          # naming this pod after it has been demoted, and that is what a cold
+          # start would come back on. The next tick retries, because the record
+          # still does not match, so one complaint per outage is enough.
+          if mkdir -p /data/conf 2>/dev/null &&
+             printf '%s %s\n' "$host" "$port" > "$MARKER.tmp" 2>/dev/null &&
+             mv "$MARKER.tmp" "$MARKER" 2>/dev/null; then
+            write_failed=""
+          elif [ -z "$write_failed" ]; then
+            write_failed="yes"
+            echo "$(date) ERROR: cannot record the master as $host $port in $MARKER, a cold start would fall back on the last record written" >&2
+          fi
         fi
       done
     }
