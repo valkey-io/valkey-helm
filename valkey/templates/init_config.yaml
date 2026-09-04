@@ -397,11 +397,17 @@ data:
       else
       MARKED=""
       if [ -f "$MASTER_MARKER" ]; then
-        MARKED=$(head -n 1 "$MASTER_MARKER" | tr -d '\r')
+        # read fails on a line with no closing newline, which is what a record
+        # interrupted mid write looks like. Taking it would mean replicating
+        # from a truncated port such as "6", which no node is listening on.
+        IFS= read -r MARKED < "$MASTER_MARKER" || MARKED=""
+        MARKED=$(printf '%s' "$MARKED" | tr -d '\r')
       fi
       MARKED_HOST=${MARKED%% *}
       MARKED_PORT=${MARKED##* }
-      if [ -n "$MARKED_HOST" ] && echo "$MARKED_PORT" | grep -qE "^[0-9]+$"; then
+      if [ -n "$MARKED_HOST" ] && [ "$MARKED_HOST" != "$MARKED_PORT" ] &&
+         echo "$MARKED_PORT" | grep -qE "^[0-9]+$" &&
+         [ "$MARKED_PORT" -ge 1 ] && [ "$MARKED_PORT" -le 65535 ]; then
         if [ "$MARKED_HOST" = "$SELF_HOST" ]; then
           log "No Sentinel answered; last recorded master is this pod, starting as MASTER"
         else
@@ -448,10 +454,16 @@ data:
     # a credential, so it is safe to keep on the data volume.
     mkdir -p "$(dirname "$MASTER_MARKER")"
     if [ -n "$REPLICATION_TARGET" ]; then
-      printf '%s %s\n' "$(echo "$REPLICATION_TARGET" | awk '{print $2}')" "$(echo "$REPLICATION_TARGET" | awk '{print $3}')" > "$MASTER_MARKER"
+      MARKER_HOST=$(echo "$REPLICATION_TARGET" | awk '{print $2}')
+      MARKER_PORT=$(echo "$REPLICATION_TARGET" | awk '{print $3}')
     else
-      printf '%s %s\n' "$SELF_HOST" "$MASTER_PORT" > "$MASTER_MARKER"
+      MARKER_HOST="$SELF_HOST"
+      MARKER_PORT="$MASTER_PORT"
     fi
+    # Written under a temporary name and renamed, so that a pod killed here
+    # leaves the previous record rather than an empty or half written one.
+    printf '%s %s\n' "$MARKER_HOST" "$MARKER_PORT" > "$MASTER_MARKER.tmp"
+    mv "$MASTER_MARKER.tmp" "$MASTER_MARKER"
     {{- else }}
     if [ "$POD_INDEX" = "0" ]; then
       log "This pod (index $POD_INDEX) is configured as MASTER"

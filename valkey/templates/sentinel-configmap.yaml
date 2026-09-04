@@ -386,8 +386,17 @@ data:
         port=$(echo "$info" | sed -n 's/^master_port://p')
       fi
       if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
-        mkdir -p /data/conf 2>/dev/null || true
-        printf '%s %s\n' "$host" "$port" > /data/conf/last-master 2>/dev/null || true
+        # Write and rename. This runs while the pod is being torn down, so a
+        # redirect straight onto the record can leave it empty, or half written
+        # if the node itself goes, and a cold start reads that record to decide
+        # whether it may come back as the master.
+        if mkdir -p /data/conf 2>/dev/null &&
+           printf '%s %s\n' "$host" "$port" > /data/conf/last-master.tmp 2>/dev/null &&
+           mv /data/conf/last-master.tmp /data/conf/last-master 2>/dev/null; then
+          log "Recorded $host:$port as the last known master"
+        else
+          log "WARN: could not record $host:$port, the last written record stands"
+        fi
       fi
     }
     trap record_master EXIT

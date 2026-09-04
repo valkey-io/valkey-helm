@@ -579,10 +579,39 @@ tests:
     asserts:
       - matchRegex:
           path: data["init.sh"]
-          pattern: '> "\$MASTER_MARKER"'
+          pattern: '> "\$MASTER_MARKER.tmp"'
       - notMatchRegex:
           path: data["init.sh"]
-          pattern: 'PASSWORD.*> "\$MASTER_MARKER"'
+          pattern: 'PASSWORD.*> "\$MASTER_MARKER'
+
+  - it: should replace the record atomically wherever it is written
+    template: templates/init_config.yaml
+    asserts:
+      # Three places write this record, and a pod killed part way through any
+      # of them would otherwise leave an empty or half written one behind.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'mv "\$MASTER_MARKER.tmp" "\$MASTER_MARKER"'
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'mv "\$MARKER.tmp" "\$MARKER"'
+
+  - it: should refuse a record that was never finished
+    template: templates/init_config.yaml
+    asserts:
+      # read fails on a line with no closing newline, which is what an
+      # interrupted write leaves. Accepting it would mean replicating from a
+      # truncated port such as "6".
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'IFS= read -r MARKED < "\$MASTER_MARKER" \|\| MARKED=""'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'head -n 1 "\$MASTER_MARKER"'
+      # A port outside the range cannot be a listening one either.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '\[ "\$MARKED_PORT" -ge 1 \] && \[ "\$MARKED_PORT" -le 65535 \]'
 
   - it: should refresh the recorded master from the local node on shutdown
     template: templates/sentinel-configmap.yaml
@@ -594,7 +623,7 @@ tests:
           pattern: 'trap record_master EXIT'
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: '> /data/conf/last-master'
+          pattern: 'mv /data/conf/last-master.tmp /data/conf/last-master'
 
   - it: should keep the master record in step with runtime failovers
     template: templates/init_config.yaml
