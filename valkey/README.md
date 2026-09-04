@@ -144,8 +144,10 @@ The replication topology survives a full restart of the StatefulSet: each pod as
 
 On a cold start the Sentinels are restarting too, and a Sentinel cannot name a master until a Valkey node is up, so waiting for one would leave both halves waiting for each other.
 Each pod therefore mirrors the current master onto its data volume, as a host and a port with no credential in it, every `replica.sentinel.masterRecordRefreshSeconds`.
-A pod that finds no Sentinel comes back in that recorded role instead of refusing to start, which puts nodes on the network for the Sentinels to find.
-A pod with neither a Sentinel nor a record still refuses to start rather than guess.
+A pod that finds no Sentinel first asks the other Valkey nodes whether one of them is already up as the primary, and follows that answer if it gets one.
+A node that is running outranks the record, both because a pod that was down across a failover still has its own name in its record, which would bring it back writable next to the node that was promoted, and because the record may name a node that has since been demoted.
+Only when nothing answers does the record decide, which is what puts nodes on the network for the Sentinels to find.
+A pod with neither a Sentinel, nor a running node, nor a record still refuses to start rather than guess.
 
 The record is read from the config file Valkey rewrites when Sentinel changes a pod's role, so it needs no credentials.
 A rewrite empties that file before filling it again, and a check landing in between sees no `replicaof` line, which is indistinguishable from a promotion.
