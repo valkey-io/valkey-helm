@@ -368,6 +368,14 @@ replica:
     # gives up on discovering the current master and assumes pod-0 is the master
     startupTimeoutSeconds: 60
 
+    # How long a pod with no recorded topology waits for a Sentinel, or for
+    # another node, to tell it what the topology is. This is the fresh install
+    # case: the Sentinels bootstrap a master once their own
+    # startupTimeoutSeconds expires, so this has to be comfortably longer than
+    # that. A pod that gives up exits, and Kubernetes restarts the init
+    # container, so this bounds one attempt rather than the whole startup.
+    initialTopologyWaitSeconds: 180
+
     # How often each Valkey pod mirrors the current master onto its data volume.
     # That record is what a cold start falls back on when no Sentinel answers,
     # so it bounds how stale the topology can be after an abrupt restart.

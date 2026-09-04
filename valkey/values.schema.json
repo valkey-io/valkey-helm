@@ -423,6 +423,9 @@
                         "failoverTimeout": {
                             "type": "integer"
                         },
+                        "initialTopologyWaitSeconds": {
+                            "type": "integer"
+                        },
                         "masterRecordRefreshSeconds": {
                             "type": "integer"
                         },

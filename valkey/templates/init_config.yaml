@@ -397,8 +397,37 @@ data:
           REPLICATION_TARGET="replicaof $MARKED_HOST $MARKED_PORT"
         fi
       else
-        log "No Sentinel answered and no recorded topology; refusing to start without a confirmed replication role"
-        exit 1
+        # Nothing anywhere: a fresh install, or a pod that lost its volume. The
+        # Sentinels are still running their own discovery and bootstrap a master
+        # once replica.sentinel.startupTimeoutSeconds expires, and this pod only
+        # has to be around to be told. Exiting here instead leaves the init
+        # container crash looping until a retry happens to land after that, so
+        # wait for the answer rather than for the next backoff.
+        WAITED=0
+        while [ "$WAITED" -lt "{{ .Values.replica.sentinel.initialTopologyWaitSeconds }}" ]; do
+          sleep 5
+          WAITED=$((WAITED + 5))
+          DISCOVERED=$(master_from_sentinels || true)
+          if [ -z "$DISCOVERED" ]; then
+            DISCOVERED=$(master_from_running_nodes || true)
+          fi
+          if [ -n "$DISCOVERED" ]; then
+            break
+          fi
+          log "Waiting for a Sentinel or a running node to report the topology, ${WAITED}s of {{ .Values.replica.sentinel.initialTopologyWaitSeconds }}s"
+        done
+        if [ -z "$DISCOVERED" ]; then
+          log "No Sentinel answered and no recorded topology; refusing to start without a confirmed replication role"
+          exit 1
+        fi
+        FOUND_HOST=${DISCOVERED% *}
+        FOUND_PORT=${DISCOVERED#* }
+        if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
+          log "Sentinel reports this pod as the master, starting as MASTER"
+        else
+          log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
+          REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
+        fi
       fi
       fi
     fi
