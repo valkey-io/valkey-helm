@@ -43,9 +43,11 @@ tests:
           persistence:
             size: 10Gi
             reclaimPolicy: Retain
-          tls:
-            certificate:
-              secretName: valkey-tls
+          networking:
+            tls:
+              certificates:
+                server:
+                  secretName: valkey-tls
           exporter:
             enabled: false
     asserts:
@@ -71,7 +73,7 @@ tests:
           path: spec.persistence.size
           value: 10Gi
       - equal:
-          path: spec.tls.certificate.secretName
+          path: spec.networking.tls.certificates.server.secretName
           value: valkey-tls
       - equal:
           path: spec.exporter.enabled
@@ -107,15 +109,17 @@ tests:
           shards: 3
           replicas: 1
           image: "valkey/valkey:{{ .Chart.AppVersion }}"
-          tls:
-            certificate:
-              secretName: "{{ .Release.Name }}-tls"
+          networking:
+            tls:
+              certificates:
+                server:
+                  secretName: "{{ .Release.Name }}-tls"
     asserts:
       - equal:
           path: spec.image
-          value: valkey/valkey:v0.4.0
+          value: valkey/valkey:v0.6.0
       - equal:
-          path: spec.tls.certificate.secretName
+          path: spec.networking.tls.certificates.server.secretName
           value: RELEASE-NAME-tls
 
   - it: templates using extraValues
@@ -128,13 +132,15 @@ tests:
         spec:
           shards: 3
           replicas: 0
-          tls:
-            certificate:
-              secretName: "{{ .Values.extraValues.tlsSecret }}"
+          networking:
+            tls:
+              certificates:
+                server:
+                  secretName: "{{ .Values.extraValues.tlsSecret }}"
     asserts:
       - equal:
           path: metadata.annotations.note
           value: tls=shared-valkey-tls
       - equal:
-          path: spec.tls.certificate.secretName
+          path: spec.networking.tls.certificates.server.secretName
           value: shared-valkey-tls

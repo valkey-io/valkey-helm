@@ -7,6 +7,8 @@ cluster:
   spec:
     shards: 3
     replicas: 1
-    tls:
-      certificate:
-        secretName: "{{ .Values.extraValues.tlsSecret }}"
+    networking:
+      tls:
+        certificates:
+          server:
+            secretName: "{{ .Values.extraValues.tlsSecret }}"
