@@ -4,7 +4,14 @@ metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
+    {{- if .Values.replica.sentinel.enabled }}
+    # Not "primary": with Sentinel the master can be any pod, and a Service
+    # cannot select on a role that changes, so this one reaches every node.
+    # Writes belong at the address Sentinel names, or at the HAProxy service.
+    app.kubernetes.io/component: nodes
+    {{- else }}
     app.kubernetes.io/component: primary
+    {{- end }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

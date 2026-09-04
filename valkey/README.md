@@ -89,7 +89,7 @@ topologySpreadConstraints:
 
 **Services:**
 
-* `valkey`: load balances across all pods, the master can be any of them
+* `valkey`: load balances across all pods, the master can be any of them, so it is labelled `app.kubernetes.io/component: nodes` rather than `primary` and is not a write endpoint
 * `valkey-sentinel`: Sentinel endpoints, used by clients to resolve the current master
 * `valkey-headless`: headless service for Valkey pod discovery
 * `valkey-sentinel-headless`: headless service for Sentinel peer discovery
