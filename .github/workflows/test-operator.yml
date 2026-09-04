@@ -67,3 +67,42 @@ jobs:
           name: valkey-operator-template-k${{ matrix.kube }}
           path: /tmp/valkey-operator-*.yaml
           if-no-files-found: error
+
+  chart-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need full history to diff against the base branch
+
+      - name: Check chart version is bumped when templates change
+        run: |
+          set -euo pipefail
+
+          BASE="origin/${GITHUB_BASE_REF:-main}"
+          git fetch --no-tags --depth=1 origin "${GITHUB_BASE_REF:-main}"
+
+          # Did any chart template (or the chart metadata) change vs the base branch?
+          if git diff --quiet "$BASE"...HEAD -- valkey-operator/templates valkey-operator/crds; then
+            echo "No valkey-operator template changes detected; skipping version check."
+            exit 0
+          fi
+          echo "valkey-operator template changes detected; verifying chart version bump."
+
+          read_version() { awk '/^version:/ {print $2; exit}' "$1"; }
+
+          NEW_VERSION="$(read_version valkey-operator/Chart.yaml)"
+          OLD_VERSION="$(git show "$BASE:valkey-operator/Chart.yaml" | awk '/^version:/ {print $2; exit}')"
+
+          echo "Base version: $OLD_VERSION"
+          echo "Current version: $NEW_VERSION"
+
+          # Fail unless the new version is strictly greater than the base version.
+          HIGHEST="$(printf '%s\n%s\n' "$OLD_VERSION" "$NEW_VERSION" | sort -V | tail -n1)"
+          if [ "$NEW_VERSION" = "$OLD_VERSION" ] || [ "$HIGHEST" != "$NEW_VERSION" ]; then
+            echo "::error file=valkey-operator/Chart.yaml::please bump the chart version (current: $NEW_VERSION, base: $OLD_VERSION)"
+            exit 1
+          fi
+
+          echo "Chart version bumped from $OLD_VERSION to $NEW_VERSION."
