@@ -128,6 +128,9 @@ Check if there are any users with inline passwords
     {{- $hasInlinePasswords = true -}}
   {{- end -}}
 {{- end -}}
+{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.password -}}
+  {{- $hasInlinePasswords = true -}}
+{{- end -}}
 {{- $hasInlinePasswords -}}
 {{- end -}}
 
@@ -167,6 +170,23 @@ Headless service name for replication
 {{- end -}}
 
 {{/*
+Stable names and selectors for the independent Sentinel StatefulSet.
+*/}}
+{{- define "valkey.sentinel.fullname" -}}
+{{- printf "%s-sentinel" (include "valkey.fullname" . | trunc 54 | trimSuffix "-") -}}
+{{- end -}}
+
+{{- define "valkey.sentinel.headlessServiceName" -}}
+{{- printf "%s-headless" (include "valkey.sentinel.fullname" . | trunc 54 | trimSuffix "-") -}}
+{{- end -}}
+
+{{- define "valkey.sentinel.selectorLabels" -}}
+app.kubernetes.io/name: {{ printf "%s-sentinel" (include "valkey.name" . | trunc 54 | trimSuffix "-") }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: sentinel
+{{- end -}}
+
+{{/*
 Validate replica persistence configuration
 */}}
 {{- define "valkey.validateReplicaPersistence" -}}
@@ -184,6 +204,174 @@ Validate replica authentication configuration
 {{- if and .Values.replica.enabled .Values.auth.enabled }}
   {{- if not (hasKey .Values.auth.aclUsers .Values.replica.replicationUser) }}
     {{- fail (printf "Replication user '%s' (replica.replicationUser) must be defined in auth.aclUsers. The chart requires this to retrieve the password for replica authentication." .Values.replica.replicationUser) }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+valkey-cli TLS flags shared by the Sentinel scripts and probes
+*/}}
+{{- define "valkey.sentinel.cliTlsFlags" -}}
+{{- if .Values.tls.enabled -}}
+--tls --cacert /tls/{{ .Values.tls.caPublicKey }}
+{{- if .Values.tls.requireClientCertificate }} --cert /tls/{{ .Values.tls.serverPublicKey }} --key /tls/{{ .Values.tls.serverKey }}{{ end }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+valkey-cli TLS flags for the commands printed after an install. Those run from
+a shell rather than inside a chart pod, so the files are the operator's own
+copies of what tls.existingSecret holds, and the names are shown as
+placeholders instead of the paths mounted into the containers.
+*/}}
+{{- define "valkey.cli.tlsFlagsHint" -}}
+{{- if .Values.tls.enabled }} --tls --cacert <{{ .Values.tls.caPublicKey }}>
+{{- if .Values.tls.requireClientCertificate }} --cert <{{ .Values.tls.serverPublicKey }}> --key <{{ .Values.tls.serverKey }}>{{ end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+TLS options for the Python example printed after an install. The Sentinel
+connection and the connection to the master are separate, so the same options
+have to be given twice: once inside sentinel_kwargs and once beside it.
+*/}}
+{{- define "valkey.python.tlsDictItems" -}}
+{{- if .Values.tls.enabled }}, "ssl": True, "ssl_ca_certs": "<{{ .Values.tls.caPublicKey }}>"
+{{- if .Values.tls.requireClientCertificate }}, "ssl_certfile": "<{{ .Values.tls.serverPublicKey }}>", "ssl_keyfile": "<{{ .Values.tls.serverKey }}>"{{ end }}
+{{- end }}
+{{- end -}}
+
+{{- define "valkey.python.tlsKwargs" -}}
+{{- if .Values.tls.enabled }},
+           ssl=True, ssl_ca_certs="<{{ .Values.tls.caPublicKey }}>"
+{{- if .Values.tls.requireClientCertificate }}, ssl_certfile="<{{ .Values.tls.serverPublicKey }}>", ssl_keyfile="<{{ .Values.tls.serverKey }}>"{{ end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Validate sentinel configuration
+*/}}
+{{- define "valkey.validateSentinelConfig" -}}
+{{- if .Values.replica.sentinel.enabled }}
+  {{- if not .Values.replica.enabled }}
+    {{- fail "Sentinel requires replication. Please set replica.enabled=true along with replica.sentinel.enabled=true" }}
+  {{- end }}
+  {{- $sentinels := int .Values.replica.sentinel.replicas }}
+  {{- if lt (int .Values.replica.replicas) 1 }}
+    {{- fail "Sentinel requires at least one Valkey replica. Please set replica.replicas to 1 or more." }}
+  {{- end }}
+  {{- if lt $sentinels 3 }}
+    {{- fail (printf "Sentinel requires at least 3 instances to form a quorum. Please set replica.sentinel.replicas to 3 or more (currently %d)." $sentinels) }}
+  {{- end }}
+  {{- if lt (int .Values.replica.sentinel.quorum) 2 }}
+    {{- fail "replica.sentinel.quorum must be at least 2, a quorum of 1 allows a single Sentinel to trigger a failover on its own." }}
+  {{- end }}
+  {{- if gt (int .Values.replica.sentinel.quorum) $sentinels }}
+    {{- fail (printf "replica.sentinel.quorum (%d) cannot be greater than replica.sentinel.replicas (%d)." (int .Values.replica.sentinel.quorum) $sentinels) }}
+  {{- end }}
+  {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
+    {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than replica.terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
+  {{- end }}
+  {{- $bootstrapWait := int .Values.replica.sentinel.initialTopologyWaitSeconds }}
+  {{- $sentinelStartup := int .Values.replica.sentinel.startupTimeoutSeconds }}
+  {{- if lt $bootstrapWait (add $sentinelStartup 30) }}
+    {{- fail (printf "replica.sentinel.initialTopologyWaitSeconds (%d) must be at least 30s above replica.sentinel.startupTimeoutSeconds (%d), which is %d. A pod with no recorded topology has nothing to be told until the Sentinels finish that discovery and bootstrap a master, so a shorter wait leaves the init container exiting just before the answer arrives." $bootstrapWait $sentinelStartup (add $sentinelStartup 30)) }}
+  {{- end }}
+  {{- if and (not .Values.replica.sentinel.password) (not .Values.auth.usersExistingSecret) }}
+    {{- fail "replica.sentinel.password is required when Sentinel is enabled, unless auth.usersExistingSecret supplies replica.sentinel.passwordKey." }}
+  {{- end }}
+  {{- if .Values.auth.enabled }}
+    {{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
+    {{- if not (hasKey .Values.auth.aclUsers $monitorUser) }}
+      {{- fail (printf "Sentinel monitor user '%s' must be defined in auth.aclUsers. Sentinel needs it to reach the monitored Valkey nodes." $monitorUser) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Selector labels for the HAProxy pods.
+
+The name deliberately differs from the Valkey one. Every Valkey side selector,
+the PodDisruptionBudget and the headless service among them, matches on
+app.kubernetes.io/name plus instance without a component, so sharing the Valkey
+name would make those select the proxy pods as well.
+*/}}
+{{- define "valkey.haproxy.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "valkey.name" . }}-haproxy
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: haproxy
+{{- end -}}
+
+{{/*
+Common labels for the HAProxy resources
+*/}}
+{{- define "valkey.haproxy.labels" -}}
+helm.sh/chart: {{ include "valkey.chart" . }}
+{{ include "valkey.haproxy.selectorLabels" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.commonLabels }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Returns the HAProxy container image
+*/}}
+{{- define "valkey.haproxy.image" -}}
+{{- include "valkey.common.image" (dict "image" .Values.haproxy.image "global" .Values.global) }}
+{{- end -}}
+
+{{/*
+Per-server TLS options for the HAProxy backends.
+In passthrough mode only the health check speaks TLS (check-ssl), the client
+stream is forwarded untouched. In bridge mode HAProxy originates TLS itself
+(ssl), so the data path is encrypted between HAProxy and the nodes.
+*/}}
+{{- define "valkey.haproxy.serverTlsOptions" -}}
+{{- if .Values.tls.enabled }}
+{{- if eq .Values.haproxy.tls.mode "bridge" }} ssl{{ else }} check-ssl{{ end }}
+{{- if eq .Values.haproxy.tls.verify "required" }} ca-file /tls/{{ .Values.tls.caPublicKey }} verify required
+{{- else }} verify none
+{{- end }}
+{{- if .Values.tls.requireClientCertificate }} crt /tls/{{ .Values.haproxy.tls.clientCertFile }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Per-server certificate identity options for an HAProxy backend.
+*/}}
+{{- define "valkey.haproxy.serverTlsIdentityOptions" -}}
+{{- $root := .root -}}
+{{- if and $root.Values.tls.enabled (eq $root.Values.haproxy.tls.verify "required") -}}
+{{- $host := printf "%s-%d.%s.%s.svc.%s" (include "valkey.fullname" $root) .index (include "valkey.headlessServiceName" $root) $root.Release.Namespace $root.Values.clusterDomain -}}
+{{- printf " verifyhost %s" $host -}}
+{{- if eq $root.Values.haproxy.tls.mode "bridge" }}{{ printf " sni str(%s)" $host }}{{ end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Validate haproxy configuration
+*/}}
+{{- define "valkey.validateHaproxyConfig" -}}
+{{- if .Values.haproxy.enabled }}
+  {{- if not (and .Values.replica.enabled .Values.replica.sentinel.enabled) }}
+    {{- fail "HAProxy routes clients to whichever node Sentinel promoted. Please set replica.enabled=true and replica.sentinel.enabled=true, or disable haproxy." }}
+  {{- end }}
+  {{- if .Values.haproxy.podDisruptionBudget.enabled }}
+    {{- if and (kindIs "invalid" .Values.haproxy.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.haproxy.podDisruptionBudget.maxUnavailable) }}
+      {{- fail "haproxy.podDisruptionBudget needs either minAvailable or maxUnavailable. A budget with neither is accepted by the API server but protects nothing." }}
+    {{- end }}
+  {{- end }}
+  {{- if and .Values.tls.enabled .Values.tls.requireClientCertificate (not .Values.haproxy.tls.clientCertFile) }}
+    {{- fail "tls.requireClientCertificate needs haproxy.tls.clientCertFile. HAProxy loads a client certificate from a single file holding both the certificate and its private key, which tls.serverPublicKey and tls.serverKey do not provide separately." }}
+  {{- end }}
+  {{- if .Values.auth.enabled }}
+    {{- $checkUser := .Values.haproxy.checkUser | default "default" }}
+    {{- if not (hasKey .Values.auth.aclUsers $checkUser) }}
+      {{- fail (printf "HAProxy check user '%s' must be defined in auth.aclUsers. HAProxy needs it to run the health check that finds the master." $checkUser) }}
+    {{- end }}
   {{- end }}
 {{- end }}
 {{- end -}}
@@ -225,4 +413,3 @@ enabled, so callers should guard with `with`.
 {{- toYaml $probes -}}
 {{- end -}}
 {{- end -}}
-

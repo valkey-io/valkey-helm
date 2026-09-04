@@ -1,3 +1,9 @@
+{{- $pods := add (int .Values.replica.replicas) 1 }}
+{{- $initMonitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
+{{- $initMonitorKey := $initMonitorUser }}
+{{- if and .Values.auth.enabled (hasKey .Values.auth.aclUsers $initMonitorUser) }}
+{{- $initMonitorKey = (index .Values.auth.aclUsers $initMonitorUser).passwordKey | default $initMonitorUser }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -5,15 +11,135 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
 data:
+{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
+  valkey-start.sh: |-
+    #!/bin/sh
+    # Starts the server, and keeps the credential free record of the current
+    # master fresh while it runs.
+    #
+    # Sentinel persists a promotion by making the server rewrite its config, and
+    # that config is on a memory backed volume, so nothing on disk would show a
+    # failover that happened after this pod started. An abrupt restart would
+    # then come back with the pre-failover topology and could hand writes to a
+    # node that had already been demoted. Mirroring the replicaof line onto the
+    # data volume keeps the record one interval behind a demotion, and two
+    # behind a promotion, for the reason given at the check below.
+    #
+    # It reads the config Valkey maintains rather than asking the server, so it
+    # needs no credentials and no TLS material.
+    #
+    # Valkey rewrites the config at the moment Sentinel changes this pod's role,
+    # so the loop below runs once a second by default to keep the record close
+    # to the promotion that it describes. Everything it does on a tick where
+    # nothing changed is a shell builtin, so the only process it starts per tick
+    # is the sleep itself.
+    set -eu
+
+    CONF="${VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf}"
+    MARKER="/data/conf/last-master"
+    SELF="{{ include "valkey.fullname" . }}-${POD_INDEX:-0}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+
+    track_master() {
+      # Word splitting is what parses each config line, so keep globbing off:
+      # an unrelated directive holding a * must not expand against the cwd.
+      set -f
+      pending=""
+      cfg_line=""
+      write_failed=""
+      while :; do
+        sleep {{ .Values.replica.sentinel.masterRecordRefreshSeconds }}
+        [ -f "$CONF" ] || continue
+        # No replicaof line means this pod is the master.
+        host="$SELF"
+        port="{{ .Values.service.port }}"
+        # A line without a closing newline is the tail of a file still being
+        # rewritten, and a truncated "replicaof host po" would record a port
+        # that was never configured, so unterminated input is left for the next
+        # tick. Valkey always ends the rewritten config with a newline, so this
+        # only ever discards a partial read.
+        while IFS= read -r cfg_line; do
+          # The trailing "" keeps $1 defined for blank and whitespace only lines.
+          set -- $cfg_line ""
+          case "$1" in
+            replicaof|slaveof)
+              if [ "${2:-}" = "no" ] && [ "${3:-}" = "one" ]; then
+                # Valkey spells "this node is a master" as "replicaof no one".
+                host="$SELF"
+                port="{{ .Values.service.port }}"
+              else
+                host="${2:-}"
+                port="${3:-}"
+              fi
+              ;;
+          esac
+        done < "$CONF"
+        case "$port" in
+          ""|*[!0-9]*) continue ;;
+        esac
+        [ -n "$host" ] || continue
+        # A rewrite truncates the file before filling it again, so a tick can
+        # read a prefix of it and find no replicaof line, which is exactly what
+        # a promotion looks like. Recording that wrongly is the direction that
+        # loses data, because the pod would come back writable, so this pod
+        # naming itself has to hold for two ticks. A replicaof line is recorded
+        # at once: a torn read can drop it but cannot invent one, and coming
+        # back as a replica of a node that is not the master costs a resync,
+        # not the writes.
+        if [ "$host" = "$SELF" ] && [ "$pending" != "$host $port" ]; then
+          pending="$host $port"
+          continue
+        fi
+        pending="$host $port"
+        current=""
+        if [ -f "$MARKER" ]; then
+          IFS= read -r current < "$MARKER" || current=""
+        fi
+        if [ "$current" != "$host $port" ]; then
+          # Write and rename, so that a cold start can never read half a record,
+          # and say so when it fails. A record that cannot be updated keeps
+          # naming this pod after it has been demoted, and that is what a cold
+          # start would come back on. The next tick retries, because the record
+          # still does not match, so one complaint per outage is enough.
+          if mkdir -p /data/conf 2>/dev/null &&
+             printf '%s %s\n' "$host" "$port" > "$MARKER.tmp" 2>/dev/null &&
+             mv "$MARKER.tmp" "$MARKER" 2>/dev/null; then
+            write_failed=""
+          elif [ -z "$write_failed" ]; then
+            write_failed="yes"
+            echo "$(date) ERROR: cannot record the master as $host $port in $MARKER, a cold start would fall back on the last record written" >&2
+          fi
+        fi
+      done
+    }
+
+    track_master &
+    exec valkey-server "$@"
+{{- end }}
+
   init.sh: |-
     #!/bin/sh
     set -eu
 
     # Default config paths
-    VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/data/conf/valkey.conf}
+    # The config lives on a memory backed emptyDir, not on the data volume: it
+    # carries the replication credentials in plain text, and CONFIG REWRITE puts
+    # them back on every failover even if this script never wrote them, so the
+    # file itself has to stay off persistent storage.
+    VALKEY_CONFIG=${VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf}
+    # The config is assembled in a temporary file and moved into place at the
+    # very end, so that an interrupted run can never leave a half written config
+    # behind. The restart logic below reads the previous config to decide the
+    # replication role, and a truncated file would make it read the wrong one.
+    VALKEY_CONFIG_TMP="${VALKEY_CONFIG}.tmp"
 
     LOGFILE="/data/init.log"
-    DATA_DIR="/data/conf"
+    {{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
+    # Credential free record of the master this pod last followed. It is the
+    # only durable topology left once the config moved to a memory backed
+    # volume, and it is what breaks the cold start deadlock below.
+    MASTER_MARKER="/data/conf/last-master"
+    {{- end }}
+    DATA_DIR="$(dirname "$VALKEY_CONFIG")"
 
     # Logging function (outputs to stderr and file)
     log() {
@@ -53,7 +179,19 @@ data:
       fi
       {{- end }}
 
-      echo "$password"
+      # An empty value in the secret would otherwise be hashed into the ACL,
+      # and the hash of an empty password is the same everywhere, so the user
+      # would be open to anyone who can reach the port.
+      if [ -z "$password" ]; then
+        log "ERROR: The password for user $username is empty"
+        return 1
+      fi
+
+      printf '%s' "$password"
+    }
+
+    escape_config_arg() {
+      printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
     }
     {{- end }}
 
@@ -68,7 +206,7 @@ data:
 
     log "Creating configuration in $DATA_DIR..."
     mkdir -p "$DATA_DIR"
-    rm -f "$VALKEY_CONFIG"
+    rm -f "$VALKEY_CONFIG_TMP"
 
 
     # Base valkey.conf
@@ -85,14 +223,14 @@ data:
       echo "tls-auth-clients no"
       {{- end }}
       echo "port 0"
-      echo "tls-port 6379"
+      echo "tls-port {{ .Values.service.port }}"
 {{- else }}
-      echo "port 6379"
+      echo "port {{ .Values.service.port }}"
 {{- end }}
       echo "protected-mode no"
       echo "bind * -::*"
       echo "dir /data"
-    } >>"$VALKEY_CONFIG"
+    } >>"$VALKEY_CONFIG_TMP"
 
     {{- if .Values.auth.enabled }}
     # Create secure directory for ACL file
@@ -100,7 +238,7 @@ data:
     mkdir -p /etc/valkey
 
     # Set aclfile path in valkey.conf
-    echo "aclfile /etc/valkey/users.acl" >>"$VALKEY_CONFIG"
+    echo "aclfile /etc/valkey/users.acl" >>"$VALKEY_CONFIG_TMP"
 
     # Remove or reset existing ACL file if present (it may be read-only from previous run)
     log "Preparing ACL file at /etc/valkey/users.acl"
@@ -124,8 +262,8 @@ data:
     PASSWORD=$(get_user_password "{{ $username }}" "{{ $passwordKey }}") || exit 1
 
     # Hash the password and write ACL entry
-    PASSHASH=$(echo -n "$PASSWORD" | sha256sum | cut -f 1 -d " ")
-    echo "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> /etc/valkey/users.acl
+    PASSHASH=$(printf '%s' "$PASSWORD" | sha256sum | cut -f 1 -d " ")
+    printf '%s\n' "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> /etc/valkey/users.acl
 
     {{- end }}
     {{- end }}
@@ -149,39 +287,221 @@ data:
 
     # Use POD_INDEX from Kubernetes metadata
     POD_INDEX=${POD_INDEX:-0}
-    IS_MASTER=false
+    MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    MASTER_PORT="{{ .Values.service.port }}"
 
-    # Check if this is pod-0 (master)
-    if [ "$POD_INDEX" = "0" ]; then
-      IS_MASTER=true
-      log "This pod (index $POD_INDEX) is configured as MASTER"
+    # Every pod announces a stable hostname so that peers (and Sentinel) address
+    # it by DNS name instead of a pod IP that changes on every reschedule.
+    {
+      echo ""
+      echo "# Replication announce configuration"
+      echo "replica-announce-ip {{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+      echo "replica-announce-port {{ .Values.service.port }}"
+    } >>"$VALKEY_CONFIG_TMP"
+
+    {{- if .Values.replica.sentinel.enabled }}
+    SELF_HOST="{{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+
+    # Ask the Sentinels that are already running which node is the master.
+    # Without this, a pod that lost its volume would fall back to the pod index
+    # and pod-0 would come back as a second writable master after a failover.
+    master_from_sentinels() {
+      sentinel_password=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null) || return 1
+      peer="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+      addr=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+        -t 2 -h "$peer" -p {{ .Values.replica.sentinel.port }} \
+        sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null || true)
+      host=$(echo "$addr" | sed -n 1p)
+      port=$(echo "$addr" | sed -n 2p)
+      # Reject anything that is not a complete host/port pair, an error reply
+      # would otherwise be turned into a bogus replication target.
+      [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$" || return 1
+      printf '%s %s\n' "$host" "$port"
+    }
+
+    # Ask the Valkey nodes that are already running which of them is the master.
+    # A node that answers is better evidence than a record written before this
+    # pod went away: a pod that was down across a failover still has its own
+    # name in that record, and coming back writable next to the node that was
+    # promoted leaves two masters, which nothing can reconcile afterwards.
+    master_from_running_nodes() {
+      {{- if .Values.auth.enabled }}
+      # As the user Sentinel itself monitors with, not the replication user:
+      # the documented minimum for a replication user is +psync +replconf
+      # +ping, which cannot run INFO, while the monitor user already has to be
+      # allowed INFO for Sentinel to work at all.
+      monitor_password=$(get_user_password "{{ $initMonitorUser }}" "{{ $initMonitorKey }}") || return 1
+      {{- end }}
+      i=0
+      while [ "$i" -lt "{{ $pods }}" ]; do
+        node="{{ include "valkey.fullname" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        i=$((i + 1))
+        if [ "$node" = "$SELF_HOST" ]; then
+          continue
+        fi
+        {{- if .Values.auth.enabled }}
+        info=$(REDISCLI_AUTH="$monitor_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user "{{ $initMonitorUser }}" \
+          -t 2 -h "$node" -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true)
+        case "$info" in
+          # valkey-cli prints the refusal and still exits 0, so without this the
+          # node would look like it is simply not the master.
+          *NOPERM*)
+            log "ERROR: {{ $initMonitorUser }} may not run INFO on $node, so this pod cannot tell which node is the master"
+            return 1
+            ;;
+        esac
+        {{- else }}
+        info=$(valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+          -t 2 -h "$node" -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true)
+        {{- end }}
+        if [ "$(echo "$info" | sed -n 's/^role://p')" = "master" ]; then
+          printf '%s %s\n' "$node" "{{ .Values.service.port }}"
+          return 0
+        fi
+      done
+      return 1
+    }
+    {{- end }}
+
+    # Determine the replication target for this pod.
+    REPLICATION_TARGET=""
+    {{- if .Values.replica.sentinel.enabled }}
+    # Persisted topology may be stale if this pod was offline during failover,
+    # so prefer the current master reported by Sentinel.
+    DISCOVERED=$(master_from_sentinels || true)
+    if [ -n "$DISCOVERED" ]; then
+      FOUND_HOST=${DISCOVERED% *}
+      FOUND_PORT=${DISCOVERED#* }
+      if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
+        log "Sentinel reports this pod as the master, starting as MASTER"
+      else
+        log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
+        REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
+      fi
     else
-      log "This pod (index $POD_INDEX) is configured as REPLICA"
+      # Nothing answered. On a whole cluster cold start every Sentinel is also
+      # starting, and a Sentinel cannot name a master until a Valkey node is
+      # up, so waiting for one here deadlocks until Sentinel gives up and
+      # assumes pod-0, which discards the writes of the node that really was
+      # the master. Come up in the last role recorded on the data volume
+      # instead: the Sentinels are still scanning and will find the master.
+      # A node that is already up outranks the record, whichever way the record
+      # points: it settles a stale record that names this pod, and it avoids
+      # attaching to a node that has itself been demoted since.
+      RUNNING=$(master_from_running_nodes || true)
+      if [ -n "$RUNNING" ]; then
+        RUNNING_HOST=${RUNNING%% *}
+        RUNNING_PORT=${RUNNING##* }
+        log "No Sentinel answered, but $RUNNING_HOST:$RUNNING_PORT is already up as the master, starting as REPLICA"
+        REPLICATION_TARGET="replicaof $RUNNING_HOST $RUNNING_PORT"
+      else
+      MARKED=""
+      if [ -f "$MASTER_MARKER" ]; then
+        # read fails on a line with no closing newline, which is what a record
+        # interrupted mid write looks like. Taking it would mean replicating
+        # from a truncated port such as "6", which no node is listening on.
+        IFS= read -r MARKED < "$MASTER_MARKER" || MARKED=""
+        MARKED=$(printf '%s' "$MARKED" | tr -d '\r')
+      fi
+      MARKED_HOST=${MARKED%% *}
+      MARKED_PORT=${MARKED##* }
+      if [ -n "$MARKED_HOST" ] && [ "$MARKED_HOST" != "$MARKED_PORT" ] &&
+         echo "$MARKED_PORT" | grep -qE "^[0-9]+$" &&
+         [ "$MARKED_PORT" -ge 1 ] && [ "$MARKED_PORT" -le 65535 ]; then
+        if [ "$MARKED_HOST" = "$SELF_HOST" ]; then
+          log "No Sentinel answered; last recorded master is this pod, starting as MASTER"
+        else
+          log "No Sentinel answered; last recorded master is $MARKED_HOST:$MARKED_PORT, starting as REPLICA"
+          REPLICATION_TARGET="replicaof $MARKED_HOST $MARKED_PORT"
+        fi
+      else
+        # Nothing anywhere: a fresh install, or a pod that lost its volume. The
+        # Sentinels are still running their own discovery and bootstrap a master
+        # once replica.sentinel.startupTimeoutSeconds expires, and this pod only
+        # has to be around to be told. Exiting here instead leaves the init
+        # container crash looping until a retry happens to land after that, so
+        # wait for the answer rather than for the next backoff.
+        WAITED=0
+        while [ "$WAITED" -lt "{{ .Values.replica.sentinel.initialTopologyWaitSeconds }}" ]; do
+          sleep 5
+          WAITED=$((WAITED + 5))
+          DISCOVERED=$(master_from_sentinels || true)
+          if [ -z "$DISCOVERED" ]; then
+            DISCOVERED=$(master_from_running_nodes || true)
+          fi
+          if [ -n "$DISCOVERED" ]; then
+            break
+          fi
+          log "Waiting for a Sentinel or a running node to report the topology, ${WAITED}s of {{ .Values.replica.sentinel.initialTopologyWaitSeconds }}s"
+        done
+        if [ -z "$DISCOVERED" ]; then
+          log "No Sentinel answered and no recorded topology; refusing to start without a confirmed replication role"
+          exit 1
+        fi
+        FOUND_HOST=${DISCOVERED% *}
+        FOUND_PORT=${DISCOVERED#* }
+        if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
+          log "Sentinel reports this pod as the master, starting as MASTER"
+        else
+          log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
+          REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
+        fi
+      fi
+      fi
     fi
 
-    # Configure replica settings
-    if [ "$IS_MASTER" = "false" ]; then
-      MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-      MASTER_PORT="{{ .Values.service.port }}"
+    # Record the master this pod is about to follow. Host and port only, never
+    # a credential, so it is safe to keep on the data volume.
+    mkdir -p "$(dirname "$MASTER_MARKER")"
+    if [ -n "$REPLICATION_TARGET" ]; then
+      MARKER_HOST=$(echo "$REPLICATION_TARGET" | awk '{print $2}')
+      MARKER_PORT=$(echo "$REPLICATION_TARGET" | awk '{print $3}')
+    else
+      MARKER_HOST="$SELF_HOST"
+      MARKER_PORT="$MASTER_PORT"
+    fi
+    # Written under a temporary name and renamed, so that a pod killed here
+    # leaves the previous record rather than an empty or half written one.
+    printf '%s %s\n' "$MARKER_HOST" "$MARKER_PORT" > "$MASTER_MARKER.tmp"
+    mv "$MASTER_MARKER.tmp" "$MASTER_MARKER"
+    {{- else }}
+    if [ "$POD_INDEX" = "0" ]; then
+      log "This pod (index $POD_INDEX) is configured as MASTER"
+    else
+      log "This pod (index $POD_INDEX) is configured as REPLICA of $MASTER_HOST:$MASTER_PORT"
+      REPLICATION_TARGET="replicaof $MASTER_HOST $MASTER_PORT"
+    fi
+    {{- end }}
 
-      log "Configuring replica to follow master at $MASTER_HOST:$MASTER_PORT"
-
+    if [ -n "$REPLICATION_TARGET" ]; then
       {
         echo ""
         echo "# Replica Configuration"
-        echo "replicaof $MASTER_HOST $MASTER_PORT"
-        echo "replica-announce-ip {{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-        {{- if .Values.replica.disklessSync }}
+        echo "$REPLICATION_TARGET"
+      } >>"$VALKEY_CONFIG_TMP"
+    fi
+
+    {{- if .Values.replica.sentinel.enabled }}
+    # In Sentinel mode the replica-side settings are written on every pod,
+    # because any pod can be demoted to a replica by a failover.
+    CONFIGURE_REPLICA_SETTINGS=true
+    {{- else }}
+    CONFIGURE_REPLICA_SETTINGS=false
+    if [ -n "$REPLICATION_TARGET" ]; then
+      CONFIGURE_REPLICA_SETTINGS=true
+    fi
+    {{- end }}
+
+    if [ "$CONFIGURE_REPLICA_SETTINGS" = "true" ]; then
+      log "Configuring replica settings"
+      {{- if .Values.replica.disklessSync }}
+      {
         echo ""
         echo "# Diskless replication"
         echo "repl-diskless-sync yes"
         echo "repl-diskless-sync-delay 5"
-        {{- end }}
-        {{- if .Values.auth.enabled }}
-        echo ""
-        echo "# Master authentication"
-        {{- end }}
-      } >>"$VALKEY_CONFIG"
+      } >>"$VALKEY_CONFIG_TMP"
+      {{- end }}
 
       {{- if .Values.auth.enabled }}
       # Get the password for the replication user
@@ -189,10 +509,15 @@ data:
       {{- $replUser := index .Values.auth.aclUsers $replUsername }}
       {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
       REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
+      REPL_PASSWORD_ESCAPED=$(escape_config_arg "$REPL_PASSWORD")
 
       # Write masterauth configuration
-      echo "masterauth $REPL_PASSWORD" >>"$VALKEY_CONFIG"
-      echo "masteruser {{ $replUsername }}" >>"$VALKEY_CONFIG"
+      {
+        echo ""
+        echo "# Master authentication"
+        printf '%s\n' "masterauth \"$REPL_PASSWORD_ESCAPED\""
+        echo "masteruser {{ $replUsername }}"
+      } >>"$VALKEY_CONFIG_TMP"
       log "Configured masterauth with user {{ $replUsername }}"
       {{- end }}
 
@@ -202,7 +527,7 @@ data:
         echo ""
         echo "# TLS for replication"
         echo "tls-replication yes"
-      } >>"$VALKEY_CONFIG"
+      } >>"$VALKEY_CONFIG_TMP"
       log "Enabled TLS for replication"
       {{- end }}
     fi
@@ -214,7 +539,7 @@ data:
       echo "# Minimum replicas for write operations"
       echo "min-replicas-to-write {{ .Values.replica.minReplicasToWrite }}"
       echo "min-replicas-max-lag {{ .Values.replica.minReplicasMaxLag }}"
-    } >>"$VALKEY_CONFIG"
+    } >>"$VALKEY_CONFIG_TMP"
     log "Configured write safety: require {{ .Values.replica.minReplicasToWrite }} replicas with max {{ .Values.replica.minReplicasMaxLag }}s lag"
     {{- end }}
     {{- end }}
@@ -222,10 +547,12 @@ data:
     # Append extra configs if present
     if [ -f /usr/local/etc/valkey/valkey.conf ]; then
       log "Appending /usr/local/etc/valkey/valkey.conf"
-      cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONFIG"
+      cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONFIG_TMP"
     fi
     if [ -d /extravalkeyconfigs ]; then
       log "Appending files in /extravalkeyconfigs/"
-      cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG"
+      cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG_TMP"
     fi
 
+    # Publish the finished config atomically.
+    mv "$VALKEY_CONFIG_TMP" "$VALKEY_CONFIG"

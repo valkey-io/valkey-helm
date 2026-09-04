@@ -1,0 +1,482 @@
+suite: haproxy configuration
+templates:
+  - templates/haproxy-configmap.yaml
+  - templates/haproxy-deployment.yaml
+  - templates/haproxy-service.yaml
+  - templates/haproxy-pdb.yaml
+set:
+  replica.enabled: true
+  replica.persistence.size: "5Gi"
+  replica.sentinel.enabled: true
+  haproxy.enabled: true
+tests:
+  - it: should fail when sentinel is not enabled
+    set:
+      replica.sentinel.enabled: false
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "HAProxy routes clients to whichever node Sentinel promoted.*"
+
+  - it: should fail when the check user is missing from aclUsers
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+      haproxy.checkUser: "missing-user"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "HAProxy check user 'missing-user' must be defined in auth.aclUsers.*"
+
+  - it: should route the write port to the node that reports role:master
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check send info\\ replication\\r\\n\n  tcp-check send QUIT\\r\\n\n  tcp-check expect string role:master'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'backend valkey_master'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-2 RELEASE-NAME-valkey-2\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local:6379'
+
+  - it: should keep a node out of the write backend until it proves it is master
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'fall 1 rise 1 init-addr last,libc,none init-state down .*on-marked-down shutdown-sessions'
+
+  - it: should keep pub/sub connections open
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'timeout tunnel 0s'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'option clitcpka'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'option srvtcpka'
+
+  - it: should render one server per valkey pod
+    set:
+      replica.replicas: 4
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-4 '
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-5 '
+
+  - it: should not authenticate the health check when auth is disabled
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check send AUTH'
+
+  - it: should take the health check password from the secret, never the configmap
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "supersecret"
+    templates:
+      - templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check send AUTH\\ default\\ "\$\{VALKEY_CHECK_PASSWORD\}"'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'supersecret'
+
+  - it: should read the health check password from the generated auth secret
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: VALKEY_CHECK_PASSWORD
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: RELEASE-NAME-valkey-auth
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: default-password
+
+  - it: should read the health check password from an existing secret
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-users"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          passwordKey: "admin-pwd"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: my-users
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: admin-pwd
+
+  - it: should run without a writable root filesystem and without extra tooling
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - notExists:
+          path: spec.template.spec.containers[0].command
+
+  - it: should verify the node certificates when TLS is enabled
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check connect port 6379 ssl'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'ssl ca-file /tls/ca.crt verify required'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-0 .* verifyhost RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local'
+
+  - it: should skip certificate verification when asked to
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      haproxy.tls.verify: none
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'ssl verify none'
+      # Anchored on the server lines: the comments above the check rules
+      # mention both keywords to explain why they are not used there.
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: '(?m)^\s*server .*(verifyhost| sni )'
+
+  - it: should expose a write and a read port
+    template: templates/haproxy-service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].name
+          value: valkey-write
+      - equal:
+          path: spec.ports[0].port
+          value: 6379
+      - equal:
+          path: spec.ports[0].targetPort
+          value: valkey-write
+      - equal:
+          path: spec.ports[1].name
+          value: valkey-read
+      - equal:
+          path: spec.ports[1].port
+          value: 6380
+      - equal:
+          path: spec.ports[1].targetPort
+          value: valkey-read
+
+  - it: should send writes to a single node if two ever look like the master
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'backend valkey_master\n(.*\n)*?  balance first'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'backend valkey_replicas\n(.*\n)*?  balance roundrobin'
+
+  - it: should make the TLS secret readable for the non-root user
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[1].secret.defaultMode
+          value: 0440
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 99
+
+  - it: should fail when a client certificate is required but no bundle is given
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "tls.requireClientCertificate needs haproxy.tls.clientCertFile.*"
+
+  - it: should present the configured client certificate bundle
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+      haproxy.tls.clientCertFile: "client.pem"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'crt /tls/client.pem'
+
+  - it: should keep client TLS end to end by default
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      # check-ssl, not ssl: only the health check is encrypted by HAProxy, the
+      # client stream is forwarded untouched so the client can negotiate TLS
+      # with the node itself.
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'default-server .* check-ssl ca-file /tls/ca.crt verify required'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'default-server .* [^-]ssl ca-file'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check connect port 6379 ssl'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: ' sni '
+
+  - it: should originate TLS itself in bridge mode
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      haproxy.tls.mode: bridge
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'default-server .* ssl ca-file /tls/ca.crt verify required'
+      # Anchored on the default-server line: the comment above the check rules
+      # names check-ssl to explain why it is not used there.
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: '(?m)^\s*default-server .*check-ssl'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-0 .* verifyhost RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local sni str\(RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local\)'
+
+  - it: should not add TLS options when TLS is disabled
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      # Anchored on the directives: the comment above the check rules explains
+      # where TLS for a check belongs, so it names the keywords.
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: '(?m)^\s*(tcp-check connect|default-server|server) .*ssl'
+
+  - it: should probe haproxy itself instead of proxying probes to the nodes
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'frontend health\n  bind \*:8404\n  mode http\n  monitor-uri /healthz'
+
+  - it: should point the kubernetes probes at the monitor endpoint
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.port
+          value: health
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: health
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: health
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe.tcpSocket
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: health
+            containerPort: 8404
+            protocol: TCP
+
+  - it: should drain the quit reply so checks close cleanly
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: '\nbackend valkey_master\n(.*\n)*?  tcp-check send QUIT\\r\\n\n  tcp-check expect string role:master\n(  #.*\n)*  tcp-check expect string \+OK'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: '\nbackend valkey_replicas\n(.*\n)*?  tcp-check send QUIT\\r\\n\n  tcp-check expect string \+PONG\n(  #.*\n)*  tcp-check expect string \+OK'
+
+  - it: should not answer to the valkey selectors
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      # The valkey PodDisruptionBudget, headless service and sentinel service
+      # all select on name plus instance without a component. Carrying the
+      # valkey name here would put the proxy pods behind all of them.
+      - notEqual:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: valkey-haproxy
+
+  - it: should keep the haproxy service pointed only at proxy pods
+    template: templates/haproxy-service.yaml
+    asserts:
+      - notEqual:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: valkey
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: valkey-haproxy
+
+  - it: should label the proxy pods so no valkey selector matches them
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: valkey-haproxy
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: haproxy
+
+  - it: should not budget disruptions unless asked to
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should keep haproxy replicas available across a node drain
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-haproxy
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      # The selector has to match the deployment's, a PDB that selects nothing
+      # is silently no protection at all.
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app.kubernetes.io/name: valkey-haproxy
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/component: haproxy
+
+  - it: should prefer minAvailable over maxUnavailable, they are mutually exclusive
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+      haproxy.podDisruptionBudget.minAvailable: 2
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 2
+      - notExists:
+          path: spec.maxUnavailable
+
+  - it: should honour minAvailable of zero rather than falling back
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+      haproxy.podDisruptionBudget.minAvailable: 0
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 0
+      - notExists:
+          path: spec.maxUnavailable
+
+  - it: should honour maxUnavailable of zero, which forbids every eviction
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+      haproxy.podDisruptionBudget.maxUnavailable: 0
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 0
+      - notExists:
+          path: spec.minAvailable
+
+  - it: should fail when the budget would constrain nothing
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+      haproxy.podDisruptionBudget.minAvailable: null
+      haproxy.podDisruptionBudget.maxUnavailable: null
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "haproxy.podDisruptionBudget needs either minAvailable or maxUnavailable.*"
+
+  - it: should set the unhealthy pod eviction policy when given
+    set:
+      haproxy.podDisruptionBudget.enabled: true
+      haproxy.podDisruptionBudget.unhealthyPodEvictionPolicy: AlwaysAllow
+    template: templates/haproxy-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: AlwaysAllow
+
+  - it: should not render anything when haproxy is disabled
+    set:
+      haproxy.enabled: false
+      haproxy.podDisruptionBudget.enabled: true
+    templates:
+      - templates/haproxy-configmap.yaml
+      - templates/haproxy-deployment.yaml
+      - templates/haproxy-service.yaml
+      - templates/haproxy-pdb.yaml
+    asserts:
+      - hasDocuments:
+          count: 0

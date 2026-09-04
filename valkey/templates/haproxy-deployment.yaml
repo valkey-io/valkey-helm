@@ -1,0 +1,139 @@
+{{- if .Values.haproxy.enabled }}
+{{- include "valkey.validateHaproxyConfig" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "valkey.fullname" . }}-haproxy
+  labels:
+    {{- include "valkey.haproxy.labels" . | nindent 4 }}
+  {{- with .Values.workloadAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.haproxy.replicas }}
+  selector:
+    matchLabels:
+      {{- include "valkey.haproxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "valkey.haproxy.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+        checksum/config: {{ include (print $.Template.BasePath "/haproxy-configmap.yaml") . | sha256sum | trunc 32 | quote }}
+    spec:
+      {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      serviceAccountName: {{ include "valkey.serviceAccountName" . }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.haproxy.podSecurityContext | nindent 8 }}
+      {{- with .Values.haproxy.extraInitContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: haproxy
+          image: {{ include "valkey.haproxy.image" . }}
+          imagePullPolicy: {{ .Values.haproxy.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.haproxy.securityContext | nindent 12 }}
+          {{- if .Values.auth.enabled }}
+          env:
+            # Expanded by HAProxy when it parses the config, so the health check
+            # credentials stay in the secret instead of the ConfigMap.
+            - name: VALKEY_CHECK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- $checkUser := .Values.haproxy.checkUser | default "default" }}
+                  {{- $user := index .Values.auth.aclUsers $checkUser }}
+                  {{- if .Values.auth.usersExistingSecret }}
+                  name: {{ tpl .Values.auth.usersExistingSecret . }}
+                  key: {{ $user.passwordKey | default $checkUser }}
+                  {{- else }}
+                  name: {{ include "valkey.fullname" . }}-auth
+                  key: {{ $checkUser }}-password
+                  {{- end }}
+          {{- end }}
+          ports:
+            - name: valkey-write
+              containerPort: {{ .Values.haproxy.service.port }}
+              protocol: TCP
+            - name: valkey-read
+              containerPort: {{ .Values.haproxy.service.readPort }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.haproxy.config.healthPort }}
+              protocol: TCP
+          # Probes hit HAProxy's own monitor endpoint. They deliberately do not
+          # depend on a backend being up: during a failover every HAProxy pod
+          # would otherwise go unready at once, exactly when clients need it.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: health
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+          resources:
+            {{- toYaml .Values.haproxy.resources | nindent 12 }}
+          volumeMounts:
+            - name: haproxy-config
+              mountPath: /usr/local/etc/haproxy
+              readOnly: true
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+              readOnly: true
+            {{- end }}
+            {{- with .Values.haproxy.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: haproxy-config
+          configMap:
+            name: {{ include "valkey.fullname" . }}-haproxy
+        {{- if .Values.tls.enabled }}
+        - name: {{ include "valkey.fullname" . }}-tls
+          secret:
+            secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            # The group bit is what makes these readable for the non-root
+            # HAProxy user, combined with fsGroup on the pod.
+            defaultMode: 0440
+        {{- end }}
+        {{- with .Values.haproxy.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.haproxy.nodeSelector | default .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.haproxy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.haproxy.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.haproxy.tolerations | default .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

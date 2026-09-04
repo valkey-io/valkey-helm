@@ -1,0 +1,119 @@
+{{- if .Values.haproxy.enabled }}
+{{- $port := .Values.service.port }}
+{{- $pods := add (int .Values.replica.replicas) 1 | int }}
+{{- $checkUser := .Values.haproxy.checkUser | default "default" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "valkey.fullname" . }}-haproxy
+  labels:
+    {{- include "valkey.haproxy.labels" . | nindent 4 }}
+data:
+  haproxy.cfg: |
+    global
+      log stdout format raw local0
+      maxconn {{ .Values.haproxy.config.maxconn }}
+
+    # Pod IPs change on every reschedule, so the backends are resolved at
+    # runtime instead of once at startup.
+    resolvers kubernetes
+      parse-resolv-conf
+      hold valid 1s
+      hold nx 1s
+      hold other 1s
+      hold refused 1s
+      hold timeout 1s
+
+    defaults
+      log global
+      mode tcp
+      option tcplog
+      retries 3
+      timeout connect {{ .Values.haproxy.config.timeout.connect }}
+      timeout client {{ .Values.haproxy.config.timeout.client }}
+      timeout server {{ .Values.haproxy.config.timeout.server }}
+      # Pub/sub connections are idle by design. Without a tunnel timeout the
+      # client and server timeouts above would drop every SUBSCRIBE.
+      timeout tunnel {{ .Values.haproxy.config.timeout.tunnel }}
+      option clitcpka
+      option srvtcpka
+
+    frontend valkey_write
+      bind *:{{ .Values.haproxy.service.port }}
+      default_backend valkey_master
+
+    frontend valkey_read
+      bind *:{{ .Values.haproxy.service.readPort }}
+      default_backend valkey_replicas
+
+    # Endpoint for the Kubernetes probes. HAProxy answers it itself, so the
+    # probes never open a connection that gets proxied to a Valkey node. Probing
+    # the proxy ports instead made every probe reach the master, which logged an
+    # "Error accepting a client connection" for each one.
+    frontend health
+      bind *:{{ .Values.haproxy.config.healthPort }}
+      mode http
+      monitor-uri /healthz
+      option dontlog-normal
+
+    # Only the node that answers "role:master" receives traffic. The health
+    # check is the failover mechanism, so no Sentinel watcher is needed.
+    backend valkey_master
+      # first, not the default roundrobin: if two nodes ever pass the role:master
+      # check at the same time, for example an old master that Sentinel has not
+      # demoted yet, roundrobin would split writes between them and the ones
+      # landing on the loser would be discarded. first sends every connection to
+      # the same node instead.
+      balance first
+      option tcp-check
+      # This rule opens the check connection, so ssl here is what encrypts it and
+      # check-ssl or check-sni on a server line would be silently ignored. An sni
+      # would have to be set here too, where it is one value for the whole
+      # backend rather than the pod name each certificate carries. Valkey serves
+      # a single certificate and does not select one by SNI, so the check sends
+      # none and verifyhost validates the certificate it gets back.
+      tcp-check connect port {{ $port }}{{ if .Values.tls.enabled }} ssl{{ end }}
+      {{- if .Values.auth.enabled }}
+      tcp-check send AUTH\ {{ $checkUser }}\ "${VALKEY_CHECK_PASSWORD}"\r\n
+      tcp-check expect string +OK
+      {{- end }}
+      # QUIT is sent before the expect so that the node closes the connection as
+      # soon as it has answered. Without it a replica would only fail the check
+      # once "timeout check" expires, and would keep receiving writes until then.
+      tcp-check send info\ replication\r\n
+      tcp-check send QUIT\r\n
+      tcp-check expect string role:master
+      # Drain the QUIT reply so the node closes the connection first. Without
+      # this HAProxy hangs up mid-stream on every successful check and the node
+      # logs an "Error accepting a client connection" each time.
+      tcp-check expect string +OK
+      timeout check {{ .Values.haproxy.config.checkTimeout }}
+      # init-state down keeps a node out of rotation until a check has proven it
+      # is the master, otherwise a starting HAProxy would forward writes to a
+      # replica during the first few seconds. fall 1 takes a demoted master out
+      # immediately, and shutdown-sessions drops its connections so that clients
+      # reconnect to the new master instead of holding a read-only one.
+      default-server check inter {{ .Values.haproxy.config.checkInterval }} fall 1 rise 1 init-addr last,libc,none init-state down resolvers kubernetes on-marked-down shutdown-sessions{{ include "valkey.haproxy.serverTlsOptions" . }}
+      {{- range $i := until $pods }}
+      server {{ include "valkey.fullname" $ }}-{{ $i }} {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $port }}{{ include "valkey.haproxy.serverTlsIdentityOptions" (dict "root" $ "index" $i) }}
+      {{- end }}
+
+    backend valkey_replicas
+      option tcp-check
+      tcp-check connect port {{ $port }}{{ if .Values.tls.enabled }} ssl{{ end }}
+      {{- if .Values.auth.enabled }}
+      tcp-check send AUTH\ {{ $checkUser }}\ "${VALKEY_CHECK_PASSWORD}"\r\n
+      tcp-check expect string +OK
+      {{- end }}
+      tcp-check send PING\r\n
+      tcp-check send QUIT\r\n
+      tcp-check expect string +PONG
+      # See the master backend: let the node close the connection first.
+      tcp-check expect string +OK
+      timeout check {{ .Values.haproxy.config.checkTimeout }}
+      balance {{ .Values.haproxy.config.readBalance }}
+      default-server check inter {{ .Values.haproxy.config.checkInterval }} fall 2 rise 1 init-addr last,libc,none init-state down resolvers kubernetes{{ include "valkey.haproxy.serverTlsOptions" . }}
+      {{- range $i := until $pods }}
+      server {{ include "valkey.fullname" $ }}-{{ $i }} {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $port }}{{ include "valkey.haproxy.serverTlsIdentityOptions" (dict "root" $ "index" $i) }}
+      {{- end }}
+{{- end }}
