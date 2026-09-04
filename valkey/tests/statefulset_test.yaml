@@ -251,6 +251,35 @@ tests:
             mountPath: /extra-config
             readOnly: true
 
+  - it: should have generated a volume with emptyDir and mount it
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      auth.enabled: true
+      auth.injectSecret.enabled: true
+      auth.injectSecret.username: default
+      auth.injectSecret.permissions: "~* &* +@all"
+      auth.injectSecret.mountPath: "/test/path"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: inject-secret
+            mountPath: "/test/"
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: inject-secret
+            mountPath: "/test/"
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: inject-secret
+            emptyDir: {}
+
   - it: should include persistentVolumeClaimRetentionPolicy when configured
     set:
       replica.enabled: true

@@ -138,6 +138,25 @@ tests:
           path: data["init.sh"]
           pattern: 'REPL_PASSWORD=\$\(get_user_password "default" "default"\)'
 
+  - it: should use injected secret for replica authentication
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.replicationUser: "default"
+      auth:
+        enabled: true
+        injectSecret:
+          enabled: true
+          username: default
+          permissions: "~* &* +@all"
+          mountPath: "/test/path"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REPL_PASSWORD=\$\(cat /test/path\)'
+
   - it: should have correct metadata
     asserts:
       - isKind:
@@ -145,3 +164,17 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
           value: valkey
+
+  - it: should use password of injected secret
+    set:
+      auth.enabled: true
+      auth.injectSecret.enabled: true
+      auth.injectSecret.username: default
+      auth.injectSecret.permissions: "~* &* +@all"
+      auth.injectSecret.mountPath: "/test/path"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'INJECTED_PASSWORD=\$\(cat /test/path\)'

@@ -136,7 +136,7 @@ Validate auth configuration
 */}}
 {{- define "valkey.validateAuthConfig" -}}
 {{- if .Values.auth.enabled }}
-  {{- if not (or .Values.auth.aclUsers .Values.auth.aclConfig) }}
+  {{- if not (or .Values.auth.aclUsers .Values.auth.aclConfig .Values.auth.injectSecret.enabled) }}
     {{- fail "auth.enabled is true but no authentication method is configured. Please provide auth.aclUsers or auth.aclConfig" }}
   {{- end }}
   {{- if .Values.auth.aclUsers }}
@@ -154,6 +154,17 @@ Validate auth configuration
       {{- if and $user.passwordKey (not $hasUsersExistingSecret) }}
         {{- fail (printf "User '%s' has passwordKey but auth.usersExistingSecret is not set" $username) }}
       {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.auth.injectSecret.enabled }}
+    {{- if not .Values.auth.injectSecret.permissions }}
+        {{- fail "auth.injectSecret.enabled is true but no permissions is configured." }}
+    {{- end }}
+    {{- if not .Values.auth.injectSecret.username }}
+        {{- fail "auth.injectSecret.enabled is true but no username is configured." }}
+    {{- end }}
+    {{- if not .Values.auth.injectSecret.mountPath }}
+        {{- fail "auth.injectSecret.enabled is true but no mountPath is configured." }}
     {{- end }}
   {{- end }}
 {{- end }}
@@ -181,7 +192,7 @@ Validate replica persistence configuration
 Validate replica authentication configuration
 */}}
 {{- define "valkey.validateReplicaAuth" -}}
-{{- if and .Values.replica.enabled .Values.auth.enabled }}
+{{- if and .Values.replica.enabled .Values.auth.enabled (not .Values.auth.injectSecret.enabled)}}
   {{- if not (hasKey .Values.auth.aclUsers .Values.replica.replicationUser) }}
     {{- fail (printf "Replication user '%s' (replica.replicationUser) must be defined in auth.aclUsers. The chart requires this to retrieve the password for replica authentication." .Values.replica.replicationUser) }}
   {{- end }}
