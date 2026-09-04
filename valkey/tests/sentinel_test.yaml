@@ -695,6 +695,40 @@ tests:
             mountPath: /tls
             readOnly: true
 
+  - it: should prefer a node that is already up over the recorded topology
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "defaultpw"
+        replicator:
+          permissions: "~* &* +@all"
+          password: "replicatorpw"
+    template: templates/init_config.yaml
+    asserts:
+      # A pod that was down across a failover still has its own name in the
+      # record. Coming back writable next to the node that was promoted leaves
+      # two masters, and nothing reconciles that afterwards.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'RUNNING=\$\(master_from_running_nodes \|\| true\)'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'already up as the master, starting as REPLICA'
+      # Only a node that answers as the master counts, and this pod is not
+      # running yet, so it is skipped rather than waited for.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "sed -n 's/\\^role://p'\\)\" = \"master\" \\]"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'if \[ "\$node" = "\$SELF_HOST" \]; then'
+      # The credential goes through the environment, never the process list.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REDISCLI_AUTH="\$repl_password" valkey-cli'
+
   - it: should refuse an empty sentinel password
     set:
       auth.enabled: true

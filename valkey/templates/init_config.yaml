@@ -1,3 +1,9 @@
+{{- $pods := add (int .Values.replica.replicas) 1 }}
+{{- $initReplUser := .Values.replica.replicationUser }}
+{{- $initReplKey := $initReplUser }}
+{{- if and .Values.auth.enabled (hasKey .Values.auth.aclUsers $initReplUser) }}
+{{- $initReplKey = (index .Values.auth.aclUsers $initReplUser).passwordKey | default $initReplUser }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -300,6 +306,37 @@ data:
       [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$" || return 1
       printf '%s %s\n' "$host" "$port"
     }
+
+    # Ask the Valkey nodes that are already running which of them is the master.
+    # A node that answers is better evidence than a record written before this
+    # pod went away: a pod that was down across a failover still has its own
+    # name in that record, and coming back writable next to the node that was
+    # promoted leaves two masters, which nothing can reconcile afterwards.
+    master_from_running_nodes() {
+      {{- if .Values.auth.enabled }}
+      repl_password=$(get_user_password "{{ $initReplUser }}" "{{ $initReplKey }}") || return 1
+      {{- end }}
+      i=0
+      while [ "$i" -lt "{{ $pods }}" ]; do
+        node="{{ include "valkey.fullname" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        i=$((i + 1))
+        if [ "$node" = "$SELF_HOST" ]; then
+          continue
+        fi
+        {{- if .Values.auth.enabled }}
+        info=$(REDISCLI_AUTH="$repl_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user "{{ $initReplUser }}" \
+          -t 2 -h "$node" -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true)
+        {{- else }}
+        info=$(valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+          -t 2 -h "$node" -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true)
+        {{- end }}
+        if [ "$(echo "$info" | sed -n 's/^role://p')" = "master" ]; then
+          printf '%s %s\n' "$node" "{{ .Values.service.port }}"
+          return 0
+        fi
+      done
+      return 1
+    }
     {{- end }}
 
     # Determine the replication target for this pod.
@@ -324,6 +361,16 @@ data:
       # assumes pod-0, which discards the writes of the node that really was
       # the master. Come up in the last role recorded on the data volume
       # instead: the Sentinels are still scanning and will find the master.
+      # A node that is already up outranks the record, whichever way the record
+      # points: it settles a stale record that names this pod, and it avoids
+      # attaching to a node that has itself been demoted since.
+      RUNNING=$(master_from_running_nodes || true)
+      if [ -n "$RUNNING" ]; then
+        RUNNING_HOST=${RUNNING%% *}
+        RUNNING_PORT=${RUNNING##* }
+        log "No Sentinel answered, but $RUNNING_HOST:$RUNNING_PORT is already up as the master, starting as REPLICA"
+        REPLICATION_TARGET="replicaof $RUNNING_HOST $RUNNING_PORT"
+      else
       MARKED=""
       if [ -f "$MASTER_MARKER" ]; then
         MARKED=$(head -n 1 "$MASTER_MARKER" | tr -d '\r')
@@ -340,6 +387,7 @@ data:
       else
         log "No Sentinel answered and no recorded topology; refusing to start without a confirmed replication role"
         exit 1
+      fi
       fi
     fi
 
