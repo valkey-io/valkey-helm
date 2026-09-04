@@ -242,6 +242,11 @@ Validate sentinel configuration
   {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
     {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than replica.terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
   {{- end }}
+  {{- $bootstrapWait := int .Values.replica.sentinel.initialTopologyWaitSeconds }}
+  {{- $sentinelStartup := int .Values.replica.sentinel.startupTimeoutSeconds }}
+  {{- if lt $bootstrapWait (add $sentinelStartup 30) }}
+    {{- fail (printf "replica.sentinel.initialTopologyWaitSeconds (%d) must be at least 30s above replica.sentinel.startupTimeoutSeconds (%d), which is %d. A pod with no recorded topology has nothing to be told until the Sentinels finish that discovery and bootstrap a master, so a shorter wait leaves the init container exiting just before the answer arrives." $bootstrapWait $sentinelStartup (add $sentinelStartup 30)) }}
+  {{- end }}
   {{- if and (not .Values.replica.sentinel.password) (not .Values.auth.usersExistingSecret) }}
     {{- fail "replica.sentinel.password is required when Sentinel is enabled, unless auth.usersExistingSecret supplies replica.sentinel.passwordKey." }}
   {{- end }}
