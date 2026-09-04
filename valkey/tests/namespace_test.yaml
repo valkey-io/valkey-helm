@@ -1,0 +1,207 @@
+suite: namespaceOverride scopes every resource
+tests:
+  # --- main workloads (explicitly requested in review) ---
+  - it: Deployment honors namespaceOverride
+    template: templates/deploy_valkey.yaml
+    set:
+      namespaceOverride: custom-namespace
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: StatefulSet honors namespaceOverride
+    template: templates/statefulset.yaml
+    set:
+      namespaceOverride: custom-namespace
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: init scripts ConfigMap honors namespaceOverride
+    template: templates/init_config.yaml
+    set:
+      namespaceOverride: custom-namespace
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  # --- every other resource the chart can render ---
+  - it: config ConfigMap honors namespaceOverride
+    template: templates/configmap.yaml
+    set:
+      namespaceOverride: custom-namespace
+      valkeyConfig: "maxmemory 100mb"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: Service honors namespaceOverride
+    template: templates/service.yaml
+    set:
+      namespaceOverride: custom-namespace
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: headless Service honors namespaceOverride
+    template: templates/service-headless.yaml
+    set:
+      namespaceOverride: custom-namespace
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: read Service honors namespaceOverride
+    template: templates/service-read.yaml
+    set:
+      namespaceOverride: custom-namespace
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.service.enabled: true
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: ServiceAccount honors namespaceOverride
+    template: templates/serviceaccount.yaml
+    set:
+      namespaceOverride: custom-namespace
+      serviceAccount.create: true
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: Secret honors namespaceOverride
+    template: templates/secret.yaml
+    set:
+      namespaceOverride: custom-namespace
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "p"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: PersistentVolumeClaim honors namespaceOverride
+    template: templates/pvc.yaml
+    set:
+      namespaceOverride: custom-namespace
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "8Gi"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: PodDisruptionBudget honors namespaceOverride
+    template: templates/poddisruptionbudget.yaml
+    set:
+      namespaceOverride: custom-namespace
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: metrics Service honors namespaceOverride
+    template: templates/metrics-svc.yaml
+    set:
+      namespaceOverride: custom-namespace
+      metrics.enabled: true
+      metrics.service.enabled: true
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: PodMonitor honors namespaceOverride
+    template: templates/podmonitor.yaml
+    set:
+      namespaceOverride: custom-namespace
+      metrics.enabled: true
+      metrics.podMonitor.enabled: true
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: ServiceMonitor honors namespaceOverride
+    template: templates/servicemonitor.yaml
+    set:
+      namespaceOverride: custom-namespace
+      metrics.enabled: true
+      metrics.service.enabled: true
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: PrometheusRule honors namespaceOverride
+    template: templates/prometheusrules.yaml
+    set:
+      namespaceOverride: custom-namespace
+      metrics.enabled: true
+      metrics.prometheusRule.enabled: true
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: NetworkPolicy honors namespaceOverride
+    template: templates/netpolicy.yaml
+    set:
+      namespaceOverride: custom-namespace
+      networkPolicy:
+        ingress: []
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  - it: helm test Pod honors namespaceOverride
+    template: templates/tests/auth.yaml
+    set:
+      namespaceOverride: custom-namespace
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "p"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+
+  # --- default behavior: fall back to the release namespace when not overridden ---
+  - it: falls back to the release namespace when namespaceOverride is unset
+    template: templates/deploy_valkey.yaml
+    release:
+      namespace: my-release-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: my-release-ns
