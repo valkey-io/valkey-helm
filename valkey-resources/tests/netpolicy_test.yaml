@@ -1,0 +1,175 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: network policy
+
+templates:
+  - templates/netpolicy.yaml
+
+tests:
+  - it: should not render anything when disabled by default
+    asserts:
+      - hasDocuments:
+          count: 0
+  - it: should render a NetworkPolicy when enabled
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: apiVersion
+          value: networking.k8s.io/v1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-resources
+  - it: uses fullnameOverride for name and cluster selector
+    set:
+      fullnameOverride: my-cluster
+      networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-cluster
+      - equal:
+          path: spec.podSelector.matchLabels["valkey.io/cluster"]
+          value: my-cluster
+  - it: should select the instance pods
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels["valkey.io/cluster"]
+          value: RELEASE-NAME-valkey-resources
+  - it: should inject default rules when enabled
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+      - lengthEqual:
+          path: spec.egress
+          count: 2
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - lengthEqual:
+          path: spec.ingress
+          count: 2
+  - it: should omit default rules when defaultRules is false
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.defaultRules: false
+    asserts:
+      - notExists:
+          path: spec.egress
+      - notExists:
+          path: spec.ingress
+  - it: should set correct PolicyTypes when defaultRules is false
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.defaultRules: false
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+  - it: should append extraIngress rules and set the Ingress policyType
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.extraIngress:
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: monitoring
+          ports:
+            - protocol: TCP
+              port: 8443
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - lengthEqual:
+          path: spec.ingress
+          count: 3
+  - it: should append extraIngress rules and set the Ingress policyType
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.extraIngress:
+        - from:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: demo-application
+          ports:
+            - protocol: TCP
+              port: 6379
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - lengthEqual:
+          path: spec.ingress
+          count: 3
+  - it: should merge extraEgress with the default egress rules
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.extraEgress:
+        - to:
+            - ipBlock:
+                cidr: 10.0.0.0/8
+          ports:
+            - protocol: TCP
+              port: 443
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 3
+  - it: should keep extra rules when default egress is disabled
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.defaultRules: false
+      networkPolicy.extraEgress:
+        - to:
+            - ipBlock:
+                cidr: 10.0.0.0/8
+          ports:
+            - protocol: TCP
+              port: 443
+      networkPolicy.extraIngress:
+        - from:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: demo-application
+          ports:
+            - protocol: TCP
+              port: 6379
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+      - lengthEqual:
+          path: spec.egress
+          count: 1
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - lengthEqual:
+          path: spec.ingress
+          count: 1
+  - it: should apply custom operator selector in default rules
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.operatorSelector: &customOperatorSelector
+        namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: valkeyoperator-demo-namespace
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/instance: valkey-operator-demo
+            app.kubernetes.io/name: valkey-operator
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0]
+          value: *customOperatorSelector
