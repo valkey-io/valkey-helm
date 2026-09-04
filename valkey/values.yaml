@@ -244,6 +244,11 @@ replica:
   # Number of replica instances (total pods = replicas + 1 master)
   replicas: 2
 
+  # Grace period for a terminating pod. It must be longer than
+  # sentinel.preStopFailoverTimeoutSeconds, otherwise Kubernetes sends SIGKILL
+  # while the graceful failover is still running.
+  terminationGracePeriodSeconds: 30
+
   # Username for replicas to authenticate to master, ignored if auth.enabled is false.
   # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
   # The chart requires this to retrieve the password for replica authentication.
@@ -299,6 +304,151 @@ replica:
   # Controls when PVCs are deleted (requires Kubernetes 1.23+)
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
   persistentVolumeClaimRetentionPolicy: {}
+
+  # Valkey Sentinel for automatic failover.
+  # Sentinel runs in an independent StatefulSet, monitors the master and
+  # promotes a replica when the master becomes unreachable.
+  # NOTE: with Sentinel enabled the Valkey service load balances across all pods,
+  # because the master can move at any time. Clients must therefore discover the
+  # master through Sentinel (SENTINEL get-master-addr-by-name).
+  sentinel:
+    # Enable Sentinel (requires replica.enabled and at least one replica).
+    # The Sentinel endpoint always requires its dedicated password, independently of whether authentication is enabled for the Valkey data endpoint.
+    enabled: false
+
+    # Number of Sentinel instances. Keep this at 3 or more so a majority can
+    # authorize failover while one Sentinel is unavailable.
+    replicas: 3
+
+    # Port on which Sentinel listens
+    port: 26379
+
+    # Name Sentinel uses to identify the monitored master
+    masterSet: mymaster
+
+    # Number of Sentinels that must agree the master is down before a failover
+    # starts. Use a majority of the Sentinel count, e.g. 2 for 3 pods.
+    quorum: 2
+
+    # Time in milliseconds after which an unresponsive master is considered down
+    downAfterMilliseconds: 5000
+
+    # Time in milliseconds before a failover attempt is considered failed
+    failoverTimeout: 60000
+
+    # Number of replicas that resynchronise with the new master simultaneously
+    parallelSyncs: 1
+
+    # User Sentinel authenticates with against the Valkey nodes, ignored if
+    # auth.enabled is false. Defaults to replica.replicationUser.
+    # The user must be defined in auth.aclUsers. Sentinel promotes replicas by
+    # sending them SLAVEOF, so a user without those permissions makes every
+    # failover abort with -failover-abort-slave-timeout. The minimum is:
+    #   ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof
+    #   +replicaof +config|rewrite +client|setname +client|kill +script|kill
+    # and, because the same user replicates, +psync +replconf
+    monitorUser: ""
+
+    # Dedicated password for Sentinel's own ACL.
+    # Do not reuse a Valkey user password because Sentinel permissions are independent from Valkey ACLs.
+    # This password is required whenever Sentinel is enabled.
+    # When auth.usersExistingSecret is set, passwordKey is looked up in that Secret first.
+    # This inline value is used as a fallback when the key is missing.
+    password: ""
+    passwordKey: "sentinel"
+
+    # Ask Sentinel to promote a replica before this pod shuts down, so that a
+    # rolling update does not leave clients writing to a terminating master.
+    preStopFailover: true
+    # How long to wait for that failover to complete before shutting down anyway.
+    # Keep it below terminationGracePeriodSeconds.
+    preStopFailoverTimeoutSeconds: 20
+
+    # How long Sentinel waits for a peer or Valkey node on startup before it
+    # gives up on discovering the current master and assumes pod-0 is the master
+    startupTimeoutSeconds: 60
+
+    # How long a pod with no recorded topology waits for a Sentinel, or for
+    # another node, to tell it what the topology is. This is the fresh install
+    # case: the Sentinels bootstrap a master once their own
+    # startupTimeoutSeconds expires, so this has to be comfortably longer than
+    # that: the chart refuses to render unless it is at least 30s above it.
+    # A pod that gives up exits, and Kubernetes restarts the init container, so
+    # this bounds one attempt rather than the whole startup.
+    initialTopologyWaitSeconds: 180
+
+    # How often each Valkey pod mirrors the current master onto its data volume.
+    # That record is what a cold start falls back on when no Sentinel answers,
+    # so it bounds how stale the topology can be after an abrupt restart.
+    # A pod that finds itself named as the master has to see that twice before
+    # it is written, because a check landing inside a config rewrite sees the
+    # same thing; a pod that finds a master to follow records it at once. The
+    # check only reads a file that Valkey keeps up to date, and writes nothing
+    # when the topology has not moved.
+    masterRecordRefreshSeconds: 1
+
+    # How often each Sentinel looks for a Valkey node that is replicating from
+    # something other than the current master and that Sentinel itself cannot
+    # see. Sentinel only discovers replicas through the master, so a node that
+    # attached to another replica is invisible to it and would never be
+    # reconfigured.
+    orphanCheckSeconds: 30
+
+    # Raw configuration appended to the generated sentinel.conf.
+    # Supports templating, e.g. "sentinel notification-script {{ .Release.Name }} /script.sh"
+    extraConfig: ""
+
+    # Resource limits/requests for the Sentinel container
+    resources: {}
+      # Example:
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+      # requests:
+      #   cpu: 10m
+      #   memory: 64Mi
+
+    # Security context for the Sentinel container, defaults to securityContext
+    securityContext: {}
+
+    # Service exposing the Sentinel endpoints to clients
+    service:
+      # Enable the Sentinel service
+      enabled: true
+      # Service type (ClusterIP, NodePort, LoadBalancer)
+      type: ClusterIP
+      # Port on which the Sentinel service will be exposed
+      port: 26379
+      # Optional annotations for the Sentinel service
+      annotations: {}
+      # NodePort value (if service.type is NodePort)
+      nodePort: 0
+      # ClusterIP value
+      clusterIP: ""
+      # Application protocol
+      appProtocol: ""
+      # Class of a load balancer implementation
+      loadBalancerClass: ""
+      # Restricts traffic through the cloud-provider load balancer to these client IPs
+      loadBalancerSourceRanges: []
+
+    # Persistence for the Sentinel state directory. Optional, and off for a
+    # reason: Sentinel rewrites its own credentials into sentinel.conf, so
+    # enabling this writes them to persistent storage. With it disabled the
+    # state sits on a memory backed emptyDir instead.
+    persistence:
+      # Enable a PVC for the Sentinel state instead of an emptyDir
+      enabled: false
+      # Size of the PVC for each Sentinel
+      size: 100Mi
+      # Storage class name (empty = use default storage class)
+      storageClass: ""
+      # Access modes for the PVC
+      accessModes:
+        - ReadWriteOnce
+
+    # PersistentVolumeClaim retention policy for the Sentinel StatefulSet.
+    persistentVolumeClaimRetentionPolicy: {}
 
 tls:
   # Enable TLS
