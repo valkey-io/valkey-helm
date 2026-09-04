@@ -695,6 +695,38 @@ tests:
             mountPath: /tls
             readOnly: true
 
+  - it: should reject a topology wait that expires before sentinel bootstraps
+    set:
+      replica.sentinel.startupTimeoutSeconds: 300
+    template: templates/statefulset.yaml
+    asserts:
+      # The two timeouts are ordered: a fresh pod has nothing to be told until
+      # the Sentinels finish their own discovery, so a shorter wait puts the
+      # init container back to exiting just before the answer arrives.
+      - failedTemplate:
+          errorPattern: "initialTopologyWaitSeconds \\(180\\) must be at least 30s above replica.sentinel.startupTimeoutSeconds \\(300\\), which is 330"
+
+  - it: should require headroom, not merely a larger number
+    set:
+      replica.sentinel.startupTimeoutSeconds: 300
+      replica.sentinel.initialTopologyWaitSeconds: 310
+    template: templates/statefulset.yaml
+    asserts:
+      # The Sentinels need a moment after their timeout to write their config,
+      # start, and pass their probe, and this pod only polls every 5s.
+      - failedTemplate:
+          errorPattern: "initialTopologyWaitSeconds \\(310\\) must be at least 30s above"
+
+  - it: should accept a topology wait with headroom over the bootstrap
+    set:
+      replica.sentinel.startupTimeoutSeconds: 300
+      replica.sentinel.initialTopologyWaitSeconds: 330
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'while \[ "\$WAITED" -lt "330" \]; do'
+
   - it: should wait for the topology on a first install instead of failing
     template: templates/init_config.yaml
     asserts:
@@ -715,6 +747,7 @@ tests:
 
   - it: should take the first install wait from the values
     set:
+      replica.sentinel.startupTimeoutSeconds: 10
       replica.sentinel.initialTopologyWaitSeconds: 42
     template: templates/init_config.yaml
     asserts:

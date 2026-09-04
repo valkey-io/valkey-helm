@@ -372,8 +372,9 @@ replica:
     # another node, to tell it what the topology is. This is the fresh install
     # case: the Sentinels bootstrap a master once their own
     # startupTimeoutSeconds expires, so this has to be comfortably longer than
-    # that. A pod that gives up exits, and Kubernetes restarts the init
-    # container, so this bounds one attempt rather than the whole startup.
+    # that: the chart refuses to render unless it is at least 30s above it.
+    # A pod that gives up exits, and Kubernetes restarts the init container, so
+    # this bounds one attempt rather than the whole startup.
     initialTopologyWaitSeconds: 180
 
     # How often each Valkey pod mirrors the current master onto its data volume.
