@@ -219,6 +219,18 @@ valkey-cli TLS flags shared by the Sentinel scripts and probes
 {{- end -}}
 
 {{/*
+valkey-cli TLS flags for the commands printed after an install. Those run from
+a shell rather than inside a chart pod, so the files are the operator's own
+copies of what tls.existingSecret holds, and the names are shown as
+placeholders instead of the paths mounted into the containers.
+*/}}
+{{- define "valkey.cli.tlsFlagsHint" -}}
+{{- if .Values.tls.enabled }} --tls --cacert <{{ .Values.tls.caPublicKey }}>
+{{- if .Values.tls.requireClientCertificate }} --cert <{{ .Values.tls.serverPublicKey }}> --key <{{ .Values.tls.serverKey }}>{{ end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Validate sentinel configuration
 */}}
 {{- define "valkey.validateSentinelConfig" -}}
