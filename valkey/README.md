@@ -116,6 +116,7 @@ With `auth.usersExistingSecret`, store that credential under `replica.sentinel.p
 Valkey user passwords are deliberately not accepted by Sentinel, so restrictions on application ACL users cannot be bypassed through Sentinel commands.
 Sentinel reaches the Valkey nodes as `replica.sentinel.monitorUser`, which defaults to `replica.replicationUser`.
 That user must be allowed to promote a replica, otherwise every failover aborts with `-failover-abort-slave-timeout`.
+A starting pod asks the other nodes which of them is the primary as the same user, rather than as `replica.replicationUser`, whose documented minimum cannot run `INFO`.
 The minimum permissions are:
 
 ```text

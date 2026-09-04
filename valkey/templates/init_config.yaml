@@ -1,8 +1,8 @@
 {{- $pods := add (int .Values.replica.replicas) 1 }}
-{{- $initReplUser := .Values.replica.replicationUser }}
-{{- $initReplKey := $initReplUser }}
-{{- if and .Values.auth.enabled (hasKey .Values.auth.aclUsers $initReplUser) }}
-{{- $initReplKey = (index .Values.auth.aclUsers $initReplUser).passwordKey | default $initReplUser }}
+{{- $initMonitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
+{{- $initMonitorKey := $initMonitorUser }}
+{{- if and .Values.auth.enabled (hasKey .Values.auth.aclUsers $initMonitorUser) }}
+{{- $initMonitorKey = (index .Values.auth.aclUsers $initMonitorUser).passwordKey | default $initMonitorUser }}
 {{- end }}
 apiVersion: v1
 kind: ConfigMap
@@ -314,7 +314,11 @@ data:
     # promoted leaves two masters, which nothing can reconcile afterwards.
     master_from_running_nodes() {
       {{- if .Values.auth.enabled }}
-      repl_password=$(get_user_password "{{ $initReplUser }}" "{{ $initReplKey }}") || return 1
+      # As the user Sentinel itself monitors with, not the replication user:
+      # the documented minimum for a replication user is +psync +replconf
+      # +ping, which cannot run INFO, while the monitor user already has to be
+      # allowed INFO for Sentinel to work at all.
+      monitor_password=$(get_user_password "{{ $initMonitorUser }}" "{{ $initMonitorKey }}") || return 1
       {{- end }}
       i=0
       while [ "$i" -lt "{{ $pods }}" ]; do
@@ -324,8 +328,16 @@ data:
           continue
         fi
         {{- if .Values.auth.enabled }}
-        info=$(REDISCLI_AUTH="$repl_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user "{{ $initReplUser }}" \
+        info=$(REDISCLI_AUTH="$monitor_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user "{{ $initMonitorUser }}" \
           -t 2 -h "$node" -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true)
+        case "$info" in
+          # valkey-cli prints the refusal and still exits 0, so without this the
+          # node would look like it is simply not the master.
+          *NOPERM*)
+            log "ERROR: {{ $initMonitorUser }} may not run INFO on $node, so this pod cannot tell which node is the master"
+            return 1
+            ;;
+        esac
         {{- else }}
         info=$(valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
           -t 2 -h "$node" -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true)

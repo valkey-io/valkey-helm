@@ -727,7 +727,41 @@ tests:
       # The credential goes through the environment, never the process list.
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'REDISCLI_AUTH="\$repl_password" valkey-cli'
+          pattern: 'REDISCLI_AUTH="\$monitor_password" valkey-cli'
+
+  - it: should ask as the user allowed to run info
+    set:
+      auth.enabled: true
+      replica.sentinel.monitorUser: watcher
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "defaultpw"
+        replicator:
+          # The documented minimum for a replication user, which cannot run INFO
+          permissions: "+psync +replconf +ping"
+          password: "replicatorpw"
+        watcher:
+          permissions: "~* &* +info +role +slaveof +replicaof +psync +replconf"
+          password: "watcherpw"
+    template: templates/init_config.yaml
+    asserts:
+      # Sentinel already requires INFO of its monitor user, so asking as that
+      # user adds no permission the deployment does not already need.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'get_user_password "watcher" "watcher"'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '--user "watcher"'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'info replication[\s\S]{0,200}--user "replicator"'
+      # A refusal is printed on stdout with a zero exit, so it has to be
+      # recognised rather than read as "this node is not the master".
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '\*NOPERM\*\)'
 
   - it: should refuse an empty sentinel password
     set:
