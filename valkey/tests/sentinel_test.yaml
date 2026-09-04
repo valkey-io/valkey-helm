@@ -637,6 +637,29 @@ tests:
           path: data["valkey-start.sh"]
           pattern: 'while IFS= read -r cfg_line'
 
+  - it: should report a record it cannot write instead of hiding it
+    template: templates/init_config.yaml
+    asserts:
+      # A record that cannot be updated keeps naming this pod after it has been
+      # demoted, and a cold start comes back on the last record written, so a
+      # silent failure here is a pod that returns writable when it should not.
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'cannot record the master as \$host \$port'
+      - notMatchRegex:
+          path: data["valkey-start.sh"]
+          pattern: '> "\$MARKER" 2>/dev/null \|\| true'
+      # Written to a temporary name and renamed, so a cold start reading it
+      # during an update sees the old record rather than an empty file.
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'mv "\$MARKER.tmp" "\$MARKER"'
+      # One complaint per outage: the loop runs every second and retries by
+      # itself, because the record still does not match.
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'elif \[ -z "\$write_failed" \]; then'
+
   - it: should ignore a config read taken during a rewrite
     template: templates/init_config.yaml
     asserts:
