@@ -231,6 +231,24 @@ placeholders instead of the paths mounted into the containers.
 {{- end -}}
 
 {{/*
+TLS options for the Python example printed after an install. The Sentinel
+connection and the connection to the master are separate, so the same options
+have to be given twice: once inside sentinel_kwargs and once beside it.
+*/}}
+{{- define "valkey.python.tlsDictItems" -}}
+{{- if .Values.tls.enabled }}, "ssl": True, "ssl_ca_certs": "<{{ .Values.tls.caPublicKey }}>"
+{{- if .Values.tls.requireClientCertificate }}, "ssl_certfile": "<{{ .Values.tls.serverPublicKey }}>", "ssl_keyfile": "<{{ .Values.tls.serverKey }}>"{{ end }}
+{{- end }}
+{{- end -}}
+
+{{- define "valkey.python.tlsKwargs" -}}
+{{- if .Values.tls.enabled }},
+           ssl=True, ssl_ca_certs="<{{ .Values.tls.caPublicKey }}>"
+{{- if .Values.tls.requireClientCertificate }}, ssl_certfile="<{{ .Values.tls.serverPublicKey }}>", ssl_keyfile="<{{ .Values.tls.serverKey }}>"{{ end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Validate sentinel configuration
 */}}
 {{- define "valkey.validateSentinelConfig" -}}
