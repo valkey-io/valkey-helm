@@ -34,7 +34,13 @@ ask Sentinel for the current master instead of connecting to a fixed pod:
 Most client libraries do this for you, e.g. in Python:
 
   Sentinel([("{{ $sentinelHost }}", {{ $sentinelPort }})],
-           sentinel_kwargs={"username": "sentinel", "password": "<sentinel password>"}).master_for("{{ .Values.replica.sentinel.masterSet }}"{{ if .Values.auth.enabled }}, username="<Valkey user>", password="<Valkey password>"{{ end }})
+           sentinel_kwargs={"username": "sentinel", "password": "<sentinel password>"{{ include "valkey.python.tlsDictItems" . }}}{{ include "valkey.python.tlsKwargs" . }}
+           ).master_for("{{ .Values.replica.sentinel.masterSet }}"{{ if .Values.auth.enabled }}, username="<Valkey user>", password="<Valkey password>"{{ end }})
+{{- if .Values.tls.enabled }}
+
+  The options appear twice on purpose: the ones inside sentinel_kwargs reach
+  the Sentinels, the ones beside it reach the master they name.
+{{- end }}
 {{- else }}
 
 The Sentinel service is disabled (replica.sentinel.service.enabled), so address
