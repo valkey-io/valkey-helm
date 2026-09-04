@@ -695,6 +695,33 @@ tests:
             mountPath: /tls
             readOnly: true
 
+  - it: should wait for the topology on a first install instead of failing
+    template: templates/init_config.yaml
+    asserts:
+      # A fresh pod has no record, no running node and no Sentinel that can
+      # name a master yet. The Sentinels bootstrap one once their own
+      # startupTimeoutSeconds expires, so exiting here only means restarting
+      # the init container until a retry happens to land after that.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'while \[ "\$WAITED" -lt "180" \]; do'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'Waiting for a Sentinel or a running node to report the topology'
+      # Bounded, so a deployment that is genuinely broken still fails.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'refusing to start without a confirmed replication role'
+
+  - it: should take the first install wait from the values
+    set:
+      replica.sentinel.initialTopologyWaitSeconds: 42
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'while \[ "\$WAITED" -lt "42" \]; do'
+
   - it: should prefer a node that is already up over the recorded topology
     set:
       auth.enabled: true

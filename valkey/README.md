@@ -148,7 +148,8 @@ Each pod therefore mirrors the current master onto its data volume, as a host an
 A pod that finds no Sentinel first asks the other Valkey nodes whether one of them is already up as the primary, and follows that answer if it gets one.
 A node that is running outranks the record, both because a pod that was down across a failover still has its own name in its record, which would bring it back writable next to the node that was promoted, and because the record may name a node that has since been demoted.
 Only when nothing answers does the record decide, which is what puts nodes on the network for the Sentinels to find.
-A pod with neither a Sentinel, nor a running node, nor a record still refuses to start rather than guess.
+A pod with neither a Sentinel, nor a running node, nor a record waits up to `replica.sentinel.initialTopologyWaitSeconds` for one of them and then refuses to start rather than guess.
+That wait is what a first install spends: the Sentinels bootstrap a master once their own `replica.sentinel.startupTimeoutSeconds` expires, and the pod is simply there to be told, so the value has to stay comfortably above it.
 
 The record is read from the config file Valkey rewrites when Sentinel changes a pod's role, so it needs no credentials.
 A rewrite empties that file before filling it again, and a check landing in between sees no `replicaof` line, which is indistinguishable from a promotion.
@@ -563,6 +564,7 @@ tls:
 | replica.sentinel.replicas | int | `3` | Number of independently deployed Sentinel pods |
 | replica.sentinel.port | int | `26379` |  |
 | replica.sentinel.masterSet | string | `"mymaster"` |  |
+| replica.sentinel.initialTopologyWaitSeconds | int | `180` | How long a pod with no recorded topology waits to be told one before giving up |
 | replica.sentinel.masterRecordRefreshSeconds | int | `1` | How often the cold-start topology record is checked against the running config |
 | replica.sentinel.quorum | int | `2` | Sentinels that must agree before a failover starts |
 | replica.sentinel.downAfterMilliseconds | int | `5000` |  |
