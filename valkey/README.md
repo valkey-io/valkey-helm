@@ -37,7 +37,7 @@ helm install valkey valkey/valkey
 Deploy Valkey with master-replica architecture for read scaling and data redundancy:
 
 ```bash
-helm install valkey valkey/valkey --set replica.enabled=true --set replica.persistence.size=5Gi
+helm install valkey valkey/valkey --set replica.enabled=true --set replica.persistence.enabled=true --set replica.persistence.size=5Gi
 ```
 
 **IMPORTANT**
@@ -93,12 +93,15 @@ dataStorage:
 
 ### Replication Storage
 
-Persistent storage is **mandatory** in replication mode. Without it, the primary might come up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
+Persistent storage is **highly recommended** in replication mode. Without it, the primary might come up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
+
+If you don't mind losing your data after a restart, then you can consider disabling persistence and RDB/AOF backups in valkey configuration.
 
 ```yaml
 replica:
   enabled: true
   persistence:
+    enabled: true  # Default
     size: 10Gi  # Required
     storageClass: "fast-ssd"  # Optional
 ```
@@ -369,8 +372,8 @@ tls:
 | replica.service.clusterIP | string | `""` |  |
 | replica.service.appProtocol | string | `""` |  |
 | replica.service.loadBalancerClass | string | `""` |  |
-| replica.persistence. |  | `""` |  |
-| replica.persistence.size | string | `""` | Required if replica is enabled |
+| replica.persistence.enabled | bool | `true` |  |
+| replica.persistence.size | string | `""` | Required if replica persistence is enabled |
 | replica.persistence.storageClass | string | `""` |  |
 | replica.persistence.accessModes | list | `""` |  |
 | resources | object | `{}` |  |

@@ -3,14 +3,15 @@ templates:
   - templates/statefulset.yaml
   - templates/init_config.yaml
 tests:
-  - it: should fail when replica enabled but no size provided
+  - it: should fail when replica persistence enabled but no size provided
     set:
       replica.enabled: true
+      replica.persistence.enabled: true
       replica.persistence.size: ""
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "Replica mode requires persistent storage.*"
+          errorPattern: "Persistence with replica mode requires storage size to be defined."
 
   - it: should succeed when replica enabled with size provided
     set:
@@ -23,6 +24,38 @@ tests:
       - equal:
           path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
           value: "5Gi"
+
+  - it: should fallback to emptyDir when replica persistence is disabled
+    set:
+      replica.enabled: true
+      replica.persistence.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            emptyDir: {}
+      - notExists:
+          path: spec.volumeClaimTemplates
+
+  - it: should succeed when replica persistence is disabled and emptyDir sizeLimit is defined
+    set:
+      replica.enabled: true
+      replica.persistence.enabled: false
+      replica.persistence.emptyDir.sizeLimit: "1Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            emptyDir:
+              sizeLimit: "1Gi"
 
   - it: should succeed when replica enabled with custom storageClass
     set:

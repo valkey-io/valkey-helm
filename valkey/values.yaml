@@ -287,13 +287,19 @@ replica:
 
   # Persistence configuration (required for replicas)
   persistence:
-    # Size of the PVC for each replica (required when replica.enabled is true)
+    # Enable persistence on Valkey using a Persistent Volume Claim
+    # IMPORTANT: If disabled, an emptyDir volume is used. This is not recommended and data loss will occur on primary restart. Please consider disabling RDB snapshots on valkeyConfig
+    # volumeClaimTemplates is immutable on a STS. Changing this parameter on a existing STS will fail with a classic helm upgrade. You can workaround this by creating a new STS aside or delete/recreate the STS.
+    enabled: true
+    # Size of the PVC for each replica (required when replica.enabled and replica.persistence.enabled is true)
     size: ""
     # Storage class name (empty = use default storage class)
     storageClass: ""
     # Access modes for the PVC
     accessModes:
       - ReadWriteOnce
+    # EmptyDir params applies if persistence is disabled
+    emptyDir: {}
 
   # PersistentVolumeClaim retention policy for StatefulSet
   # Controls when PVCs are deleted (requires Kubernetes 1.23+)

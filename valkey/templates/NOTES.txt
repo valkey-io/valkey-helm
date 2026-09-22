@@ -105,15 +105,17 @@ valkey> GET foo
 "bar"
 
 💾 Persistence
-{{- if .Values.replica.enabled }}
-- Persistence is ENABLED (required for replication mode). Each instance has its own volume.
+{{- if and .Values.replica.enabled .Values.replica.persistence.enabled }}
+- Persistence is ENABLED by default (highly recommended for replication mode). Each instance has its own volume.
 - Size: {{ .Values.replica.persistence.size }}
 {{- if .Values.replica.persistence.storageClass }}
 - Storage class: {{ .Values.replica.persistence.storageClass }}
 {{- end }}
 - To see PVCs:
   $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }}
-{{- else }}
+{{- else if and (not .Values.replica.persistence.enabled) .Values.replica.enabled }}
+- Persistence is DISABLED. You should also consider disabling RDB snapshots on valkeyConfig: to prevent unwanted files to be written to an emptyDir.
+{{ else if not .Values.replica.enabled -}}
 {{ if .Values.dataStorage.enabled -}}
 {{ if .Values.dataStorage.hostPath -}}
 - Persistence is ENABLED. A hostPath volume is used at path='`{{ .Values.dataStorage.hostPath }}`'.

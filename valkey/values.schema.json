@@ -388,11 +388,25 @@
                                 "type": "string"
                             }
                         },
+                        "enabled": {
+                            "type": "boolean"
+                        },
                         "size": {
                             "type": "string"
                         },
                         "storageClass": {
                             "type": "string"
+                        },
+                        "emptyDir": {
+                            "type": "object",
+                            "properties": {
+                                "medium": {
+                                    "type": "string"
+                                },
+                                "sizeLimit": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 },
