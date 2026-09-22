@@ -1,6 +1,6 @@
 # valkey-resources examples
 
-Helm values overlays for common `ValkeyCluster` shapes (operator **v0.4.0+**).
+Helm values overlays for common `ValkeyCluster` shapes (operator **v0.6.0+**).
 
 Each file is meant for `helm install` / `helm upgrade` with `-f`. Merge multiple files when needed.
 
@@ -25,7 +25,7 @@ helm install my-cluster valkey/valkey-resources -n valkey \
 |---|---|
 | [minimal.yaml](minimal.yaml) | Explicit shards / replicas only |
 | [scheduling-node-spread.yaml](scheduling-node-spread.yaml) | `scheduling.node.spread` (shard-aware node HA) + PDB |
-| [scheduling-zone-spread.yaml](scheduling-zone-spread.yaml) | Zone `topologySpreadConstraints` escape hatch |
+| [scheduling-zone-spread.yaml](scheduling-zone-spread.yaml) | `scheduling.zone.spread` (zone-aware placement) |
 | [tls.yaml](tls.yaml) | TLS Secret ref via `extraValues` + `tpl` |
 | [persistence.yaml](persistence.yaml) | PVC size on StatefulSet |
 | [metrics-podmonitor.yaml](metrics-podmonitor.yaml) | PodMonitor for exporter sidecars |
@@ -34,7 +34,8 @@ helm install my-cluster valkey/valkey-resources -n valkey \
 ## Notes
 
 - Chart defaults leave `node.spread` off (operator default `Disabled`). Production clusters should set `shard` to at least `Preferred`; see `scheduling-node-spread.yaml`.
-- Prefer `node.spread` for hostname / node anti-colocation. Use raw `topologySpreadConstraints` for other keys (for example zones). Do not stack a hostname TSC with `node.spread.primaries` / `pods` at the same strength.
+- Prefer `node.spread` for hostname / node anti-colocation and `zone.spread` for zone-aware placement over hand-written `topologySpreadConstraints`; the operator owns the emitted constraints. Do not enable two dimensions at the same strength on the same axis (admission rejects duplicate constraints).
+- `zone.spread` and `zone.pinning` are mutually exclusive.
 - Secrets are references only; create them out of band.
 - CRDs come from the `valkey-operator` chart. Helm does not upgrade CRDs automatically.
 

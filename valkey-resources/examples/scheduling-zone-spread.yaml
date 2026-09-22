@@ -1,19 +1,32 @@
-# Zone-level topology spread (escape hatch). Operator renders TSC verbatim;
-# you must supply labelSelector. Prefer node.spread for hostname / node HA.
+# Zone-aware placement on topology.kubernetes.io/zone via scheduling.zone.spread.
+# Prefer this over hand-written topologySpreadConstraints: the operator emits and
+# owns the constraints, and a shard with more members than zones balances across
+# them rather than becoming unschedulable.
 #
-# fullnameOverride pins ValkeyCluster metadata.name so valkey.io/cluster matches
-# the selector. Change both together if you rename the cluster.
-fullnameOverride: my-cluster
-
+# Modes: Disabled | Preferred | Required
+# - shard: pods of each shard spread across zones
+# - primaries: each shard's node-index-0 pod (creation-time primary) spread across zones
+# - pods: all cluster pods spread across zones
+#
+# Preferred (ScheduleAnyway) is the safe default: the scheduler spreads shards
+# across zones when it can, but still places a pod if a perfect spread is not
+# possible, so a zone outage or shortage never leaves pods Pending. Use Required
+# (DoNotSchedule) only when you would rather a pod stay unschedulable than share
+# a zone.
+#
+# Do not enable two dimensions at the same strength on this axis; admission
+# rejects duplicate constraints.
+# zone.spread is mutually exclusive with zone.pinning.
 cluster:
   spec:
     shards: 3
     replicas: 1
     scheduling:
-      topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: topology.kubernetes.io/zone
-          whenUnsatisfiable: ScheduleAnyway
-          labelSelector:
-            matchLabels:
-              valkey.io/cluster: my-cluster
+      zone:
+        spread:
+          shard:
+            mode: Preferred
+          primaries:
+            mode: Disabled
+          pods:
+            mode: Disabled
