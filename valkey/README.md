@@ -253,8 +253,8 @@ Resource-specific annotations such as `service.annotations` or `workloadAnnotati
 are merged on top and take precedence on conflicting keys. Pod templates are not
 affected; use `podAnnotations` for those.
 
-This is useful for GitOps tooling that reads annotations, for example to place the
-whole release in an Argo CD sync wave:
+Values must be strings, so quote numbers. This is useful for GitOps tooling that reads
+annotations, for example to place the whole release in an Argo CD sync wave:
 
 ```yaml
 commonAnnotations:

@@ -50,6 +50,8 @@ Annotations for a resource: .Values.commonAnnotations merged with the resource-s
 annotations passed in as "annotations" (resource-specific annotations take precedence).
 Chart-owned annotations such as helm.sh/resource-policy or helm.sh/hook must be passed
 in "annotations" too, so they win over commonAnnotations instead of being rendered twice.
+Values are converted to strings, because Kubernetes rejects non-string annotation values
+(an unquoted `sync-wave: -1` would otherwise render as an integer).
 Renders an empty string when there is nothing to add, so callers can wrap it in `with`.
 Usage:
   {{- with (include "valkey.annotations" (dict "context" $ "annotations" .Values.service.annotations)) }}
@@ -58,7 +60,13 @@ Usage:
   {{- end }}
 */}}
 {{- define "valkey.annotations" -}}
-{{- $annotations := mergeOverwrite (dict) (default (dict) .context.Values.commonAnnotations) (default (dict) .annotations) -}}
+{{- $merged := mergeOverwrite (dict) (default (dict) .context.Values.commonAnnotations) (default (dict) .annotations) -}}
+{{- $annotations := dict -}}
+{{- range $key, $value := $merged -}}
+{{- if not (kindIs "invalid" $value) -}}
+{{- $_ := set $annotations $key (toString $value) -}}
+{{- end -}}
+{{- end -}}
 {{- with $annotations }}
 {{- toYaml . }}
 {{- end }}

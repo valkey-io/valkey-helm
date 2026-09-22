@@ -370,3 +370,17 @@ tests:
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
           value: before-hook-creation,hook-succeeded
+
+  - it: should render non-string resource-specific annotation values as strings
+    set:
+      workloadAnnotations:
+        example.com/wave: -1
+        example.com/enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/wave"]
+          value: "-1"
+      - equal:
+          path: metadata.annotations["example.com/enabled"]
+          value: "true"

@@ -26,7 +26,10 @@
             "type": "string"
         },
         "commonAnnotations": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            }
         },
         "commonLabels": {
             "type": "object"
