@@ -244,6 +244,23 @@ tls:
   existingSecret: "valkey-tls-secret"
 ```
 
+## Common annotations
+
+`commonAnnotations` adds a set of annotations to every resource the chart renders
+(Deployment/StatefulSet, Services, ConfigMaps, Secret, PersistentVolumeClaim,
+NetworkPolicy, ServiceAccount, PodDisruptionBudget and the monitoring resources).
+Resource-specific annotations such as `service.annotations` or `workloadAnnotations`
+are merged on top and take precedence on conflicting keys. Pod templates are not
+affected; use `podAnnotations` for those.
+
+This is useful for GitOps tooling that reads annotations, for example to place the
+whole release in an Argo CD sync wave:
+
+```yaml
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "-1"
+```
+
 ## Values
 
 | Key | Type | Default | Description |
@@ -339,6 +356,7 @@ tls:
 | podAnnotations | object | `{}` |  |
 | podLabels | object | `{}` |  |
 | commonLabels | object | `{}` |  |
+| commonAnnotations | object | `{}` | Annotations added to every resource; resource-specific annotations take precedence |
 | podDisruptionBudget.enabled | bool | `false` |  |
 | podDisruptionBudget.minAvailable | int or string | `null` | Minimum pods available during disruptions |
 | podDisruptionBudget.maxUnavailable | int or string | `1` | Maximum pods unavailable during disruptions |

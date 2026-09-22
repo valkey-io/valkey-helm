@@ -46,6 +46,23 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{/*
+Annotations for a resource: .Values.commonAnnotations merged with the resource-specific
+annotations passed in as "annotations" (resource-specific annotations take precedence).
+Renders an empty string when there is nothing to add, so callers can wrap it in `with`.
+Usage:
+  {{- with (include "valkey.annotations" (dict "context" $ "annotations" .Values.service.annotations)) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+*/}}
+{{- define "valkey.annotations" -}}
+{{- $annotations := mergeOverwrite (dict) (default (dict) .context.Values.commonAnnotations) (default (dict) .annotations) -}}
+{{- with $annotations }}
+{{- toYaml . }}
+{{- end }}
+{{- end }}
+
+{{/*
 Selector labels
 */}}
 {{- define "valkey.selectorLabels" -}}

@@ -17,6 +17,9 @@ metadata:
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- with (include "valkey.annotations" (dict "context" $)) }}
+    {{- . | nindent 4 }}
+    {{- end }}
 spec:
   restartPolicy: Never
   containers:
@@ -93,6 +96,9 @@ metadata:
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- with (include "valkey.annotations" (dict "context" $)) }}
+    {{- . | nindent 4 }}
+    {{- end }}
 spec:
   restartPolicy: Never
   containers:

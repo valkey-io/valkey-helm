@@ -8,9 +8,9 @@ metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
-  {{- with .Values.workloadAnnotations }}
+  {{- with (include "valkey.annotations" (dict "context" $ "annotations" .Values.workloadAnnotations)) }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- . | nindent 4 }}
   {{- end }}
 spec:
   serviceName: {{ include "valkey.fullname" . }}-headless
