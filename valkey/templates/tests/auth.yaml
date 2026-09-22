@@ -12,6 +12,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: {{ include "valkey.fullname" . }}-test-auth-generated
+  namespace: {{ include "valkey.namespace" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
   annotations:
