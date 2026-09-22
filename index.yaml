@@ -67,7 +67,7 @@ entries:
     appVersion: 9.0.2
     created: "2026-04-12T15:12:51.04254901Z"
     description: A Helm chart for Kubernetes
-    digest: 917cbf4e88c1273f0a0ac3d343af74a7b5633ec27d8457dc2ee1f68aa9f49bb8
+    digest: a685b802426be48519569389e4e6b221e21376bece84bb8b331720e54a8c21c9
     home: https://valkey.io/valkey-helm/
     icon: https://dyltqmyl993wv.cloudfront.net/assets/stacks/valkey/img/valkey-stack-220x234.png
     maintainers:
