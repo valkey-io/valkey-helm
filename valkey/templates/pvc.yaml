@@ -8,15 +8,13 @@ metadata:
     {{- with .Values.dataStorage.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- $annotations := include "valkey.annotations" (dict "context" $ "annotations" .Values.dataStorage.annotations) }}
-  {{- if or .Values.dataStorage.keepPvc $annotations }}
+  {{- $pvcAnnotations := default (dict) .Values.dataStorage.annotations }}
+  {{- if .Values.dataStorage.keepPvc }}
+  {{- $pvcAnnotations = merge (dict "helm.sh/resource-policy" "keep") $pvcAnnotations }}
+  {{- end }}
+  {{- with (include "valkey.annotations" (dict "context" $ "annotations" $pvcAnnotations)) }}
   annotations:
-    {{- if .Values.dataStorage.keepPvc }}
-    "helm.sh/resource-policy": keep
-    {{- end }}
-    {{- with $annotations }}
     {{- . | nindent 4 }}
-    {{- end }}
   {{- end }}
 spec:
   accessModes:

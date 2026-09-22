@@ -334,3 +334,39 @@ tests:
       - equal:
           path: metadata.annotations["example.com/team"]
           value: platform
+
+  - it: should let the chart-owned resource-policy annotation win over commonAnnotations on the PersistentVolumeClaim
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "1Gi"
+      dataStorage.keepPvc: true
+      commonAnnotations:
+        helm.sh/resource-policy: delete
+        example.com/team: platform
+    template: templates/pvc.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should let the helm hook annotations win over commonAnnotations on the test Pod
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+      commonAnnotations:
+        helm.sh/hook: pre-install
+        helm.sh/hook-delete-policy: hook-failed
+    template: templates/tests/auth.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded

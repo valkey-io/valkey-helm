@@ -15,11 +15,7 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
   annotations:
-    "helm.sh/hook": test
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
-    {{- with (include "valkey.annotations" (dict "context" $)) }}
-    {{- . | nindent 4 }}
-    {{- end }}
+    {{- include "valkey.annotations" (dict "context" $ "annotations" (dict "helm.sh/hook" "test" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded")) | nindent 4 }}
 spec:
   restartPolicy: Never
   containers:
@@ -94,11 +90,7 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
   annotations:
-    "helm.sh/hook": test
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
-    {{- with (include "valkey.annotations" (dict "context" $)) }}
-    {{- . | nindent 4 }}
-    {{- end }}
+    {{- include "valkey.annotations" (dict "context" $ "annotations" (dict "helm.sh/hook" "test" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded")) | nindent 4 }}
 spec:
   restartPolicy: Never
   containers:
