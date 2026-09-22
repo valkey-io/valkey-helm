@@ -4,6 +4,10 @@ metadata:
   name: {{ include "valkey.fullname" . }}-init-scripts
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
+  {{- with (include "valkey.annotations" (dict "context" $)) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
 data:
   init.sh: |-
     #!/bin/sh

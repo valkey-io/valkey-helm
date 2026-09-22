@@ -44,6 +44,12 @@ workloadAnnotations: {}
 # Common labels to add to all resources (Deployment, Service, ConfigMap, etc.)
 commonLabels: {}
 
+# Common annotations to add to all resources (Deployment, Service, ConfigMap, etc.).
+# Resource-specific annotations (e.g. service.annotations, workloadAnnotations) are
+# merged on top and take precedence on conflicting keys.
+# Values must be strings; quote numbers, e.g. argocd.argoproj.io/sync-wave: "-1"
+commonAnnotations: {}
+
 # Security context for the pod (applies to all containers)
 podSecurityContext:
   fsGroup: 1000

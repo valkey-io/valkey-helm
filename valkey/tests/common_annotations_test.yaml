@@ -1,0 +1,386 @@
+suite: common annotations
+templates:
+  - templates/deploy_valkey.yaml
+  - templates/statefulset.yaml
+  - templates/service.yaml
+  - templates/service-headless.yaml
+  - templates/service-read.yaml
+  - templates/metrics-svc.yaml
+  - templates/configmap.yaml
+  - templates/init_config.yaml
+  - templates/secret.yaml
+  - templates/pvc.yaml
+  - templates/netpolicy.yaml
+  - templates/poddisruptionbudget.yaml
+  - templates/serviceaccount.yaml
+  - templates/servicemonitor.yaml
+  - templates/podmonitor.yaml
+  - templates/prometheusrules.yaml
+  - templates/tests/auth.yaml
+tests:
+  - it: should not add an annotations block when commonAnnotations is empty
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: metadata.annotations
+
+  - it: should add commonAnnotations to the Deployment but not to its pod template
+    set:
+      commonAnnotations:
+        argocd.argoproj.io/sync-wave: "-1"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-1"
+      - notExists:
+          path: spec.template.metadata.annotations["argocd.argoproj.io/sync-wave"]
+
+  - it: should let workloadAnnotations take precedence over commonAnnotations on the Deployment
+    set:
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+      workloadAnnotations:
+        example.com/owner: workload
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: workload
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the StatefulSet but not to its pod template
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+      workloadAnnotations:
+        example.com/owner: workload
+    template: templates/statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: workload
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+      - notExists:
+          path: spec.template.metadata.annotations["example.com/team"]
+
+  - it: should add commonAnnotations to the primary Service and let service.annotations win
+    set:
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+      service.annotations:
+        example.com/owner: service
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: service
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the headless Service
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      commonAnnotations:
+        example.com/team: platform
+    template: templates/service-headless.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the read Service and let replica.service.annotations win
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.service.annotations:
+        example.com/owner: read
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+    template: templates/service-read.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: read
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the metrics Service
+    set:
+      metrics.enabled: true
+      metrics.service.annotations:
+        example.com/owner: metrics
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+    template: templates/metrics-svc.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: metrics
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the valkey.conf ConfigMap
+    set:
+      valkeyConfig: "maxmemory 100mb"
+      commonAnnotations:
+        example.com/team: platform
+    template: templates/configmap.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the init-scripts ConfigMap
+    set:
+      commonAnnotations:
+        example.com/team: platform
+    template: templates/init_config.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the auth Secret
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+      commonAnnotations:
+        example.com/team: platform
+    template: templates/secret.yaml
+    asserts:
+      - isKind:
+          of: Secret
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the PersistentVolumeClaim and keep dataStorage annotations
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "1Gi"
+      dataStorage.keepPvc: true
+      dataStorage.annotations:
+        example.com/owner: storage
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+    template: templates/pvc.yaml
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: storage
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should not add an annotations block to the PersistentVolumeClaim when nothing is set
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "1Gi"
+    template: templates/pvc.yaml
+    asserts:
+      - notExists:
+          path: metadata.annotations
+
+  - it: should add commonAnnotations to the NetworkPolicy and let networkPolicy.annotations win
+    set:
+      networkPolicy.annotations:
+        example.com/owner: netpol
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+    template: templates/netpolicy.yaml
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: netpol
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the PodDisruptionBudget
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      commonAnnotations:
+        example.com/team: platform
+    template: templates/poddisruptionbudget.yaml
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the ServiceAccount and let serviceAccount.annotations win
+    set:
+      serviceAccount.annotations:
+        example.com/owner: sa
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+    template: templates/serviceaccount.yaml
+    asserts:
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: sa
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the ServiceMonitor
+    set:
+      metrics.enabled: true
+      metrics.serviceMonitor.enabled: true
+      commonAnnotations:
+        example.com/team: platform
+    template: templates/servicemonitor.yaml
+    asserts:
+      - isKind:
+          of: ServiceMonitor
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the PodMonitor
+    set:
+      metrics.enabled: true
+      metrics.podMonitor.enabled: true
+      commonAnnotations:
+        example.com/team: platform
+    template: templates/podmonitor.yaml
+    asserts:
+      - isKind:
+          of: PodMonitor
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the PrometheusRule and let extraAnnotations win
+    set:
+      metrics.enabled: true
+      metrics.prometheusRule.enabled: true
+      metrics.prometheusRule.extraAnnotations:
+        example.com/owner: rules
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+    template: templates/prometheusrules.yaml
+    asserts:
+      - isKind:
+          of: PrometheusRule
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: rules
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the test Pod and keep the helm hook annotations
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+      commonAnnotations:
+        example.com/team: platform
+    template: templates/tests/auth.yaml
+    asserts:
+      - isKind:
+          of: Pod
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should let the chart-owned resource-policy annotation win over commonAnnotations on the PersistentVolumeClaim
+    set:
+      dataStorage.enabled: true
+      dataStorage.requestedSize: "1Gi"
+      dataStorage.keepPvc: true
+      commonAnnotations:
+        helm.sh/resource-policy: delete
+        example.com/team: platform
+    template: templates/pvc.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should let the helm hook annotations win over commonAnnotations on the test Pod
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+      commonAnnotations:
+        helm.sh/hook: pre-install
+        helm.sh/hook-delete-policy: hook-failed
+    template: templates/tests/auth.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded
+
+  - it: should render non-string resource-specific annotation values as strings
+    set:
+      workloadAnnotations:
+        example.com/wave: -1
+        example.com/enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/wave"]
+          value: "-1"
+      - equal:
+          path: metadata.annotations["example.com/enabled"]
+          value: "true"

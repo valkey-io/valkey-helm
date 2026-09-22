@@ -25,6 +25,12 @@
         "clusterDomain": {
             "type": "string"
         },
+        "commonAnnotations": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            }
+        },
         "commonLabels": {
             "type": "object"
         },

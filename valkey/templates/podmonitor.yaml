@@ -10,9 +10,9 @@ metadata:
     {{- with .Values.metrics.podMonitor.extraLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with .Values.metrics.podMonitor.annotations }}
+  {{- with (include "valkey.annotations" (dict "context" $ "annotations" .Values.metrics.podMonitor.annotations)) }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- . | nindent 4 }}
   {{- end }}
 spec:
   podMetricsEndpoints:
