@@ -1,0 +1,30 @@
+suite: operator manager clusterrole
+templates:
+  - templates/clusterrole.yaml
+tests:
+  - it: should not render the manager clusterrole when rbac.create is false
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should grant the manager the pod verbs the operator uses, including delete
+    set:
+      rbac.create: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: rules[1].resources
+          value:
+            - pods
+      - equal:
+          path: rules[1].verbs
+          value:
+            - delete
+            - get
+            - list
+            - watch
