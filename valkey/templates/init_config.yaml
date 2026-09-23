@@ -138,6 +138,14 @@ data:
     fi
     {{- end }}
 
+    # Set user from injected secret with permissions
+    {{- if and .Values.auth.injectSecret.enabled .Values.auth.injectSecret.mountPath }}
+    INJECTED_PASSWORD=$(cat {{ .Values.auth.injectSecret.mountPath }})
+    PASSHASH=$(echo -n "$INJECTED_PASSWORD" | sha256sum | cut -f 1 -d " ")
+    echo "user {{ .Values.auth.injectSecret.username }} on #$PASSHASH {{ .Values.auth.injectSecret.permissions }}" >> /etc/valkey/users.acl
+    log "Set user {{ .Values.auth.injectSecret.username }} by injected secret"
+    {{- end }}
+
     # Set final permissions
     chmod 0400 /etc/valkey/users.acl
     log "ACL file created with 0400 permissions"
@@ -185,10 +193,16 @@ data:
 
       {{- if .Values.auth.enabled }}
       # Get the password for the replication user
-      {{- $replUsername := .Values.replica.replicationUser }}
+      {{- $replUsername := ""}}
+      {{- if .Values.auth.injectSecret.enabled }}
+      {{- $replUsername = .Values.auth.injectSecret.username }}
+      REPL_PASSWORD=$(cat {{ .Values.auth.injectSecret.mountPath }})
+      {{- else }}
+      {{- $replUsername = .Values.replica.replicationUser }}
       {{- $replUser := index .Values.auth.aclUsers $replUsername }}
       {{- $replPasswordKey := $replUser.passwordKey | default $replUsername }}
       REPL_PASSWORD=$(get_user_password "{{ $replUsername }}" "{{ $replPasswordKey }}") || exit 1
+      {{- end }}
 
       # Write masterauth configuration
       echo "masterauth $REPL_PASSWORD" >>"$VALKEY_CONFIG"
