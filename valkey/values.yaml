@@ -391,15 +391,21 @@ metrics:
     extraEnvs: {}
     # Example:
     # LOG_LEVEL: info
-    securityContext: {}
-      # Example:
-      # runAsNonRoot: true
-      # runAsUser: 1000
+    # Security context for the metrics exporter container. Defaults match the
+    # Valkey container's `securityContext`, so the pod satisfies the restricted
+    # Pod Security Standard out of the box. Values you set here are merged onto
+    # these defaults; set `securityContext: null` if your exporter image needs
+    # none of them.
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1000
+      # Example of a further restriction:
       # runAsGroup: 1000
-      # capabilities:
-      #   drop:
-      #     - ALL
-      # readOnlyRootFilesystem: true
 
   # Service configuration for the metrics exporter
   service:

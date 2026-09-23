@@ -74,6 +74,44 @@ tests:
       - exists:
           path: spec.template.metadata.annotations["checksum/initconfig"]
 
+  - it: should harden the metrics exporter container by default
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      metrics.enabled: true
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+
+  - it: should merge metrics exporter security context overrides onto the defaults
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      metrics.enabled: true
+      metrics.exporter.securityContext:
+        runAsUser: 65532
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+
   - it: should use image pull policy for containers, initContainers and metrics
     set:
       replica.enabled: true

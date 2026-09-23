@@ -196,6 +196,40 @@ tests:
       - exists:
           path: spec.template.metadata.annotations["checksum/initconfig"]
 
+  - it: should harden the metrics exporter container by default
+    set:
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+
+  - it: should merge metrics exporter security context overrides onto the defaults
+    set:
+      metrics.enabled: true
+      metrics.exporter.securityContext:
+        runAsUser: 65532
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+
   - it: should use image pull policy for containers, initContainers and metrics
     set:
       image.pullPolicy: Always
