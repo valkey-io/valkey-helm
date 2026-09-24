@@ -86,3 +86,35 @@ tests:
           content:
             app.kubernetes.io/instance: RELEASE-NAME
             app.kubernetes.io/name: valkey
+
+  - it: should not call itself the primary endpoint in sentinel mode
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.password: "sentinelpw"
+    template: templates/service.yaml
+    asserts:
+      # The master can be any pod and a Service cannot select on a role that
+      # moves, so this one reaches every node. Labelling it primary would say
+      # the opposite of what the endpoint does.
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: nodes
+      - notExists:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+
+  - it: should pin to pod-0 and call itself primary without sentinel
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+    template: templates/service.yaml
+    asserts:
+      # Without Sentinel the master is pod-0 for the life of the release, so
+      # the Service can and does select exactly it.
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: primary
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-valkey-0

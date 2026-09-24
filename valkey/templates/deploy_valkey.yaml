@@ -3,6 +3,7 @@
 {{- $storage := .Values.dataStorage }}
 {{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
 {{- include "valkey.validateAuthConfig" . }}
+{{- include "valkey.validateSentinelConfig" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
