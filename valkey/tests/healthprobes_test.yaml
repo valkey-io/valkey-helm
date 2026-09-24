@@ -95,4 +95,4 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].startupProbe.exec.command
-          value: [ "valkey-cli", "--cacert", "/tls/ca.crt", "--cert", "/tls/server.crt", "--key", "/tls/server.key", "--tls", "ping" ]
+          value: [ "valkey-cli", "--cacert", "/tls/ca.crt", "--tls", "--cert", "/tls/server.crt", "--key", "/tls/server.key", "ping" ]

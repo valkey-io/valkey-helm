@@ -302,11 +302,10 @@ enabled, so callers should guard with `with`.
 {{- define "valkey.healthProbes" -}}
 {{- $cmd := list "valkey-cli" -}}
 {{- if $.Values.tls.enabled -}}
-{{- $cmd = concat $cmd (list "--cacert" (printf "/tls/%s" $.Values.tls.caPublicKey)) -}}
+{{- $cmd = concat $cmd (list "--cacert" (printf "/tls/%s" $.Values.tls.caPublicKey) "--tls") -}}
 {{- if $.Values.tls.requireClientCertificate -}}
 {{- $cmd = concat $cmd (list "--cert" (printf "/tls/%s" $.Values.tls.serverPublicKey) "--key" (printf "/tls/%s" $.Values.tls.serverKey)) -}}
 {{- end -}}
-{{- $cmd = append $cmd "--tls" -}}
 {{- end -}}
 {{- $cmd = append $cmd "ping" -}}
 {{- $probes := dict -}}
