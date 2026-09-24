@@ -85,3 +85,14 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].startupProbe.exec.command
           value: [ "valkey-cli", "--cacert", "/tls/ca.crt", "--tls", "ping" ]
+
+  - it: adds the client certificate and key to the ping command when client certificates are required
+    template: templates/deploy_valkey.yaml
+    set:
+      tls.enabled: true
+      tls.existingSecret: valkey-tls
+      tls.requireClientCertificate: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command
+          value: [ "valkey-cli", "--cacert", "/tls/ca.crt", "--cert", "/tls/server.crt", "--key", "/tls/server.key", "--tls", "ping" ]
