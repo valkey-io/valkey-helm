@@ -485,6 +485,7 @@ tls:
 | replica.sentinel.initialTopologyWaitSeconds | int | `180` | How long a pod with no recorded topology waits to be told one before giving up |
 | replica.sentinel.masterRecordRefreshSeconds | int | `1` | How often the cold-start topology record is checked against the running config |
 | replica.sentinel.quorum | int | `2` | Sentinels that must agree before a failover starts |
+| replica.sentinel.allowUnsafeTopology | bool | `false` | Permit fewer than 3 Sentinels, a quorum of 1 or a single Valkey pod; development and test only |
 | replica.sentinel.downAfterMilliseconds | int | `5000` |  |
 | replica.sentinel.failoverTimeout | int | `60000` |  |
 | replica.sentinel.parallelSyncs | int | `1` |  |
