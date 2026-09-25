@@ -79,9 +79,16 @@ tests:
     template: templates/deploy_valkey.yaml
     set:
       tls.enabled: true
-      tls.caPublicKey: ca.crt
+      # Deliberately not the default filenames, so that the assertion below
+      # fails if a path is ever hardcoded rather than read from the values.
+      tls.caPublicKey: probe-ca.pem
+      tls.serverPublicKey: probe-cert.pem
+      tls.serverKey: probe-key.pem
       tls.existingSecret: valkey-tls
     asserts:
+      # The key is tls.serverKey. Passing the certificate again is refused by
+      # valkey-cli with "Invalid private key", which fails every probe and
+      # leaves the pod unready for as long as TLS is enabled.
       - equal:
           path: spec.template.spec.containers[0].startupProbe.exec.command
-          value: [ "valkey-cli", "--cacert", "/tls/ca.crt", "--tls", "ping" ]
+          value: [ "valkey-cli", "--cacert", "/tls/probe-ca.pem", "--cert", "/tls/probe-cert.pem", "--key", "/tls/probe-key.pem", "--tls", "ping" ]
