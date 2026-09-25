@@ -27,6 +27,33 @@
         }
       }
     },
+    "networkPolicy": {
+      "additionalProperties": true,
+      "type": "object",
+      "properties": {
+        "annotations": {
+          "type": "object"
+        },
+        "defaultRules": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "extraEgress": {
+          "type": "array"
+        },
+        "extraIngress": {
+          "type": "array"
+        },
+        "labels": {
+          "type": "object"
+        },
+        "operatorSelector": {
+          "type": "object"
+        }
+      }
+    },
     "cluster": {
       "type": "object",
       "required": ["spec"],

@@ -1,0 +1,18 @@
+---
+# Creates networkPolicy with necessary rules and extraIngress for application ->
+# valkey communication
+networkPolicy:
+  enabled: true
+  extraIngress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: demo-application
+      ports:
+        - protocol: TCP
+          port: 6379
+
+cluster:
+  spec:
+    shards: 3
+    replicas: 1
