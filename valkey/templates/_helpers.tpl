@@ -290,6 +290,93 @@ Validate sentinel configuration
 {{- end -}}
 
 {{/*
+Selector labels for the HAProxy pods.
+
+The name deliberately differs from the Valkey one. Every Valkey side selector,
+the PodDisruptionBudget and the headless service among them, matches on
+app.kubernetes.io/name plus instance without a component, so sharing the Valkey
+name would make those select the proxy pods as well.
+*/}}
+{{- define "valkey.haproxy.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "valkey.name" . }}-haproxy
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: haproxy
+{{- end -}}
+
+{{/*
+Common labels for the HAProxy resources
+*/}}
+{{- define "valkey.haproxy.labels" -}}
+helm.sh/chart: {{ include "valkey.chart" . }}
+{{ include "valkey.haproxy.selectorLabels" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.commonLabels }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Returns the HAProxy container image
+*/}}
+{{- define "valkey.haproxy.image" -}}
+{{- include "valkey.common.image" (dict "image" .Values.haproxy.image "global" .Values.global) }}
+{{- end -}}
+
+{{/*
+Per-server TLS options for the HAProxy backends.
+In passthrough mode only the health check speaks TLS (check-ssl), the client
+stream is forwarded untouched. In bridge mode HAProxy originates TLS itself
+(ssl), so the data path is encrypted between HAProxy and the nodes.
+*/}}
+{{- define "valkey.haproxy.serverTlsOptions" -}}
+{{- if .Values.tls.enabled }}
+{{- if eq .Values.haproxy.tls.mode "bridge" }} ssl{{ else }} check-ssl{{ end }}
+{{- if eq .Values.haproxy.tls.verify "required" }} ca-file /tls/{{ .Values.tls.caPublicKey }} verify required
+{{- else }} verify none
+{{- end }}
+{{- if .Values.tls.requireClientCertificate }} crt /tls/{{ .Values.haproxy.tls.clientCertFile }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Per-server certificate identity options for an HAProxy backend.
+*/}}
+{{- define "valkey.haproxy.serverTlsIdentityOptions" -}}
+{{- $root := .root -}}
+{{- if and $root.Values.tls.enabled (eq $root.Values.haproxy.tls.verify "required") -}}
+{{- $host := printf "%s-%d.%s.%s.svc.%s" (include "valkey.fullname" $root) .index (include "valkey.headlessServiceName" $root) $root.Release.Namespace $root.Values.clusterDomain -}}
+{{- printf " verifyhost %s" $host -}}
+{{- if eq $root.Values.haproxy.tls.mode "bridge" }}{{ printf " sni str(%s)" $host }}{{ end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Validate haproxy configuration
+*/}}
+{{- define "valkey.validateHaproxyConfig" -}}
+{{- if .Values.haproxy.enabled }}
+  {{- if not (and .Values.replica.enabled .Values.replica.sentinel.enabled) }}
+    {{- fail "HAProxy routes clients to whichever node Sentinel promoted. Please set replica.enabled=true and replica.sentinel.enabled=true, or disable haproxy." }}
+  {{- end }}
+  {{- if .Values.haproxy.podDisruptionBudget.enabled }}
+    {{- if and (kindIs "invalid" .Values.haproxy.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.haproxy.podDisruptionBudget.maxUnavailable) }}
+      {{- fail "haproxy.podDisruptionBudget needs either minAvailable or maxUnavailable. A budget with neither is accepted by the API server but protects nothing." }}
+    {{- end }}
+  {{- end }}
+  {{- if and .Values.tls.enabled .Values.tls.requireClientCertificate (not .Values.haproxy.tls.clientCertFile) }}
+    {{- fail "tls.requireClientCertificate needs haproxy.tls.clientCertFile. HAProxy loads a client certificate from a single file holding both the certificate and its private key, which tls.serverPublicKey and tls.serverKey do not provide separately." }}
+  {{- end }}
+  {{- if .Values.auth.enabled }}
+    {{- $checkUser := .Values.haproxy.checkUser | default "default" }}
+    {{- if not (hasKey .Values.auth.aclUsers $checkUser) }}
+      {{- fail (printf "HAProxy check user '%s' must be defined in auth.aclUsers. HAProxy needs it to run the health check that finds the master." $checkUser) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Render the Valkey server container health probes (startupProbe, livenessProbe,
 readinessProbe). Each probe is gated on its own `enabled` flag. When a probe's
 `customProbe` map is set it replaces the default handler and timing entirely;

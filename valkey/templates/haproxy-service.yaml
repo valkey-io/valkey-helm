@@ -1,0 +1,40 @@
+{{- if .Values.haproxy.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "valkey.fullname" . }}-haproxy
+  labels:
+    {{- include "valkey.haproxy.labels" . | nindent 4 }}
+  {{- with .Values.haproxy.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.haproxy.service.type }}
+  {{- if .Values.haproxy.service.clusterIP }}
+  clusterIP: {{ .Values.haproxy.service.clusterIP }}
+  {{- end }}
+  {{- if .Values.haproxy.service.loadBalancerClass }}
+  loadBalancerClass: {{ .Values.haproxy.service.loadBalancerClass }}
+  {{- end }}
+  {{- if .Values.haproxy.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{ .Values.haproxy.service.loadBalancerSourceRanges }}
+  {{- end }}
+  ports:
+    - name: valkey-write
+      port: {{ .Values.haproxy.service.port }}
+      targetPort: valkey-write
+      protocol: TCP
+      {{- if and (eq .Values.haproxy.service.type "NodePort") .Values.haproxy.service.nodePort }}
+      nodePort: {{ .Values.haproxy.service.nodePort }}
+      {{- end }}
+    - name: valkey-read
+      port: {{ .Values.haproxy.service.readPort }}
+      targetPort: valkey-read
+      protocol: TCP
+      {{- if and (eq .Values.haproxy.service.type "NodePort") .Values.haproxy.service.readNodePort }}
+      nodePort: {{ .Values.haproxy.service.readNodePort }}
+      {{- end }}
+  selector:
+    {{- include "valkey.haproxy.selectorLabels" . | nindent 4 }}
+{{- end }}

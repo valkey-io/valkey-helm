@@ -1,0 +1,24 @@
+{{- if and .Values.haproxy.enabled .Values.haproxy.podDisruptionBudget.enabled }}
+{{- include "valkey.validateHaproxyConfig" . }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "valkey.fullname" . }}-haproxy
+  labels:
+    {{- include "valkey.haproxy.labels" . | nindent 4 }}
+spec:
+  {{- /* Tested for null rather than truthiness: 0 is a meaningful value here,
+         maxUnavailable: 0 forbids every voluntary eviction, and a truthiness
+         check would silently drop it. */}}
+  {{- if not (kindIs "invalid" .Values.haproxy.podDisruptionBudget.minAvailable) }}
+  minAvailable: {{ .Values.haproxy.podDisruptionBudget.minAvailable }}
+  {{- else if not (kindIs "invalid" .Values.haproxy.podDisruptionBudget.maxUnavailable) }}
+  maxUnavailable: {{ .Values.haproxy.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "valkey.haproxy.selectorLabels" . | nindent 6 }}
+  {{- with .Values.haproxy.podDisruptionBudget.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ . }}
+  {{- end }}
+{{- end }}
