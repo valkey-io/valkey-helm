@@ -482,6 +482,9 @@
                         "quorum": {
                             "type": "integer"
                         },
+                        "allowUnsafeTopology": {
+                            "type": "boolean"
+                        },
                         "replicas": {
                             "type": "integer"
                         },

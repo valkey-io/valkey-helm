@@ -330,6 +330,11 @@ replica:
     # starts. Use a majority of the Sentinel count, e.g. 2 for 3 pods.
     quorum: 2
 
+    # Allow topologies that cannot fail over safely: fewer than 3 Sentinels, a
+    # quorum of 1, or a single Valkey pod with nothing to promote. For
+    # development and test clusters only.
+    allowUnsafeTopology: false
+
     # Time in milliseconds after which an unresponsive master is considered down
     downAfterMilliseconds: 5000
 
