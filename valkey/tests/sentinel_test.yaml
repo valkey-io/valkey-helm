@@ -77,6 +77,158 @@ tests:
       - failedTemplate:
           errorPattern: "replica.sentinel.password is required.*"
 
+  - it: should refuse to disable sentinel authentication without TLS
+    set:
+      replica.sentinel.password: ""
+      replica.sentinel.auth.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "replica.sentinel.auth.enabled is false.*requires tls.enabled and tls.requireClientCertificate.*"
+
+  - it: should refuse to disable sentinel authentication without a client certificate requirement
+    set:
+      replica.sentinel.password: ""
+      replica.sentinel.auth.enabled: false
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "replica.sentinel.auth.enabled is false.*requires tls.enabled and tls.requireClientCertificate.*"
+
+  - it: should refuse a sentinel password that disabled authentication would never use
+    set:
+      replica.sentinel.auth.enabled: false
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "replica.sentinel.password is set but replica.sentinel.auth.enabled is false.*"
+
+  - it: should run sentinel without a password behind mutual TLS
+    set:
+      replica.sentinel.password: ""
+      replica.sentinel.auth.enabled: false
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: '/sentinel-auth/'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'user default off'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel sentinel-pass'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: '--user sentinel'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'tls-auth-clients no'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'tls-replication yes'
+      - matchRegex:
+          path: data["sentinel-ping.sh"]
+          pattern: 'valkey-cli --tls --cacert /tls/ca.crt --cert /tls/server.crt --key /tls/server.key -t 2 -p 26379 ping'
+      - notMatchRegex:
+          path: data["sentinel-ping.sh"]
+          pattern: 'REDISCLI_AUTH'
+      - notMatchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'REDISCLI_AUTH="\$SENTINEL_PASSWORD"'
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'sentinel failover mymaster'
+
+  - it: should keep the monitor credentials when only sentinel authentication is off
+    set:
+      replica.sentinel.password: ""
+      replica.sentinel.auth.enabled: false
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+        replicator:
+          permissions: "~* &* +psync +replconf"
+          password: "replpw"
+      replica.replicationUser: replicator
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'user sentinel on'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel auth-pass \$\{MASTER_SET\} "\$\{MONITOR_PASSWORD_ESCAPED\}"'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'echo "sentinel auth-user \$\{MASTER_SET\} replicator"'
+
+  - it: should ask the sentinels without a credential when sentinel authentication is off
+    set:
+      replica.sentinel.password: ""
+      replica.sentinel.auth.enabled: false
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: '/sentinel-auth/'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: '--user sentinel'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'addr=\$\(valkey-cli --tls --cacert /tls/ca.crt --cert /tls/server.crt --key /tls/server.key \\'
+
+  - it: should not mount a sentinel credential in the valkey pods when sentinel authentication is off
+    set:
+      replica.sentinel.password: ""
+      replica.sentinel.auth.enabled: false
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+    template: templates/statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "sentinel-auth")]
+      - exists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-scripts")]
+
+  - it: should not mount a sentinel credential in the sentinel pods when sentinel authentication is off
+    set:
+      replica.sentinel.password: ""
+      replica.sentinel.auth.enabled: false
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "sentinel-auth")]
+      - exists:
+          path: spec.template.spec.volumes[?(@.name == "RELEASE-NAME-valkey-tls")]
+
   - it: should deploy sentinel in an independent statefulset
     template: templates/sentinel-statefulset.yaml
     asserts:

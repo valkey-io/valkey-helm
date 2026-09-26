@@ -313,7 +313,8 @@ replica:
   # master through Sentinel (SENTINEL get-master-addr-by-name).
   sentinel:
     # Enable Sentinel (requires replica.enabled and at least one replica).
-    # The Sentinel endpoint always requires its dedicated password, independently of whether authentication is enabled for the Valkey data endpoint.
+    # The Sentinel endpoint requires its dedicated password, independently of whether authentication is enabled for the Valkey data endpoint,
+    # unless mutual TLS stands in for it (see replica.sentinel.auth).
     enabled: false
 
     # Number of Sentinel instances. Keep this at 3 or more so a majority can
@@ -349,9 +350,15 @@ replica:
     # and, because the same user replicates, +psync +replconf
     monitorUser: ""
 
+    # Authenticate the Sentinel endpoint with the dedicated password below.
+    # Can only be turned off with tls.enabled and tls.requireClientCertificate,
+    # where every connection is already authenticated by its client certificate.
+    auth:
+      enabled: true
+
     # Dedicated password for Sentinel's own ACL.
     # Do not reuse a Valkey user password because Sentinel permissions are independent from Valkey ACLs.
-    # This password is required whenever Sentinel is enabled.
+    # This password is required whenever Sentinel is enabled and replica.sentinel.auth.enabled is true.
     # When auth.usersExistingSecret is set, passwordKey is looked up in that Secret first.
     # This inline value is used as a fallback when the key is missing.
     password: ""

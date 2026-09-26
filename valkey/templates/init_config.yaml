@@ -306,9 +306,11 @@ data:
     # Without this, a pod that lost its volume would fall back to the pod index
     # and pod-0 would come back as a second writable master after a failover.
     master_from_sentinels() {
+      {{- if .Values.replica.sentinel.auth.enabled }}
       sentinel_password=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null) || return 1
+      {{- end }}
       peer="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-      addr=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+      addr=$({{ if .Values.replica.sentinel.auth.enabled }}REDISCLI_AUTH="$sentinel_password" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }}{{ if .Values.replica.sentinel.auth.enabled }} --user sentinel{{ end }} \
         -t 2 -h "$peer" -p {{ .Values.replica.sentinel.port }} \
         sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null || true)
       host=$(echo "$addr" | sed -n 1p)
