@@ -117,7 +117,7 @@ tests:
     asserts:
       - equal:
           path: spec.image
-          value: valkey/valkey:v0.6.0
+          value: valkey/valkey:v0.7.0
       - equal:
           path: spec.networking.tls.certificates.server.secretName
           value: RELEASE-NAME-tls
