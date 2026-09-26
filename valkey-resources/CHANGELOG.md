@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+### Changed
+
+- `appVersion` defaults to operator **v0.7.0** (up from v0.6.0). Upgrade the `valkey-operator` chart and apply the v0.7.0 CRDs first. See the [v0.7.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.0).
+- `kubeVersion` is now `>=1.32.0-0`, matching the operator.
+
+### Notes
+
+- No breaking ValkeyCluster API changes. The new fields can be set through the `cluster.spec` drop-in:
+  - `networking.tls.clientAuth` (`mode`, `certificateUser`) for mTLS and certificate-based ACL users.
+  - `networking.discovery.preferredEndpointType: Hostname` and `networking.clusterDomain` for hostname announce.
+  - `networking.tls.serverName` for the name the operator verifies.
+  - `config.cluster-node-timeout`, now user-settable. The operator no longer sets it to 2000 ms, so existing clusters move to the Valkey default of 15000 ms on upgrade.
+- Upgrading the operator rolls every ValkeyCluster once.
+
 ## 0.2.0
 
 ### Changed
