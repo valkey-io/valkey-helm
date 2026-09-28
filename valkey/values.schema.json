@@ -318,7 +318,10 @@
                             "type": "boolean"
                         }
                     }
-                }
+                },
+				"user": {
+					"type": "string"
+				}
             }
         },
         "nameOverride": {

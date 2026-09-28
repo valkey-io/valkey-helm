@@ -505,6 +505,9 @@ env: {}
 metrics:
   # Enable Prometheus exporter sidecar
   enabled: false
+  # Allow explicitly setting the metrics username if usersExistingSecret is set (optional)
+  # if not set will default to "default"
+  user: ""
   # Exporter configuration
   exporter:
     # Command to run in the metrics exporter container (overrides args)

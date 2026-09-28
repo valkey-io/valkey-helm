@@ -469,6 +469,66 @@ tests:
                 name: my-custom-secret
                 key: my-password-key
 
+  - it: should set REDIS_PASSWORD from metrics.user in metrics exporter when usersExistingSecret and metrics.user is set
+    set:
+      metrics.enabled: true
+      metrics.user: exporter
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+        exporter:
+          permissions: "+ping +info +config|get +client +slowlog +latency +memory|stats"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-custom-secret
+                key: exporter
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_USER
+            value: exporter
+
+  - it: should set REDIS_PASSWORD from metrics.user using custom passwordKey in metrics exporter when usersExistingSecret and metrics.user is set
+    set:
+      metrics.enabled: true
+      metrics.user: exporter
+      auth.enabled: true
+      auth.usersExistingSecret: "my-custom-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          passwordKey: "my-password-key"
+        exporter:
+          permissions: "+ping +info +config|get +client +slowlog +latency +memory|stats"
+          passwordKey: "my-exporter-password-key"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-custom-secret
+                key: my-exporter-password-key
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_USER
+            value: exporter
+
   - it: should not set runtimeClassName when empty
     set:
       runtimeClassName: ""
