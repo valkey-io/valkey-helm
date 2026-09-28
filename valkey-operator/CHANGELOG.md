@@ -4,7 +4,6 @@
 
 - Valkey Operator version defaults to v0.7.1. See the [v0.7.0](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.0) and [v0.7.1](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.1) release notes for the upstream changes.
 - The ClusterRole grants `delete` on `pods`. The operator uses it to replace a pod its StatefulSet can no longer replace.
-- `kubeVersion` is now `>=1.31.0-0`, the operator's minimum supported Kubernetes version.
 
 > **Note:** CRDs are not upgraded automatically by Helm. Apply the v0.7.1 CRDs before upgrading the chart, or the operator cannot finish the upgrade roll. See [UPGRADE.md](UPGRADE.md).
 

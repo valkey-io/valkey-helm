@@ -4,7 +4,7 @@ description: A Helm chart for the Valkey Operator
 type: application
 version: 0.7.0
 appVersion: "v0.7.1"
-kubeVersion: ">=1.31.0-0"
+kubeVersion: ">=1.20.0-0"
 home: https://valkey.io/valkey-helm/
 sources:
   - https://github.com/valkey-io/valkey-operator.git
