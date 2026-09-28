@@ -4,8 +4,8 @@
 
 ### Changed
 
-- `appVersion` defaults to operator **v0.7.0** (up from v0.6.0). Upgrade the `valkey-operator` chart and apply the v0.7.0 CRDs first. See the [v0.7.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.0).
-- `kubeVersion` is now `>=1.32.0-0`, matching the operator.
+- `appVersion` defaults to operator **v0.7.1** (up from v0.6.0). Upgrade the `valkey-operator` chart and apply the v0.7.1 CRDs first. See the [v0.7.0](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.0) and [v0.7.1](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.1) release notes.
+- `kubeVersion` is now `>=1.31.0-0`, matching the operator.
 
 ### Notes
 
