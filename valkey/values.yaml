@@ -113,6 +113,21 @@ initResources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
+# Init container that writes the Valkey configuration before the server starts
+initContainer:
+  # Image configuration. The init container runs a shell script, so set a
+  # repository when the Valkey image has no shell. Leave repository empty to
+  # use the Valkey image (image.*), in which case registry and tag are ignored.
+  image:
+    # Image registry
+    registry: ""
+    # Init container image repository (leave empty to use the Valkey image)
+    repository: ""
+    # Image pull policy (Always, IfNotPresent, Never), leave empty to use image.pullPolicy
+    pullPolicy: ""
+    # Image tag (leave empty to use .Chart.AppVersion)
+    tag: ""
+
 # Health probes for the main Valkey container.
 # Each probe is gated on its own `enabled` flag and rendered by the
 # `valkey.healthProbes` helper. The default handler is a `valkey-cli ping` exec
