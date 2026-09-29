@@ -1,0 +1,203 @@
+suite: init container image
+templates:
+  - templates/deploy_valkey.yaml
+  - templates/statefulset.yaml
+  - templates/sentinel-statefulset.yaml
+  - templates/init_config.yaml
+  - templates/sentinel-configmap.yaml
+  - templates/tests/auth.yaml
+# A fixed appVersion keeps the expected image references independent of the
+# chart's own release, so a version bump never touches this suite.
+chart:
+  appVersion: 7.7.7
+set:
+  image.registry: registry.example
+  image.repository: team/valkey
+  image.tag: "1.2.3"
+tests:
+  # Unset: the init container renders exactly as before the value existed.
+
+  - it: runs the Deployment init container from the Valkey image when initContainer.image is not set
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: registry.example/team/valkey:1.2.3
+
+  - it: runs the StatefulSet init container from the Valkey image when initContainer.image is not set
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: registry.example/team/valkey:1.2.3
+
+  - it: keeps the Valkey image when only initContainer.image.tag and registry are set
+    set:
+      initContainer.image.registry: ghcr.io
+      initContainer.image.tag: "2.0"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: registry.example/team/valkey:1.2.3
+
+  # Set: the init container runs from its own image.
+
+  - it: runs the Deployment init container from initContainer.image when a repository is set
+    set:
+      initContainer.image.registry: ghcr.io
+      initContainer.image.repository: example/init
+      initContainer.image.tag: "2.0"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: ghcr.io/example/init:2.0
+
+  - it: runs the StatefulSet init container from initContainer.image when a repository is set
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      initContainer.image.registry: ghcr.io
+      initContainer.image.repository: example/init
+      initContainer.image.tag: "2.0"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: ghcr.io/example/init:2.0
+
+  - it: defaults the init image tag to the chart appVersion, not to image.tag
+    set:
+      initContainer.image.repository: valkey/valkey
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: valkey/valkey:7.7.7
+
+  - it: keeps a digest pinned in initContainer.image.tag
+    set:
+      initContainer.image.registry: ghcr.io
+      initContainer.image.repository: example/init
+      initContainer.image.tag: "2.0@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: ghcr.io/example/init:2.0@sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+  - it: lets global.imageRegistry override the init image registry, as for every image
+    set:
+      global.imageRegistry: mirror.example
+      initContainer.image.registry: ghcr.io
+      initContainer.image.repository: example/init
+      initContainer.image.tag: "2.0"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: mirror.example/example/init:2.0
+
+  - it: uses initContainer.image.pullPolicy for the Deployment init container
+    set:
+      initContainer.image.repository: example/init
+      initContainer.image.pullPolicy: Never
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Never
+
+  - it: uses initContainer.image.pullPolicy for the StatefulSet init container
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      initContainer.image.repository: example/init
+      initContainer.image.pullPolicy: Never
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Never
+
+  - it: uses initContainer.image.pullPolicy even when the image itself falls back
+    set:
+      image.pullPolicy: IfNotPresent
+      initContainer.image.pullPolicy: Always
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
+
+  # Scope: only the init container moves.
+
+  - it: leaves the Deployment server container on the Valkey image and pull policy
+    set:
+      image.pullPolicy: IfNotPresent
+      initContainer.image.repository: example/init
+      initContainer.image.tag: "2.0"
+      initContainer.image.pullPolicy: Never
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example/team/valkey:1.2.3
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: IfNotPresent
+
+  - it: leaves the StatefulSet server container on the Valkey image
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      initContainer.image.repository: example/init
+      initContainer.image.tag: "2.0"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example/team/valkey:1.2.3
+
+  - it: leaves the Sentinel containers on the Valkey image, their scripts need its shell
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      replica.sentinel.enabled: true
+      replica.sentinel.password: sentinelpw
+      initContainer.image.repository: example/init
+      initContainer.image.tag: "2.0"
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example/team/valkey:1.2.3
+
+  - it: leaves the helm test pod on the Valkey image, its check runs valkey-cli from that image
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+      initContainer.image.repository: example/init
+      initContainer.image.tag: "2.0"
+    template: templates/tests/auth.yaml
+    asserts:
+      - equal:
+          path: spec.containers[0].image
+          value: registry.example/team/valkey:1.2.3
+
+  # The value is part of the schema, so a wrong type is refused up front.
+
+  - it: refuses an initContainer.image.repository that is not a string
+    set:
+      initContainer.image.repository: 5
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "initContainer[./]image[./]repository"
