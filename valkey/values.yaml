@@ -481,13 +481,10 @@ haproxy:
     type: ClusterIP
     # Port forwarding to the current master, for reads and writes
     port: 6379
-    # Port load balancing across all healthy nodes, for reads only
-    readPort: 6380
     # Optional annotations for the HAProxy service
     annotations: {}
-    # NodePort values (if service.type is NodePort)
+    # NodePort value (if service.type is NodePort)
     nodePort: 0
-    readNodePort: 0
     # ClusterIP value
     clusterIP: ""
     # Class of a load balancer implementation
@@ -507,8 +504,6 @@ haproxy:
     checkInterval: 2s
     # Maximum duration of a single health check
     checkTimeout: 5s
-    # Load balancing algorithm for the read port
-    readBalance: roundrobin
     timeout:
       connect: 5s
       client: 1m
@@ -518,21 +513,21 @@ haproxy:
       tunnel: 0s
 
   tls:
-    # How HAProxy treats TLS on the client side, only used when tls.enabled.
+    # With tls.enabled, HAProxy forwards the encrypted stream untouched and the
+    # client completes the handshake with the Valkey node itself, so clients
+    # must speak TLS and the server certificate has to be valid for the HAProxy
+    # service name as well, that being the name clients connect to.
     #
-    #   passthrough: HAProxy forwards the encrypted stream untouched and the
-    #                client completes the TLS handshake with the Valkey node
-    #                itself, so the connection stays encrypted end to end.
-    #                Clients must connect with TLS. The server certificate has
-    #                to be valid for the HAProxy service name as well, since
-    #                that is the name clients connect to.
-    #   bridge:      clients connect in plaintext and HAProxy speaks TLS to the
-    #                nodes on their behalf. Use this for clients that cannot do
-    #                TLS at all, and keep in mind the client leg is unencrypted.
-    mode: passthrough
-    # Certificate validation for the connections to the Valkey nodes, only used
-    # when tls.enabled is true. Either "required" (validate against
-    # tls.caPublicKey) or "none".
+    # Certificate validation for the health check connections to the nodes,
+    # only used when tls.enabled is true. Either "required" or "none".
+    #
+    # "required" validates against tls.caPublicKey and, because HAProxy checks
+    # each node separately, also that the certificate it gets back covers that
+    # pod's own DNS name. A certificate issued for the service name alone,
+    # which is the common case, fails that check and takes every backend down
+    # with "Server presented an SSL certificate different from the configured
+    # one". Use "none" for such a certificate, or add the pod names to it:
+    #   <release>-valkey-<index>.<release>-valkey-headless.<ns>.svc.<domain>
     verify: required
     # Key in tls.existingSecret holding the client certificate HAProxy presents
     # to the nodes, required when tls.requireClientCertificate is true. HAProxy

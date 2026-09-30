@@ -135,9 +135,6 @@
                         "maxconn": {
                             "type": "integer"
                         },
-                        "readBalance": {
-                            "type": "string"
-                        },
                         "timeout": {
                             "type": "object",
                             "properties": {
@@ -272,12 +269,6 @@
                         "port": {
                             "type": "integer"
                         },
-                        "readNodePort": {
-                            "type": "integer"
-                        },
-                        "readPort": {
-                            "type": "integer"
-                        },
                         "type": {
                             "type": "string"
                         }
@@ -288,13 +279,6 @@
                     "properties": {
                         "clientCertFile": {
                             "type": "string"
-                        },
-                        "mode": {
-                            "type": "string",
-                            "enum": [
-                                "passthrough",
-                                "bridge"
-                            ]
                         },
                         "verify": {
                             "type": "string",
@@ -910,8 +894,16 @@
                     ]
                 },
                 "unhealthyPodEvictionPolicy": {
-                    "type": ["string", "null"],
-                    "enum": ["IfHealthyBudget", "AlwaysAllow", "", null]
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "enum": [
+                        "IfHealthyBudget",
+                        "AlwaysAllow",
+                        "",
+                        null
+                    ]
                 }
             }
         },

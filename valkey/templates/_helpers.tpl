@@ -324,13 +324,12 @@ Returns the HAProxy container image
 
 {{/*
 Per-server TLS options for the HAProxy backends.
-In passthrough mode only the health check speaks TLS (check-ssl), the client
-stream is forwarded untouched. In bridge mode HAProxy originates TLS itself
-(ssl), so the data path is encrypted between HAProxy and the nodes.
+Only the health check speaks TLS (check-ssl). The client stream is forwarded
+untouched, so the client completes the handshake with the node itself and
+HAProxy never holds a client's identity.
 */}}
 {{- define "valkey.haproxy.serverTlsOptions" -}}
-{{- if .Values.tls.enabled }}
-{{- if eq .Values.haproxy.tls.mode "bridge" }} ssl{{ else }} check-ssl{{ end }}
+{{- if .Values.tls.enabled }} check-ssl
 {{- if eq .Values.haproxy.tls.verify "required" }} ca-file /tls/{{ .Values.tls.caPublicKey }} verify required
 {{- else }} verify none
 {{- end }}
@@ -347,7 +346,6 @@ Per-server certificate identity options for an HAProxy backend.
 {{- if and $root.Values.tls.enabled (eq $root.Values.haproxy.tls.verify "required") -}}
 {{- $host := printf "%s-%d.%s.%s.svc.%s" (include "valkey.fullname" $root) .index (include "valkey.headlessServiceName" $root) $root.Release.Namespace $root.Values.clusterDomain -}}
 {{- printf " verifyhost %s" $host -}}
-{{- if eq $root.Values.haproxy.tls.mode "bridge" }}{{ printf " sni str(%s)" $host }}{{ end -}}
 {{- end -}}
 {{- end -}}
 

@@ -28,13 +28,6 @@ spec:
       {{- if and (eq .Values.haproxy.service.type "NodePort") .Values.haproxy.service.nodePort }}
       nodePort: {{ .Values.haproxy.service.nodePort }}
       {{- end }}
-    - name: valkey-read
-      port: {{ .Values.haproxy.service.readPort }}
-      targetPort: valkey-read
-      protocol: TCP
-      {{- if and (eq .Values.haproxy.service.type "NodePort") .Values.haproxy.service.readNodePort }}
-      nodePort: {{ .Values.haproxy.service.readNodePort }}
-      {{- end }}
   selector:
     {{- include "valkey.haproxy.selectorLabels" . | nindent 4 }}
 {{- end }}

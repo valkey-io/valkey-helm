@@ -183,27 +183,21 @@ tests:
           path: data["haproxy.cfg"]
           pattern: '(?m)^\s*server .*(verifyhost| sni )'
 
-  - it: should expose a write and a read port
+  - it: should expose a write port
     template: templates/haproxy-service.yaml
     asserts:
-      - equal:
-          path: spec.ports[0].name
-          value: valkey-write
+      # Reads go to the valkey-read Service, which selects the same pods.
+      # A second data path through the proxy only adds health checks.
       - equal:
           path: spec.ports[0].port
           value: 6379
       - equal:
           path: spec.ports[0].targetPort
           value: valkey-write
-      - equal:
-          path: spec.ports[1].name
-          value: valkey-read
-      - equal:
-          path: spec.ports[1].port
-          value: 6380
-      - equal:
-          path: spec.ports[1].targetPort
-          value: valkey-read
+      - lengthEqual:
+          path: spec.ports
+          count: 1
+
 
   - it: should send writes to a single node if two ever look like the master
     template: templates/haproxy-configmap.yaml
@@ -211,9 +205,6 @@ tests:
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: 'backend valkey_master\n(.*\n)*?  balance first'
-      - matchRegex:
-          path: data["haproxy.cfg"]
-          pattern: 'backend valkey_replicas\n(.*\n)*?  balance roundrobin'
 
   - it: should make the TLS secret readable for the non-root user
     set:
@@ -250,6 +241,25 @@ tests:
           path: data["haproxy.cfg"]
           pattern: 'crt /tls/client.pem'
 
+  - it: should never originate TLS towards the nodes
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      # Only the health check speaks TLS. Terminating the client leg would put
+      # one proxy certificate in front of every client, so a node that maps a
+      # certificate to a user would give them all that user's rights.
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: '(?m)^\s*default-server .*[^k-]ssl '
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'sni str'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: '(?m)^\s*bind .*ssl'
+
   - it: should keep client TLS end to end by default
     set:
       tls.enabled: true
@@ -272,24 +282,6 @@ tests:
           path: data["haproxy.cfg"]
           pattern: ' sni '
 
-  - it: should originate TLS itself in bridge mode
-    set:
-      tls.enabled: true
-      tls.existingSecret: "valkey-tls"
-      haproxy.tls.mode: bridge
-    template: templates/haproxy-configmap.yaml
-    asserts:
-      - matchRegex:
-          path: data["haproxy.cfg"]
-          pattern: 'default-server .* ssl ca-file /tls/ca.crt verify required'
-      # Anchored on the default-server line: the comment above the check rules
-      # names check-ssl to explain why it is not used there.
-      - notMatchRegex:
-          path: data["haproxy.cfg"]
-          pattern: '(?m)^\s*default-server .*check-ssl'
-      - matchRegex:
-          path: data["haproxy.cfg"]
-          pattern: 'server RELEASE-NAME-valkey-0 .* verifyhost RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local sni str\(RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local\)'
 
   - it: should not add TLS options when TLS is disabled
     template: templates/haproxy-configmap.yaml
@@ -347,9 +339,6 @@ tests:
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: '\nbackend valkey_master\n(.*\n)*?  tcp-check send QUIT\\r\\n\n  tcp-check expect string role:master\n(  #.*\n)*  tcp-check expect string \+OK'
-      - matchRegex:
-          path: data["haproxy.cfg"]
-          pattern: '\nbackend valkey_replicas\n(.*\n)*?  tcp-check send QUIT\\r\\n\n  tcp-check expect string \+PONG\n(  #.*\n)*  tcp-check expect string \+OK'
 
   - it: should not answer to the valkey selectors
     template: templates/haproxy-deployment.yaml

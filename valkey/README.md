@@ -180,7 +180,9 @@ The health check is the failover mechanism, so no sidecar, no runtime package in
 **Services:**
 
 * `valkey-haproxy:6379`: reads and writes, always routed to the current master
-* `valkey-haproxy:6380`: reads, load balanced across all healthy nodes
+
+There is no separate read endpoint.
+`valkey-read` already load balances across every pod, so a second path through the proxy would only add a health check to each node without changing where the traffic lands.
 
 **Labels:**
 
@@ -203,17 +205,19 @@ The password is passed to HAProxy as an environment variable read from the exist
 
 **TLS:**
 
-With `tls.enabled`, `haproxy.tls.mode` decides what clients speak to HAProxy.
-
-`passthrough` (the default) forwards the encrypted stream untouched, so the client completes the TLS handshake with the Valkey node itself and the connection stays encrypted end to end.
+With `tls.enabled`, HAProxy forwards the encrypted stream untouched and the client completes the TLS handshake with the Valkey node itself, so the connection stays encrypted end to end.
 Clients connect with TLS exactly as they would to Valkey directly.
 Because they connect to the HAProxy service name, the server certificate must also be valid for it, so add a SAN such as `valkey-haproxy.<namespace>.svc.<clusterDomain>` next to the pod names.
 
-`bridge` is for clients that cannot do TLS at all: they connect in plaintext and HAProxy speaks TLS to the nodes on their behalf.
-The client leg is then unencrypted, so only use it where that is acceptable.
+HAProxy never terminates a client's TLS connection.
+Doing so would put one proxy certificate in front of every client, and on a node that maps a certificate to a user, every client would inherit that user's rights.
+It follows that clients which cannot speak TLS cannot use this proxy against a TLS enabled cluster, because the nodes themselves listen on the TLS port only.
 
-In both modes HAProxy health checks the nodes over TLS and validates their certificates against `tls.caPublicKey`.
-Set `haproxy.tls.verify: none` if the certificates do not cover the pod DNS names.
+HAProxy does speak TLS for its own health checks, and `haproxy.tls.verify` decides how far it validates the nodes.
+
+`required`, the default, validates the certificate against `tls.caPublicKey` and checks that it covers the DNS name of the pod being checked.
+That second part is what usually surprises people: HAProxy checks each node separately, so a certificate issued for the service name alone fails, and every backend goes down with `Server presented an SSL certificate different from the configured one`.
+Either add the pod names to the certificate, as `<release>-valkey-<index>.<release>-valkey-headless.<namespace>.svc.<clusterDomain>`, or set `haproxy.tls.verify: none`, which keeps the health check encrypted but stops validating what it is talking to.
 
 **Client certificates:**
 
@@ -597,19 +601,16 @@ tls:
 | haproxy.checkUser | string | `""` | Defaults to the 'default' user |
 | haproxy.service.type | string | `"ClusterIP"` |  |
 | haproxy.service.port | int | `6379` | Write port, follows the master |
-| haproxy.service.readPort | int | `6380` | Read port, load balanced |
 | haproxy.service.annotations | object | `{}` |  |
 | haproxy.config.maxconn | int | `4096` |  |
 | haproxy.config.checkInterval | string | `"2s"` | Time for HAProxy to notice a new master, on top of Sentinel's own detection |
 | haproxy.config.checkTimeout | string | `"5s"` |  |
 | haproxy.config.healthPort | int | `8404` | Serves /healthz for the Kubernetes probes, not published |
-| haproxy.config.readBalance | string | `"roundrobin"` |  |
 | haproxy.config.timeout.connect | string | `"5s"` |  |
 | haproxy.config.timeout.client | string | `"1m"` |  |
 | haproxy.config.timeout.server | string | `"1m"` |  |
 | haproxy.config.timeout.tunnel | string | `"0s"` | Keeps pub/sub connections open |
-| haproxy.tls.mode | string | `"passthrough"` | passthrough keeps TLS end to end, bridge accepts plaintext clients |
-| haproxy.tls.verify | string | `"required"` | Certificate validation towards the nodes |
+| haproxy.tls.verify | string | `"required"` | Certificate validation towards the nodes, including each pod name |
 | haproxy.tls.clientCertFile | string | `""` | Combined cert+key, required with tls.requireClientCertificate |
 | haproxy.podDisruptionBudget.enabled | bool | `false` | Keep HAProxy replicas available across node drains |
 | haproxy.podDisruptionBudget.minAvailable | int | `null` | Takes precedence over maxUnavailable |

@@ -70,9 +70,6 @@ spec:
             - name: valkey-write
               containerPort: {{ .Values.haproxy.service.port }}
               protocol: TCP
-            - name: valkey-read
-              containerPort: {{ .Values.haproxy.service.readPort }}
-              protocol: TCP
             - name: health
               containerPort: {{ .Values.haproxy.config.healthPort }}
               protocol: TCP
