@@ -181,8 +181,10 @@ The health check is the failover mechanism, so no sidecar, no runtime package in
 
 * `valkey-haproxy:6379`: reads and writes, always routed to the current master
 
-There is no separate read endpoint.
-`valkey-read` already load balances across every pod, so a second path through the proxy would only add a health check to each node without changing where the traffic lands.
+There is no separate read endpoint, `valkey-read` already load balances across every pod.
+It only drops a pod based on the pod's own probes, though, and the readiness probe is off by default.
+A pod that stops answering therefore keeps receiving reads until the liveness probe restarts it, which takes up to `livenessProbe.periodSeconds` times `livenessProbe.failureThreshold`, 30 seconds by default.
+If reads need to move off a failing pod faster than that, enable `readinessProbe` with a shorter period or a lower failure threshold.
 
 **Labels:**
 
