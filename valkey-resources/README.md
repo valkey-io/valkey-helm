@@ -1,16 +1,16 @@
 # valkey-resources
 
-![Version: 0.1.3](https://img.shields.io/badge/Version-0.1.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.4.0](https://img.shields.io/badge/AppVersion-v0.4.0-informational?style=flat-square)
+![Version: 0.3.0](https://img.shields.io/badge/Version-0.3.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.7.1](https://img.shields.io/badge/AppVersion-v0.7.1-informational?style=flat-square)
 
 Deploys a single operator managed `ValkeyCluster`. Does not install the operator.
 
 ## Prerequisites
 
-* Kubernetes 1.20+
+* Kubernetes 1.31+
 * Helm 3.5+
-* [valkey-operator](../valkey-operator/) **v0.4.0+** installed (CRDs present)
+* [valkey-operator](../valkey-operator/) **v0.7.1+** installed (CRDs present)
 
-Without matching CRDs the API server rejects `ValkeyCluster` on apply. Helm does not upgrade CRDs for you; apply the operator chart CRDs when moving to v0.4.0. See [CHANGELOG.md](CHANGELOG.md) and the [operator v0.4.0 notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.4.0).
+Without matching CRDs the API server rejects `ValkeyCluster` on apply. Helm does not upgrade CRDs for you; apply the operator chart CRDs when moving to v0.7.1. See [CHANGELOG.md](CHANGELOG.md) and the operator [v0.7.0](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.0) and [v0.7.1](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.1) notes.
 
 ## Install
 
@@ -23,7 +23,7 @@ helm install my-cluster valkey/valkey-resources -n valkey
 
 ### Examples
 
-Copy-paste values for common shapes live under [`examples/`](examples/) (operator v0.4.0+). Start with `minimal.yaml` and `scheduling-node-spread.yaml` for production node HA via `scheduling.node.spread`. See [`examples/README.md`](examples/README.md).
+Copy-paste values for common shapes live under [`examples/`](examples/) (operator v0.6.0+). Start with `minimal.yaml` and `scheduling-node-spread.yaml` for production node HA via `scheduling.node.spread`. See [`examples/README.md`](examples/README.md).
 
 ```bash
 helm install my-cluster ./valkey-resources -n valkey \
@@ -46,12 +46,14 @@ cluster:
   spec:
     shards: 3
     replicas: 1
-    tls:
-      certificate:
-        secretName: "{{ .Values.extraValues.tlsSecret }}"
+    networking:
+      tls:
+        certificates:
+          server:
+            secretName: "{{ .Values.extraValues.tlsSecret }}"
 ```
 
-### Operator v0.4.0 `cluster.spec` shape
+### `cluster.spec` scheduling and PDB shape (since operator v0.4.0)
 
 Placement and PDB fields changed in the CRD. Use the nested forms in values:
 

@@ -1,0 +1,58 @@
+# Valkey in high availability mode: one Valkey StatefulSet and an independent
+# three-pod Sentinel StatefulSet. Sentinel promotes a replica automatically.
+#
+#   helm install valkey ./valkey -f valkey/examples/ha-sentinel.yaml
+#
+# Clients resolve the current master through the valkey-sentinel service, see
+# the notes printed after the install.
+#
+# SECURITY: the passwords below are placeholders. Replace all three credentials
+# before installing anywhere real, or drop the inline passwords and point
+# auth.usersExistingSecret at a secret you manage. The dedicated Sentinel
+# credential is required and must match replica.sentinel.passwordKey:
+#
+#   kubectl create secret generic valkey-users \
+#     --from-literal=default=... --from-literal=replicator=... \
+#     --from-literal=sentinel=...
+
+replica:
+  enabled: true
+  # 2 replicas + 1 master
+  replicas: 2
+  persistence:
+    size: 1Gi
+
+  # Used both for replication and by Sentinel to monitor the nodes
+  replicationUser: replicator
+
+  sentinel:
+    enabled: true
+    replicas: 3
+    # Use a distinct credential for the Sentinel endpoint. In production,
+    # prefer auth.usersExistingSecret and set passwordKey instead.
+    password: "replace-with-a-sentinel-password"
+    quorum: 2
+
+auth:
+  enabled: true
+  aclUsers:
+    default:
+      permissions: "~* &* +@all"
+      password: "REPLACE-ME"
+    replicator:
+      # Sentinel needs all of these to monitor the nodes and to promote a
+      # replica, see replica.sentinel.monitorUser in values.yaml
+      permissions: >-
+        on ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof
+        +replicaof +config|rewrite +client|setname +client|kill +script|kill
+        +psync +replconf
+      password: "REPLACE-ME-TOO"
+
+# Spread the Sentinel quorum across nodes when the cluster has capacity.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/component: sentinel

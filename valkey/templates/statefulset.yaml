@@ -2,6 +2,7 @@
 {{- include "valkey.validateAuthConfig" . }}
 {{- include "valkey.validateReplicaPersistence" . }}
 {{- include "valkey.validateReplicaAuth" . }}
+{{- include "valkey.validateSentinelConfig" . }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -56,6 +57,7 @@ spec:
         {{- end }}
     spec:
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
+      terminationGracePeriodSeconds: {{ .Values.replica.terminationGracePeriodSeconds }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       {{- if .Values.priorityClassName }}
@@ -83,8 +85,23 @@ spec:
           volumeMounts:
             - name: valkey-data
               mountPath: /data
+            - name: valkey-conf
+              mountPath: /valkey-conf
             - name: scripts
               mountPath: /scripts
+            {{- if .Values.replica.sentinel.enabled }}
+            - name: sentinel-auth
+              mountPath: /sentinel-auth
+              readOnly: true
+            {{- end }}
+            {{- if and .Values.tls.enabled .Values.replica.sentinel.enabled }}
+            # This container asks Sentinel which node is the master, and over
+            # TLS that query needs the CA to verify the answer. Without Sentinel
+            # it makes no connection at all, so it gets no key material.
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+              readOnly: true
+            {{- end }}
             {{- if .Values.valkeyConfig }}
             - name: valkey-config
               mountPath: /usr/local/etc/valkey/valkey.conf
@@ -119,8 +136,15 @@ spec:
         - name: {{ include "valkey.fullname" . }}
           image: {{ include "valkey.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.replica.sentinel.enabled }}
+          # A wrapper that keeps the credential free master record on the data
+          # volume in step with the config Sentinel makes the server rewrite.
+          # It execs the server, so valkey-server is still PID 1.
+          command: [ "/scripts/valkey-start.sh" ]
+          {{- else }}
           command: [ "valkey-server" ]
-          args: [ "/data/conf/valkey.conf" ]
+          {{- end }}
+          args: [ "/valkey-conf/valkey.conf" ]
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
@@ -141,11 +165,30 @@ spec:
           {{- with (include "valkey.healthProbes" .) }}
           {{- . | nindent 10 }}
           {{- end }}
+          {{- if and .Values.replica.sentinel.enabled .Values.replica.sentinel.preStopFailover }}
+          lifecycle:
+            preStop:
+              exec:
+                command: [ "/sentinel-scripts/sentinel-prestop.sh" ]
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: valkey-data
               mountPath: /data
+            - name: valkey-conf
+              mountPath: /valkey-conf
+            {{- if .Values.replica.sentinel.enabled }}
+            - name: scripts
+              mountPath: /scripts
+            {{- end }}
+            {{- if and .Values.replica.sentinel.enabled .Values.replica.sentinel.preStopFailover }}
+            - name: sentinel-scripts
+              mountPath: /sentinel-scripts
+            - name: sentinel-auth
+              mountPath: /sentinel-auth
+              readOnly: true
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
@@ -153,6 +196,18 @@ spec:
             {{- if .Values.auth.enabled }}
             - name: valkey-acl
               mountPath: /etc/valkey
+            {{- if and .Values.replica.sentinel.enabled .Values.replica.sentinel.preStopFailover }}
+            {{- if .Values.auth.usersExistingSecret }}
+            - name: valkey-users-secret
+              mountPath: /valkey-users-secret
+              readOnly: true
+            {{- end }}
+            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            - name: valkey-auth-secret
+              mountPath: /valkey-auth-secret
+              readOnly: true
+            {{- end }}
+            {{- end }}
             {{- end }}
             {{- range $secret := .Values.extraValkeySecrets }}
             - name: {{ $secret.name }}-valkey
@@ -228,10 +283,42 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       volumes:
+        # Holds valkey.conf. Memory backed because the file carries the
+        # replication credentials in plain text, and CONFIG REWRITE rewrites
+        # them into it whenever Sentinel changes the topology.
+        - name: valkey-conf
+          emptyDir:
+            medium: Memory
         - name: scripts
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts
             defaultMode: 0555
+        {{- if .Values.replica.sentinel.enabled }}
+        - name: sentinel-scripts
+          configMap:
+            name: {{ include "valkey.fullname" . }}-sentinel-scripts
+            defaultMode: 0555
+        - name: sentinel-auth
+          projected:
+            defaultMode: 0400
+            sources:
+              {{- if .Values.auth.usersExistingSecret }}
+              - secret:
+                  name: {{ tpl .Values.auth.usersExistingSecret . }}
+                  optional: true
+                  items:
+                    - key: {{ .Values.replica.sentinel.passwordKey }}
+                      path: existing-password
+              {{- end }}
+              {{- if .Values.replica.sentinel.password }}
+              - secret:
+                  name: {{ include "valkey.fullname" . }}-auth
+                  optional: true
+                  items:
+                    - key: sentinel-password
+                      path: inline-password
+              {{- end }}
+        {{- end }}
         {{- if .Values.auth.enabled }}
         - name: valkey-acl
           emptyDir:

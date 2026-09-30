@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.3.0
+
+### Changed
+
+- `appVersion` defaults to operator **v0.7.1** (up from v0.6.0). Upgrade the `valkey-operator` chart and apply the v0.7.1 CRDs first. See the [v0.7.0](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.0) and [v0.7.1](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.1) release notes.
+
+### Notes
+
+- No breaking ValkeyCluster API changes. The new fields can be set through the `cluster.spec` drop-in:
+  - `networking.tls.clientAuth` (`mode`, `certificateUser`) for mTLS and certificate-based ACL users.
+  - `networking.discovery.preferredEndpointType: Hostname` and `networking.clusterDomain` for hostname announce.
+  - `networking.tls.serverName` for the name the operator verifies.
+  - `config.cluster-node-timeout`, now user-settable. The operator no longer sets it to 2000 ms, so existing clusters move to the Valkey default of 15000 ms on upgrade.
+- Upgrading the operator rolls every ValkeyCluster once.
+
+## 0.2.0
+
+### Changed
+
+- `appVersion` defaults to operator **v0.6.0** (up from v0.4.0). Workloads created from this chart must target a cluster whose ValkeyCluster CRD matches v0.6.0 (install or upgrade the `valkey-operator` chart / CRDs first). See the [v0.6.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.6.0).
+- Reworked [`examples/scheduling-zone-spread.yaml`](examples/scheduling-zone-spread.yaml) to use the first-class `scheduling.zone.spread` API (added in operator v0.5.0) instead of hand-written `topologySpreadConstraints`. The operator now owns the emitted constraints, and the example uses `shard.mode: Preferred` for soft, zone-aware placement.
+
+Breaking ValkeyCluster API change that matters for `cluster.spec` drop-in values:
+
+- TLS certificate reference moved from `spec.networking.tls.certificate.secretName` to `spec.networking.tls.certificates.server.secretName`. Update TLS-enabled clusters accordingly.
+
+### Notes
+
+- This release skips operator v0.5.0. If upgrading from a chart release on appVersion v0.4.0, note that v0.5.0 first moved `spec.tls` to `spec.networking.tls`; v0.6.0 then moved `certificate` to `certificates.server`. Both changes are reflected in the current examples and values.
+- Operator v0.5.0 also added the `scheduling.zone.spread` and `scheduling.zone.pinning` axes (zone-aware placement mirroring `scheduling.node.spread`). The `scheduling-zone-spread.yaml` example uses `zone.spread`; `zone.spread` and `zone.pinning` are mutually exclusive.
+
 ## 0.1.3
 
 ### Added
