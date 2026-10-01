@@ -16,6 +16,10 @@ templates:
   - templates/servicemonitor.yaml
   - templates/podmonitor.yaml
   - templates/prometheusrules.yaml
+  - templates/sentinel-statefulset.yaml
+  - templates/sentinel-service.yaml
+  - templates/sentinel-headless-service.yaml
+  - templates/sentinel-configmap.yaml
   - templates/tests/auth.yaml
 tests:
   - it: should not add an annotations block when commonAnnotations is empty
@@ -384,3 +388,77 @@ tests:
       - equal:
           path: metadata.annotations["example.com/enabled"]
           value: "true"
+
+  - it: should add commonAnnotations to the Sentinel StatefulSet but not to its pod template
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.password: "sentinelpw"
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+      workloadAnnotations:
+        example.com/owner: workload
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: workload
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+      - notExists:
+          path: spec.template.metadata.annotations["example.com/team"]
+
+  - it: should add commonAnnotations to the Sentinel Service and let replica.sentinel.service.annotations win
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.password: "sentinelpw"
+      replica.sentinel.service.annotations:
+        example.com/owner: sentinel
+      commonAnnotations:
+        example.com/owner: common
+        example.com/team: platform
+    template: templates/sentinel-service.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: sentinel
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the Sentinel headless Service
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.password: "sentinelpw"
+      commonAnnotations:
+        example.com/team: platform
+    template: templates/sentinel-headless-service.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
+
+  - it: should add commonAnnotations to the Sentinel scripts ConfigMap
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      replica.sentinel.enabled: true
+      replica.sentinel.password: "sentinelpw"
+      commonAnnotations:
+        example.com/team: platform
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
