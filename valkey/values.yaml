@@ -125,6 +125,9 @@ initContainer:
   # Image configuration. The init container runs a shell script, so set a
   # repository when the Valkey image has no shell. Leave repository empty to
   # use the Valkey image (image.*), in which case registry and tag are ignored.
+  # When Sentinel is enabled the init image must also contain valkey-cli, which
+  # the official Valkey image has and busybox does not; the init script refuses
+  # to start without it.
   image:
     # Image registry
     registry: ""

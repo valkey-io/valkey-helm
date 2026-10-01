@@ -23,7 +23,9 @@ A Helm chart for Kubernetes
 
 In every mode the Valkey pods start with an init container that writes the configuration with a shell script, from the Valkey image (`image`) by default.
 If your Valkey image has no shell, set `initContainer.image` to an image that has one, such as `busybox`.
-That moves only the init container: in Sentinel mode the server container and the Sentinel pods also run shell scripts from `image`, and the init script calls `valkey-cli`, so a Valkey image without a shell cannot be used there.
+That moves only the init container: in Sentinel mode the server container and the Sentinel pods also run shell scripts from `image`, so a Valkey image without a shell cannot be used there.
+When Sentinel is enabled the init image must also contain `valkey-cli`, which the init script uses to ask the Sentinels and the other nodes which of them is the master: the official Valkey image qualifies, `busybox` does not.
+The init script checks for the commands it needs before writing anything and exits with an error naming the missing ones.
 The `helm test` pods run a shell script from `image` as well.
 
 ### Standalone Mode (Default)
@@ -492,7 +494,7 @@ tls:
 | imagePullSecrets | list | `[]` |  |
 | initContainer.image.pullPolicy | string | `""` | Pull policy for the init container; empty uses image.pullPolicy |
 | initContainer.image.registry | string | `""` | Registry of the init container image |
-| initContainer.image.repository | string | `""` | Init container image, for a Valkey image without a shell; empty uses the Valkey image and ignores registry and tag |
+| initContainer.image.repository | string | `""` | Init container image, for a Valkey image without a shell; empty uses the Valkey image and ignores registry and tag; with Sentinel enabled it must contain valkey-cli |
 | initContainer.image.tag | string | `""` | Tag of the init container image; empty uses the chart appVersion |
 | initResources | object | `{}` |  |
 | livenessProbe.customProbe | object | `{}` | Full probe spec to replace the default valkey-cli ping handler and timing |
