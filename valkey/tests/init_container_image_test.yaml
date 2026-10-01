@@ -201,3 +201,40 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "initContainer[./]image[./]repository"
+
+  # Sentinel mode: the init script asks Sentinel and the other nodes who the
+  # master is through valkey-cli, so the init image must provide it. A missing
+  # valkey-cli must stop the script up front, by name, instead of reading as
+  # "nobody answered" and falling back to a recorded topology.
+
+  - it: names valkey-cli and initContainer.image when the Sentinel init script refuses a missing dependency
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      replica.sentinel.enabled: true
+      replica.sentinel.password: sentinelpw
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'valkey-cli'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'initContainer\.image'
+
+  - it: leaves the replica init script without a valkey-cli requirement when Sentinel is off
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'valkey-cli'
+
+  - it: leaves the standalone init script without a valkey-cli requirement
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'valkey-cli'
