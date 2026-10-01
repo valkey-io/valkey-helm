@@ -209,7 +209,7 @@ tests:
   # valkey-cli must stop the script up front, by name, instead of reading as
   # "nobody answered" and falling back to a recorded topology.
 
-  - it: names valkey-cli and initContainer.image when the Sentinel init script refuses a missing dependency
+  - it: refuses a missing dependency by name, on stderr, before the Sentinel init script writes anything
     set:
       replica.enabled: true
       replica.persistence.size: 1Gi
@@ -217,12 +217,20 @@ tests:
       replica.sentinel.password: sentinelpw
     template: templates/init_config.yaml
     asserts:
+      # The guard itself, not just its words: valkey-cli in the required list,
+      # a command -v probe per command, the non-empty check, one line on
+      # stderr naming the missing commands and initContainer.image, exit 1.
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'valkey-cli'
+          pattern: '(?m)^REQUIRED_COMMANDS="valkey-cli( [a-z0-9-]+)*"$'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'initContainer\.image'
+          pattern: '(?s)for COMMAND in \$REQUIRED_COMMANDS; do\n\s*command -v "\$COMMAND" >/dev/null 2>&1 \|\| MISSING_COMMANDS="\$MISSING_COMMANDS \$COMMAND"\ndone\nif \[ -n "\$MISSING_COMMANDS" \]; then\n\s*echo "ERROR: the init container image lacks\$MISSING_COMMANDS;[^\n]*initContainer\.image[^\n]*" >&2\n\s*exit 1\nfi'
+      # And it runs before the first write (the log file) and the first
+      # question to a Sentinel.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '(?s)if \[ -n "\$MISSING_COMMANDS" \]; then.*?exit 1.*?rm -f "\$LOGFILE".*?master_from_sentinels\(\)'
 
   - it: leaves the replica init script without a valkey-cli requirement when Sentinel is off
     set:
