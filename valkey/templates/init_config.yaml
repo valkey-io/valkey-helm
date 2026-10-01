@@ -138,6 +138,29 @@ data:
     # only durable topology left once the config moved to a memory backed
     # volume, and it is what breaks the cold start deadlock below.
     MASTER_MARKER="/data/conf/last-master"
+
+    # Sentinel mode asks the Sentinels and the other nodes who the master is
+    # through valkey-cli, and a call that fails reads as "nobody answered". On
+    # an image without valkey-cli, busybox for instance, every node would look
+    # down, and this pod would come up on the recorded topology, possibly as a
+    # second writable master. So refuse to run on an image that lacks any of
+    # the external commands this script calls, before anything is written.
+    # Plain echo rather than log(): log needs tee and the log file.
+    REQUIRED_COMMANDS="valkey-cli sed grep tr awk sleep cat date tee dirname mkdir mv rm"
+    {{- if .Values.auth.enabled }}
+    REQUIRED_COMMANDS="$REQUIRED_COMMANDS chmod touch"
+    {{- if .Values.auth.aclUsers }}
+    REQUIRED_COMMANDS="$REQUIRED_COMMANDS sha256sum cut"
+    {{- end }}
+    {{- end }}
+    MISSING_COMMANDS=""
+    for COMMAND in $REQUIRED_COMMANDS; do
+      command -v "$COMMAND" >/dev/null 2>&1 || MISSING_COMMANDS="$MISSING_COMMANDS $COMMAND"
+    done
+    if [ -n "$MISSING_COMMANDS" ]; then
+      echo "ERROR: the init container image lacks$MISSING_COMMANDS; with Sentinel enabled the init image must contain valkey-cli and the shell utilities this script uses, so set initContainer.image to an image that has them, such as the official Valkey image" >&2
+      exit 1
+    fi
     {{- end }}
     DATA_DIR="$(dirname "$VALKEY_CONFIG")"
 
