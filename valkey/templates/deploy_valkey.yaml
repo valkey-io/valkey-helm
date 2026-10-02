@@ -66,6 +66,8 @@ spec:
               {{- if .Values.dataStorage.subPath }}
               subPath: {{ .Values.dataStorage.subPath }}
               {{- end }}
+            - name: valkey-conf
+              mountPath: /valkey-conf
             - name: scripts
               mountPath: /scripts
             {{- if .Values.valkeyConfig }}
@@ -106,7 +108,7 @@ spec:
           image: {{ include "valkey.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: [ "valkey-server" ]
-          args: [ "/data/conf/valkey.conf" ]
+          args: [ "/valkey-conf/valkey.conf" ]
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
@@ -131,6 +133,8 @@ spec:
               {{- if .Values.dataStorage.subPath }}
               subPath: {{ .Values.dataStorage.subPath }}
               {{- end }}
+            - name: valkey-conf
+              mountPath: /valkey-conf
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
@@ -213,6 +217,11 @@ spec:
       {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:
+        # Holds valkey.conf, which init.sh generates there. Memory backed
+        # because the file can carry credentials in plain text.
+        - name: valkey-conf
+          emptyDir:
+            medium: Memory
         - name: scripts
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts
