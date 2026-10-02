@@ -72,6 +72,19 @@ Returns the Valkey container image
 {{- end -}}
 
 {{/*
+Returns the init container image, which is the Valkey container image unless
+initContainer.image.repository is set
+*/}}
+{{- define "valkey.initContainer.image" -}}
+{{- $image := .Values.initContainer.image }}
+{{- if $image.repository }}
+{{- include "valkey.common.image" (dict "image" (dict "registry" $image.registry "repository" $image.repository "tag" ($image.tag | default .Chart.AppVersion)) "global" .Values.global) }}
+{{- else }}
+{{- include "valkey.image" . }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Returns the Valkey exporter container image
 */}}
 {{- define "valkey.metrics.exporter.image" -}}
