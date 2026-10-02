@@ -128,7 +128,7 @@ Check if there are any users with inline passwords
     {{- $hasInlinePasswords = true -}}
   {{- end -}}
 {{- end -}}
-{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.password -}}
+{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.auth.enabled .Values.replica.sentinel.password -}}
   {{- $hasInlinePasswords = true -}}
 {{- end -}}
 {{- $hasInlinePasswords -}}
@@ -277,8 +277,17 @@ Validate sentinel configuration
   {{- if lt $bootstrapWait (add $sentinelStartup 30) }}
     {{- fail (printf "replica.sentinel.initialTopologyWaitSeconds (%d) must be at least 30s above replica.sentinel.startupTimeoutSeconds (%d), which is %d. A pod with no recorded topology has nothing to be told until the Sentinels finish that discovery and bootstrap a master, so a shorter wait leaves the init container exiting just before the answer arrives." $bootstrapWait $sentinelStartup (add $sentinelStartup 30)) }}
   {{- end }}
-  {{- if and (not .Values.replica.sentinel.password) (not .Values.auth.usersExistingSecret) }}
-    {{- fail "replica.sentinel.password is required when Sentinel is enabled, unless auth.usersExistingSecret supplies replica.sentinel.passwordKey." }}
+  {{- if .Values.replica.sentinel.auth.enabled }}
+    {{- if and (not .Values.replica.sentinel.password) (not .Values.auth.usersExistingSecret) }}
+      {{- fail "replica.sentinel.password is required when Sentinel is enabled, unless auth.usersExistingSecret supplies replica.sentinel.passwordKey. To run Sentinel without a password behind mutual TLS, set replica.sentinel.auth.enabled=false." }}
+    {{- end }}
+  {{- else }}
+    {{- if not (and .Values.tls.enabled .Values.tls.requireClientCertificate) }}
+      {{- fail "replica.sentinel.auth.enabled is false, which requires tls.enabled and tls.requireClientCertificate so that a client certificate authenticates every connection to the Sentinel port instead of a password." }}
+    {{- end }}
+    {{- if .Values.replica.sentinel.password }}
+      {{- fail "replica.sentinel.password is set but replica.sentinel.auth.enabled is false, so it would never be used. Remove the password or enable Sentinel authentication." }}
+    {{- end }}
   {{- end }}
   {{- if .Values.auth.enabled }}
     {{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}

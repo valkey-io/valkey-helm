@@ -114,6 +114,9 @@ Writes sent to the `valkey` service directly may land on a replica and fail with
 Set `replica.sentinel.password` to a credential used only for the Sentinel endpoint, even when Valkey authentication is disabled.
 With `auth.usersExistingSecret`, store that credential under `replica.sentinel.passwordKey` (default: `sentinel`) instead.
 Valkey user passwords are deliberately not accepted by Sentinel, so restrictions on application ACL users cannot be bypassed through Sentinel commands.
+
+With `tls.enabled` and `tls.requireClientCertificate`, every connection to the Sentinel port is already authenticated by a client certificate at the TLS handshake. Such deployments can set `replica.sentinel.auth.enabled: false` to run Sentinel without a password.
+
 Sentinel reaches the Valkey nodes as `replica.sentinel.monitorUser`, which defaults to `replica.replicationUser`.
 That user must be allowed to promote a replica, otherwise every failover aborts with `-failover-abort-slave-timeout`.
 A starting pod asks the other nodes which of them is the primary as the same user, rather than as `replica.replicationUser`, whose documented minimum cannot run `INFO`.
@@ -490,7 +493,8 @@ tls:
 | replica.sentinel.parallelSyncs | int | `1` |  |
 | replica.sentinel.monitorUser | string | `""` | Defaults to replica.replicationUser |
 | replica.sentinel.orphanCheckSeconds | int | `30` | How often each Sentinel looks for a node replicating from something it cannot see |
-| replica.sentinel.password | string | `""` | Dedicated Sentinel ACL password; required with Sentinel unless supplied by auth.usersExistingSecret |
+| replica.sentinel.auth.enabled | bool | `true` | Require the dedicated Sentinel password; may only be false with tls.enabled and tls.requireClientCertificate |
+| replica.sentinel.password | string | `""` | Dedicated Sentinel ACL password; required with Sentinel unless supplied by auth.usersExistingSecret or replica.sentinel.auth.enabled is false |
 | replica.sentinel.passwordKey | string | `"sentinel"` | Key containing the Sentinel password in auth.usersExistingSecret |
 | replica.sentinel.preStopFailover | bool | `true` | Fail over before a master pod is terminated |
 | replica.sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |

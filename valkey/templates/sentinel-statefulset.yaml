@@ -104,9 +104,11 @@ spec:
               mountPath: /sentinel-data
             - name: sentinel-scripts
               mountPath: /sentinel-scripts
+            {{- if .Values.replica.sentinel.auth.enabled }}
             - name: sentinel-auth
               mountPath: /sentinel-auth
               readOnly: true
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
@@ -135,6 +137,7 @@ spec:
           configMap:
             name: {{ include "valkey.fullname" . }}-sentinel-scripts
             defaultMode: 0555
+        {{- if .Values.replica.sentinel.auth.enabled }}
         - name: sentinel-auth
           projected:
             defaultMode: 0400
@@ -155,6 +158,7 @@ spec:
                     - key: sentinel-password
                       path: inline-password
               {{- end }}
+        {{- end }}
         {{- if .Values.tls.enabled }}
         - name: {{ include "valkey.fullname" . }}-tls
           secret:
