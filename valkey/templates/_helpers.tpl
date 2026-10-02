@@ -257,14 +257,19 @@ Validate sentinel configuration
     {{- fail "Sentinel requires replication. Please set replica.enabled=true along with replica.sentinel.enabled=true" }}
   {{- end }}
   {{- $sentinels := int .Values.replica.sentinel.replicas }}
+  {{- if not .Values.replica.sentinel.allowUnsafeTopology }}
   {{- if lt (int .Values.replica.replicas) 1 }}
-    {{- fail "Sentinel requires at least one Valkey replica. Please set replica.replicas to 1 or more." }}
+    {{- fail "Sentinel requires at least one Valkey replica. Please set replica.replicas to 1 or more, or replica.sentinel.allowUnsafeTopology=true for a development cluster." }}
   {{- end }}
   {{- if lt $sentinels 3 }}
-    {{- fail (printf "Sentinel requires at least 3 instances to form a quorum. Please set replica.sentinel.replicas to 3 or more (currently %d)." $sentinels) }}
+    {{- fail (printf "Sentinel requires at least 3 instances to form a quorum. Please set replica.sentinel.replicas to 3 or more (currently %d), or replica.sentinel.allowUnsafeTopology=true for a development cluster." $sentinels) }}
   {{- end }}
   {{- if lt (int .Values.replica.sentinel.quorum) 2 }}
-    {{- fail "replica.sentinel.quorum must be at least 2, a quorum of 1 allows a single Sentinel to trigger a failover on its own." }}
+    {{- fail "replica.sentinel.quorum must be at least 2, a quorum of 1 allows a single Sentinel to trigger a failover on its own. Set replica.sentinel.allowUnsafeTopology=true for a development cluster." }}
+  {{- end }}
+  {{- end }}
+  {{- if lt (int .Values.replica.sentinel.quorum) 1 }}
+    {{- fail "replica.sentinel.quorum must be at least 1." }}
   {{- end }}
   {{- if gt (int .Values.replica.sentinel.quorum) $sentinels }}
     {{- fail (printf "replica.sentinel.quorum (%d) cannot be greater than replica.sentinel.replicas (%d)." (int .Values.replica.sentinel.quorum) $sentinels) }}

@@ -55,6 +55,38 @@ tests:
       - failedTemplate:
           errorPattern: "quorum must be at least 2.*"
 
+  - it: should allow a single sentinel and a single valkey pod for development
+    set:
+      replica.sentinel.allowUnsafeTopology: true
+      replica.replicas: 0
+      replica.sentinel.replicas: 1
+      replica.sentinel.quorum: 1
+    templates:
+      - templates/statefulset.yaml
+      - templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: should still reject a quorum above the sentinel count with unsafe topology allowed
+    set:
+      replica.sentinel.allowUnsafeTopology: true
+      replica.sentinel.replicas: 1
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "quorum \\(2\\) cannot be greater than replica.sentinel.replicas \\(1\\).*"
+
+  - it: should still reject a quorum of zero with unsafe topology allowed
+    set:
+      replica.sentinel.allowUnsafeTopology: true
+      replica.sentinel.quorum: 0
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "quorum must be at least 1.*"
+
   - it: should fail when the monitor user is missing from aclUsers
     set:
       auth.enabled: true
