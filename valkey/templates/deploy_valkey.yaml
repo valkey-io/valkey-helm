@@ -187,13 +187,35 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.metrics.exporter.extraVolumeMounts }}
+          {{- if or .Values.metrics.exporter.extraVolumeMounts .Values.tls.enabled }}
           volumeMounts:
-            {{- toYaml . | nindent 12 }}
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- with .Values.metrics.exporter.extraVolumeMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           env:
             - name: REDIS_ALIAS
               value: {{ include "valkey.fullname" . }}
+            - name: REDIS_ADDR
+              {{- if .Values.tls.enabled }}
+              value: "rediss://localhost:{{ .Values.service.port }}"
+              {{- else }}
+              value: "redis://localhost:{{ .Values.service.port }}"
+              {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: REDIS_EXPORTER_TLS_CA_CERT_FILE
+              value: "/tls/{{ .Values.tls.caPublicKey }}"
+            - name: REDIS_EXPORTER_TLS_CLIENT_CERT_FILE
+              value: /tls/{{ .Values.tls.serverPublicKey }}
+            - name: REDIS_EXPORTER_TLS_CLIENT_KEY_FILE
+              value: /tls/{{ .Values.tls.serverKey }}
+            - name: REDIS_EXPORTER_TLS_SERVER_NAME
+              value: '{{ include "valkey.fullname" . }}'
+            {{- end }}
             {{- if .Values.auth.enabled }}
             - name: REDIS_PASSWORD
               valueFrom:

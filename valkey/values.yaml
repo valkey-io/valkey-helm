@@ -524,7 +524,7 @@ metrics:
       # Image pull policy (Always, IfNotPresent, Never)
       pullPolicy: IfNotPresent
       # Image tag (leave empty to use latest)
-      tag: "v1.79.0"
+      tag: "v1.88.0"
     resources: {}
       # Example:
       # limits:
