@@ -9,9 +9,9 @@ metadata:
     {{- if .Values.metrics.prometheusRule.extraLabels }}
     {{- toYaml .Values.metrics.prometheusRule.extraLabels | nindent 4 }}
     {{- end }}
-  {{- with .Values.metrics.prometheusRule.extraAnnotations }}
+  {{- with (include "valkey.annotations" (dict "context" $ "annotations" .Values.metrics.prometheusRule.extraAnnotations)) }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- . | nindent 4 }}
   {{- end }}
 spec:
 {{- with .Values.metrics.prometheusRule.rules }}

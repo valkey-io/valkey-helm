@@ -10,6 +10,10 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/component: sentinel
+  {{- with (include "valkey.annotations" (dict "context" $)) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
 data:
   sentinel-start.sh: |-
     #!/bin/sh
