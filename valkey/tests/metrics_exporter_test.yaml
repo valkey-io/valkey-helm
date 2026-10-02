@@ -1,0 +1,165 @@
+suite: metrics exporter connection settings
+templates:
+  - templates/deploy_valkey.yaml
+  - templates/statefulset.yaml
+  - templates/init_config.yaml
+  - templates/secret.yaml
+set:
+  metrics.enabled: true
+tests:
+  # The exporter runs as a sidecar and reaches Valkey on localhost, so the same
+  # settings apply to the standalone Deployment and the replicated StatefulSet.
+
+  - it: should point the Deployment exporter at the local Valkey port
+    set:
+      service.port: 6380
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_ADDR
+            value: redis://localhost:6380
+      - notExists:
+          path: spec.template.spec.containers[1].env[?(@.name == "REDIS_EXPORTER_TLS_CA_CERT_FILE")]
+      - notExists:
+          path: spec.template.spec.containers[1].volumeMounts
+
+  - it: should point the StatefulSet exporter at the local Valkey port
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      service.port: 6380
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_ADDR
+            value: redis://localhost:6380
+      - notExists:
+          path: spec.template.spec.containers[1].env[?(@.name == "REDIS_EXPORTER_TLS_CA_CERT_FILE")]
+      - notExists:
+          path: spec.template.spec.containers[1].volumeMounts
+
+  - it: should connect the Deployment exporter over TLS
+    set:
+      tls.enabled: true
+      tls.existingSecret: valkey-tls
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_ADDR
+            value: rediss://localhost:6379
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_CA_CERT_FILE
+            value: /tls/ca.crt
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_SERVER_NAME
+            value: RELEASE-NAME-valkey
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
+
+  - it: should connect the StatefulSet exporter over TLS
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      tls.enabled: true
+      tls.existingSecret: valkey-tls
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_ADDR
+            value: rediss://localhost:6379
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_CA_CERT_FILE
+            value: /tls/ca.crt
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_CLIENT_CERT_FILE
+            value: /tls/server.crt
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_CLIENT_KEY_FILE
+            value: /tls/server.key
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_SERVER_NAME
+            value: RELEASE-NAME-valkey
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
+
+  - it: should use metrics.exporter.tlsServerName for certificate verification
+    set:
+      tls.enabled: true
+      tls.existingSecret: valkey-tls
+      metrics.exporter.tlsServerName: valkey.example.svc.cluster.local
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_SERVER_NAME
+            value: valkey.example.svc.cluster.local
+
+  - it: should leave REDIS_ADDR to metrics.exporter.extraEnvs instead of setting it twice
+    set:
+      metrics.exporter.extraEnvs:
+        REDIS_ADDR: redis://localhost:6390
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_ADDR
+            value: redis://localhost:6390
+      - notContains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_ADDR
+            value: redis://localhost:6379
+
+  - it: should leave TLS settings to metrics.exporter.extraEnvs instead of setting them twice
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      tls.enabled: true
+      tls.existingSecret: valkey-tls
+      metrics.exporter.extraEnvs:
+        REDIS_EXPORTER_TLS_CLIENT_CERT_FILE: /client/tls.crt
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_CLIENT_CERT_FILE
+            value: /client/tls.crt
+      - notContains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_CLIENT_CERT_FILE
+            value: /tls/server.crt
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_CA_CERT_FILE
+            value: /tls/ca.crt

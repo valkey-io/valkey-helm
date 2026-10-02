@@ -247,10 +247,10 @@ spec:
       resources:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- $exporterTls := and .Values.tls.enabled (not $replicated) }}
-      {{- if or .Values.metrics.exporter.extraVolumeMounts $exporterTls }}
+      {{- $exporterEnvs := .Values.metrics.exporter.extraEnvs | default dict }}
+      {{- if or .Values.metrics.exporter.extraVolumeMounts .Values.tls.enabled }}
       volumeMounts:
-        {{- if $exporterTls }}
+        {{- if .Values.tls.enabled }}
         - name: {{ include "valkey.fullname" . }}-tls
           mountPath: /tls
         {{- end }}
@@ -261,23 +261,24 @@ spec:
       env:
         - name: REDIS_ALIAS
           value: {{ include "valkey.fullname" . }}
-        {{- if not $replicated }}
+        {{- /* A variable also set in metrics.exporter.extraEnvs is left to that
+               entry, so the container never carries the same name twice */}}
+        {{- if not (hasKey $exporterEnvs "REDIS_ADDR") }}
         - name: REDIS_ADDR
-          {{- if .Values.tls.enabled }}
-          value: "rediss://localhost:{{ .Values.service.port }}"
-          {{- else }}
-          value: "redis://localhost:{{ .Values.service.port }}"
-          {{- end }}
+          value: {{ printf "%s://localhost:%v" (ternary "rediss" "redis" .Values.tls.enabled) .Values.service.port | quote }}
         {{- end }}
-        {{- if $exporterTls }}
-        - name: REDIS_EXPORTER_TLS_CA_CERT_FILE
-          value: "/tls/{{ .Values.tls.caPublicKey }}"
-        - name: REDIS_EXPORTER_TLS_CLIENT_CERT_FILE
-          value: /tls/{{ .Values.tls.serverPublicKey }}
-        - name: REDIS_EXPORTER_TLS_CLIENT_KEY_FILE
-          value: /tls/{{ .Values.tls.serverKey }}
-        - name: REDIS_EXPORTER_TLS_SERVER_NAME
-          value: '{{ include "valkey.fullname" . }}'
+        {{- if .Values.tls.enabled }}
+        {{- $tlsEnvs := dict
+              "REDIS_EXPORTER_TLS_CA_CERT_FILE" (printf "/tls/%s" .Values.tls.caPublicKey)
+              "REDIS_EXPORTER_TLS_CLIENT_CERT_FILE" (printf "/tls/%s" .Values.tls.serverPublicKey)
+              "REDIS_EXPORTER_TLS_CLIENT_KEY_FILE" (printf "/tls/%s" .Values.tls.serverKey)
+              "REDIS_EXPORTER_TLS_SERVER_NAME" (.Values.metrics.exporter.tlsServerName | default (include "valkey.fullname" .)) }}
+        {{- range $name := list "REDIS_EXPORTER_TLS_CA_CERT_FILE" "REDIS_EXPORTER_TLS_CLIENT_CERT_FILE" "REDIS_EXPORTER_TLS_CLIENT_KEY_FILE" "REDIS_EXPORTER_TLS_SERVER_NAME" }}
+        {{- if not (hasKey $exporterEnvs $name) }}
+        - name: {{ $name }}
+          value: {{ index $tlsEnvs $name | quote }}
+        {{- end }}
+        {{- end }}
         {{- end }}
         {{- if .Values.auth.enabled }}
         - name: REDIS_PASSWORD
