@@ -3,6 +3,7 @@ templates:
   - templates/deploy_valkey.yaml
   - templates/statefulset.yaml
   - templates/init_config.yaml
+  - templates/secret.yaml
 tests:
   - it: renders default startup and liveness probes on the Deployment valkey container
     template: templates/deploy_valkey.yaml

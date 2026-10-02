@@ -2,6 +2,7 @@ suite: deployment configuration
 templates:
   - templates/deploy_valkey.yaml
   - templates/init_config.yaml
+  - templates/secret.yaml
 tests:
   - it: should not have auth volumes when auth disabled
     set:
@@ -568,3 +569,34 @@ tests:
           content:
             name: EXPORTER_QUOTED
             value: 'say "hi"'
+
+  - it: should not add a secret checksum when the chart renders no Secret
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/secret"]
+
+  - it: should roll the pod when an inline password changes
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          pattern: '^[0-9a-f]{32}$'
+
+  - it: should not add a secret checksum when passwords come from usersExistingSecret only
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/secret"]

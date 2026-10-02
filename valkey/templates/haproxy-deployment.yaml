@@ -31,6 +31,13 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
         checksum/config: {{ include (print $.Template.BasePath "/haproxy-configmap.yaml") . | sha256sum | trunc 32 | quote }}
+        {{- /* HAProxy reads the health check password once, at start-up, and
+               only uses one when authentication is enabled */}}
+        {{- if .Values.auth.enabled }}
+        {{- with (include "valkey.authSecretChecksum" .) }}
+        checksum/secret: {{ . | quote }}
+        {{- end }}
+        {{- end }}
     spec:
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}

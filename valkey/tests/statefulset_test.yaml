@@ -2,6 +2,7 @@ suite: statefulset configuration
 templates:
   - templates/statefulset.yaml
   - templates/init_config.yaml
+  - templates/secret.yaml
 tests:
   - it: should fail when replica enabled but no size provided
     set:
