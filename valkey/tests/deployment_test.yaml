@@ -521,3 +521,18 @@ tests:
       - matchRegex:
           path: data["init.sh"]
           pattern: 'VALKEY_CONFIG=\$\{VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf\}'
+
+  # The pod template is shared with the StatefulSet; this is the one mount
+  # that is deliberately left to the Deployment.
+  - it: should render extraVolumeMounts for the init container
+    set:
+      extraVolumeMounts:
+        - name: extra-data
+          mountPath: /extra/data
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: extra-data
+            mountPath: /extra/data

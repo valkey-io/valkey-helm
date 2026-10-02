@@ -439,3 +439,25 @@ tests:
       - equal:
           path: spec.template.spec.runtimeClassName
           value: "kata-containers"
+
+  # The pod template is shared with the Deployment, which is the only one of
+  # the two that adds extraVolumeMounts to the init container.
+  - it: should not render extraVolumeMounts for the init container
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      extraVolumeMounts:
+        - name: extra-data
+          mountPath: /extra/data
+    template: templates/statefulset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: extra-data
+            mountPath: /extra/data
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-data
+            mountPath: /extra/data
