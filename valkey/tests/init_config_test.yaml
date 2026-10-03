@@ -166,3 +166,44 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
           value: valkey
+
+  # The pod-index label only exists from Kubernetes 1.28. Without it, the
+  # scripts must take the ordinal from the hostname, never default to 0,
+  # which would make every pod configure itself as the master.
+  - it: should take the pod index from pod_index, with a hostname fallback, in init.sh
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'pod_index\(\) \{'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'index="\$\{pod_hostname##\*-\}"'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'POD_INDEX=\$\(pod_index\) \|\| exit 1'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'POD_INDEX:-0'
+
+  - it: should take the pod index from pod_index, with a hostname fallback, in valkey-start.sh
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      replica.sentinel.enabled: true
+      replica.sentinel.password: "sentinel-password"
+    asserts:
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'pod_index\(\) \{'
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'index="\$\{pod_hostname##\*-\}"'
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'POD_INDEX=\$\(pod_index\) \|\| exit 1\n\s*SELF="RELEASE-NAME-valkey-\$\{POD_INDEX\}\.'
+      - notMatchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'POD_INDEX:-0'
