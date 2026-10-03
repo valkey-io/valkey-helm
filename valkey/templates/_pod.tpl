@@ -63,6 +63,12 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+        # Where the ordinal comes from when the pod-index label is missing
+        # (Kubernetes < 1.28); unlike HOSTNAME, always set and never an FQDN
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
       {{- end }}
       volumeMounts:
         - name: {{ $dataVolume }}
@@ -144,6 +150,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         {{- end }}
         {{- range $key, $val := .Values.env }}
         - name: {{ $key }}

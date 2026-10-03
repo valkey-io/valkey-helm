@@ -38,18 +38,18 @@ data:
     # Prints this pod's StatefulSet ordinal. It comes from the
     # apps.kubernetes.io/pod-index label (POD_INDEX), which Kubernetes only
     # sets from 1.28; before that the variable is empty. Assuming 0 would make
-    # every pod take itself for pod-0, the master, so fall back to the
-    # hostname, which for a StatefulSet pod ends in the ordinal, and fail when
-    # neither gives a number.
+    # every pod take itself for pod-0, the master, so fall back to the pod
+    # name (POD_NAME, from metadata.name), which for a StatefulSet pod ends in
+    # the ordinal, and fail when neither gives a number.
     pod_index() {
       index="${POD_INDEX:-}"
       if [ -z "$index" ]; then
-        pod_hostname="${HOSTNAME:-}"
-        index="${pod_hostname##*-}"
+        pod_name="${POD_NAME:-}"
+        index="${pod_name##*-}"
       fi
       case "$index" in
         ""|*[!0-9]*)
-          echo "$(date) ERROR: cannot tell this pod's StatefulSet ordinal from the pod-index label ('${POD_INDEX:-}') or the hostname ('${HOSTNAME:-}')" >&2
+          echo "$(date) ERROR: cannot tell this pod's StatefulSet ordinal from the pod-index label ('${POD_INDEX:-}') or the pod name ('${POD_NAME:-}')" >&2
           return 1
           ;;
       esac
@@ -311,18 +311,18 @@ data:
     # Prints this pod's StatefulSet ordinal. It comes from the
     # apps.kubernetes.io/pod-index label (POD_INDEX), which Kubernetes only
     # sets from 1.28; before that the variable is empty. Assuming 0 would make
-    # every pod take itself for pod-0, the master, so fall back to the
-    # hostname, which for a StatefulSet pod ends in the ordinal, and fail when
-    # neither gives a number.
+    # every pod take itself for pod-0, the master, so fall back to the pod
+    # name (POD_NAME, from metadata.name), which for a StatefulSet pod ends in
+    # the ordinal, and fail when neither gives a number.
     pod_index() {
       index="${POD_INDEX:-}"
       if [ -z "$index" ]; then
-        pod_hostname="${HOSTNAME:-}"
-        index="${pod_hostname##*-}"
+        pod_name="${POD_NAME:-}"
+        index="${pod_name##*-}"
       fi
       case "$index" in
         ""|*[!0-9]*)
-          echo "$(date) ERROR: cannot tell this pod's StatefulSet ordinal from the pod-index label ('${POD_INDEX:-}') or the hostname ('${HOSTNAME:-}')" >&2
+          echo "$(date) ERROR: cannot tell this pod's StatefulSet ordinal from the pod-index label ('${POD_INDEX:-}') or the pod name ('${POD_NAME:-}')" >&2
           return 1
           ;;
       esac

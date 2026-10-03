@@ -462,3 +462,26 @@ tests:
           content:
             name: extra-data
             mountPath: /extra/data
+
+  # The pod_index fallback for clusters without the pod-index label reads
+  # POD_NAME; HOSTNAME is not guaranteed and can be an FQDN.
+  - it: should give the init and main containers the pod name
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
