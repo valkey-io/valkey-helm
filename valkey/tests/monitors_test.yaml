@@ -1,0 +1,51 @@
+suite: prometheus operator monitors
+templates:
+  - templates/servicemonitor.yaml
+  - templates/podmonitor.yaml
+set:
+  metrics.enabled: true
+  metrics.serviceMonitor.enabled: true
+  metrics.podMonitor.enabled: true
+tests:
+  - it: should set the ServiceMonitor scrape limits
+    set:
+      metrics.serviceMonitor.sampleLimit: 1000
+      metrics.serviceMonitor.targetLimit: 10
+    template: templates/servicemonitor.yaml
+    asserts:
+      - equal:
+          path: spec.sampleLimit
+          value: 1000
+      - equal:
+          path: spec.targetLimit
+          value: 10
+
+  - it: should set the PodMonitor scrape limits
+    set:
+      metrics.podMonitor.sampleLimit: 1000
+      metrics.podMonitor.targetLimit: 10
+    template: templates/podmonitor.yaml
+    asserts:
+      - equal:
+          path: spec.sampleLimit
+          value: 1000
+      - equal:
+          path: spec.targetLimit
+          value: 10
+      - equal:
+          path: spec.namespaceSelector.matchNames[0]
+          value: NAMESPACE
+
+  - it: should leave the limits out by default
+    asserts:
+      - notExists:
+          path: spec.sampleLimit
+      - notExists:
+          path: spec.targetLimit
+
+  - it: should reject a limit that is not a non-negative integer
+    set:
+      metrics.podMonitor.sampleLimit: true
+    template: templates/podmonitor.yaml
+    asserts:
+      - failedTemplate: {}

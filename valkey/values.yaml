@@ -736,9 +736,9 @@ metrics:
     additionalLabels: {}
     # Pod labels to copy onto the generated metrics
     podTargetLabels: []
-    # Maximum number of samples to collect per Pod scrape
+    # Maximum number of samples to collect per scrape (an integer; false for no limit)
     sampleLimit: false
-    # Maximum number of scrape targets allowed
+    # Maximum number of scrape targets allowed (an integer; false for no limit)
     targetLimit: false
   podMonitor:
     # Enable PodMonitor resource for scraping pod metrics
@@ -763,9 +763,9 @@ metrics:
     additionalLabels: {}
     # Pod labels to attach to the metrics
     podTargetLabels: []
-    # Maximum samples to scrape from each Pod
+    # Maximum samples to scrape from each Pod (an integer; false for no limit)
     sampleLimit: false
-    # Maximum number of pods to scrape
+    # Maximum number of pods to scrape (an integer; false for no limit)
     targetLimit: false
 
   # PrometheusRule configuration for alerting rules (used by kube-prometheus-stack)
