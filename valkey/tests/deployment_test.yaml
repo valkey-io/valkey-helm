@@ -536,3 +536,35 @@ tests:
           content:
             name: extra-data
             mountPath: /extra/data
+
+  - it: should escape env values that contain quotes or backslashes
+    set:
+      env:
+        QUOTED: 'say "hi"'
+        WINDOWS_PATH: 'C:\path\n'
+        NUMBER: 5
+      metrics.enabled: true
+      metrics.exporter.extraEnvs:
+        EXPORTER_QUOTED: 'say "hi"'
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUOTED
+            value: 'say "hi"'
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WINDOWS_PATH
+            value: 'C:\path\n'
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NUMBER
+            value: "5"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: EXPORTER_QUOTED
+            value: 'say "hi"'
