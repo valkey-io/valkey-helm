@@ -6,9 +6,11 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
 spec:
-  {{- if .Values.podDisruptionBudget.minAvailable }}
+  {{- /* Tested for null rather than truthiness, so that an explicit 0 is
+         kept: minAvailable takes precedence when both are set */}}
+  {{- if not (kindIs "invalid" .Values.podDisruptionBudget.minAvailable) }}
   minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
-  {{- else if .Values.podDisruptionBudget.maxUnavailable }}
+  {{- else if not (kindIs "invalid" .Values.podDisruptionBudget.maxUnavailable) }}
   maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
   {{- end }}
   selector:
