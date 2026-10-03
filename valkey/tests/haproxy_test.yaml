@@ -559,3 +559,13 @@ tests:
     asserts:
       - notExists:
           path: spec.template.metadata.annotations["checksum/secret"]
+
+  - it: should render several loadBalancerSourceRanges as a yaml list
+    set:
+      haproxy.service.type: LoadBalancer
+      haproxy.service.loadBalancerSourceRanges: ["10.0.0.1/32", "192.168.0.0/16"]
+    template: templates/haproxy-service.yaml
+    asserts:
+      - equal:
+          path: spec.loadBalancerSourceRanges
+          value: ["10.0.0.1/32", "192.168.0.0/16"]

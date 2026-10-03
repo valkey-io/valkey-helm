@@ -68,16 +68,17 @@ tests:
           of: Service
       - notExists:
           path: spec.loadBalancerClass
+  # More than one entry: a single one also rendered fine as a Go-formatted list
   - it: should be able to set loadBalancerSourceRanges
     set:
-      service.loadBalancerSourceRanges: ["10.0.0.1"]
+      service.loadBalancerSourceRanges: ["10.0.0.1/32", "192.168.0.0/16"]
     template: templates/service.yaml
     asserts:
       - isKind:
           of: Service
       - equal:
           path: spec.loadBalancerSourceRanges
-          value: ["10.0.0.1"]
+          value: ["10.0.0.1/32", "192.168.0.0/16"]
   - it: should have correct selector labels
     template: templates/service.yaml
     asserts:

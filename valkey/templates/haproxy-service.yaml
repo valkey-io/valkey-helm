@@ -17,8 +17,9 @@ spec:
   {{- if .Values.haproxy.service.loadBalancerClass }}
   loadBalancerClass: {{ .Values.haproxy.service.loadBalancerClass }}
   {{- end }}
-  {{- if .Values.haproxy.service.loadBalancerSourceRanges }}
-  loadBalancerSourceRanges: {{ .Values.haproxy.service.loadBalancerSourceRanges }}
+  {{- with .Values.haproxy.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   ports:
     - name: valkey-write
