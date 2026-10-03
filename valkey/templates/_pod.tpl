@@ -258,9 +258,18 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- $exporterEnvs := .Values.metrics.exporter.extraEnvs | default dict }}
-      {{- if or .Values.metrics.exporter.extraVolumeMounts .Values.tls.enabled }}
+      {{- /* A /tls mount the user already added through extraVolumeMounts
+             (the workaround before the chart mounted it) takes the place of
+             the chart's own, as Kubernetes rejects a repeated mountPath */}}
+      {{- $exporterTlsMount := .Values.tls.enabled }}
+      {{- range .Values.metrics.exporter.extraVolumeMounts }}
+      {{- if eq (.mountPath | toString | trimSuffix "/") "/tls" }}
+      {{- $exporterTlsMount = false }}
+      {{- end }}
+      {{- end }}
+      {{- if or .Values.metrics.exporter.extraVolumeMounts $exporterTlsMount }}
       volumeMounts:
-        {{- if .Values.tls.enabled }}
+        {{- if $exporterTlsMount }}
         - name: {{ include "valkey.fullname" . }}-tls
           mountPath: /tls
         {{- end }}

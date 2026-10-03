@@ -163,3 +163,46 @@ tests:
           content:
             name: REDIS_EXPORTER_TLS_CA_CERT_FILE
             value: /tls/ca.crt
+
+  - it: should not mount /tls twice when extraVolumeMounts already mounts it
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      tls.enabled: true
+      tls.existingSecret: valkey-tls
+      metrics.exporter.extraVolumeMounts:
+        - name: my-exporter-tls
+          mountPath: /tls/
+    template: templates/statefulset.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[1].volumeMounts
+          count: 1
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: my-exporter-tls
+            mountPath: /tls/
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_EXPORTER_TLS_CA_CERT_FILE
+            value: /tls/ca.crt
+
+  - it: should keep its own /tls mount next to unrelated extraVolumeMounts
+    set:
+      tls.enabled: true
+      tls.existingSecret: valkey-tls
+      metrics.exporter.extraVolumeMounts:
+        - name: other
+          mountPath: /other
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[1].volumeMounts
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: RELEASE-NAME-valkey-tls
+            mountPath: /tls
