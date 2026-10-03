@@ -135,6 +135,22 @@ Check if there are any users with inline passwords
 {{- end -}}
 
 {{/*
+Whether the chart renders its own auth Secret: for inline user passwords or
+auth.aclConfig when authentication is enabled, and for the inline Sentinel
+password, which Sentinel needs whether or not authentication is enabled.
+Returns "true" or "false".
+*/}}
+{{- define "valkey.renderAuthSecret" -}}
+{{- $userSecret := and .Values.auth.enabled (or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig) -}}
+{{- $sentinelSecret := and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.password -}}
+{{- if or $userSecret $sentinelSecret -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}
+
+{{/*
 Validate auth configuration
 */}}
 {{- define "valkey.validateAuthConfig" -}}
@@ -431,4 +447,16 @@ enabled, so callers should guard with `with`.
 {{- if $probes -}}
 {{- toYaml $probes -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+Checksum of the chart-managed auth Secret's data, so that pods restart when an
+inline password changes. Only the data is hashed, not the labels, so a chart
+version bump alone does not change it. Empty when the chart renders no Secret.
+*/}}
+{{- define "valkey.authSecretChecksum" -}}
+{{- $secret := include (print .Template.BasePath "/secret.yaml") . | fromYaml }}
+{{- with $secret.data }}
+{{- toJson . | sha256sum | trunc 32 }}
+{{- end }}
 {{- end -}}

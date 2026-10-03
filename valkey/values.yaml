@@ -657,6 +657,10 @@ metrics:
       # - --redis.addr=redis:6379
     # Port on which the metrics exporter will listen
     port: 9121
+    # Name the exporter expects in the Valkey server certificate when
+    # tls.enabled is true (it connects to localhost). Defaults to the Valkey
+    # service name; set it to a name the certificate covers, e.g. the FQDN.
+    tlsServerName: ""
     # Image configuration
     image:
       # Image registry

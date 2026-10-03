@@ -483,12 +483,13 @@ tls:
 | metrics.enabled | bool | `false` |  |
 | metrics.exporter.args | list | `[]` |  |
 | metrics.exporter.command | list | `[]` |  |
-| metrics.exporter.extraEnvs | object | `{}` |  |
+| metrics.exporter.extraEnvs | object | `{}` | Also overrides the REDIS_ADDR and REDIS_EXPORTER_TLS_* values the chart sets |
 | metrics.exporter.extraVolumeMounts | list | `[]` |  |
 | metrics.exporter.image.pullPolicy | string | `"IfNotPresent"` |  |
 | metrics.exporter.image.repository | string | `"ghcr.io/oliver006/redis_exporter"` |  |
 | metrics.exporter.image.tag | string | `"v1.88.0"` |  |
 | metrics.exporter.port | int | `9121` |  |
+| metrics.exporter.tlsServerName | string | `""` | Server name expected in the Valkey certificate with TLS, defaults to the service name |
 | metrics.exporter.resources | object | `{}` |  |
 | metrics.exporter.securityContext | object | `{}` |  |
 | metrics.podMonitor.additionalLabels | object | `{}` |  |

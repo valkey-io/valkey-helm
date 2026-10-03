@@ -4,6 +4,7 @@ templates:
   - templates/haproxy-deployment.yaml
   - templates/haproxy-service.yaml
   - templates/haproxy-pdb.yaml
+  - templates/secret.yaml
 set:
   replica.enabled: true
   replica.persistence.size: "5Gi"
@@ -523,3 +524,38 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  # HAProxy reads the health check password from an environment variable when
+  # it starts, so a password change has to restart it like the Valkey pods.
+  - it: should restart HAProxy when an inline password changes
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          pattern: '^[0-9a-f]{32}$'
+
+  - it: should not restart HAProxy for a Sentinel password change when auth is disabled
+    set:
+      replica.sentinel.password: "sentinel-password"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/secret"]
+
+  - it: should not add a secret checksum when passwords come from usersExistingSecret only
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/secret"]
