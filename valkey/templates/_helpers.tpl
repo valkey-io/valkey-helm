@@ -182,7 +182,21 @@ Validate auth configuration
 Headless service name for replication
 */}}
 {{- define "valkey.headlessServiceName" -}}
-{{ include "valkey.fullname" . }}-headless
+{{ include "valkey.fullnameWithSuffix" (list . "headless") }}
+{{- end -}}
+
+{{/*
+The full name with "-<suffix>" appended, the full name shortened first so
+that the result still fits the 63 characters allowed for Service, container
+and volume names. Names that already fit come out unchanged. Only for names
+with that limit: ConfigMaps, Secrets, Deployments and the like allow 253
+characters and keep the plain "<fullname>-<suffix>".
+Usage: include "valkey.fullnameWithSuffix" (list . "read")
+*/}}
+{{- define "valkey.fullnameWithSuffix" -}}
+{{- $root := index . 0 -}}
+{{- $suffix := index . 1 -}}
+{{- printf "%s-%s" (include "valkey.fullname" $root | trunc (int (sub 62 (len $suffix))) | trimSuffix "-") $suffix -}}
 {{- end -}}
 
 {{/*
@@ -314,7 +328,7 @@ app.kubernetes.io/name plus instance without a component, so sharing the Valkey
 name would make those select the proxy pods as well.
 */}}
 {{- define "valkey.haproxy.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "valkey.name" . }}-haproxy
+app.kubernetes.io/name: {{ printf "%s-haproxy" (include "valkey.name" . | trunc 55 | trimSuffix "-") }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: haproxy
 {{- end -}}

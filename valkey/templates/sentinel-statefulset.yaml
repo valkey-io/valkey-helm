@@ -111,7 +111,7 @@ spec:
               mountPath: /sentinel-auth
               readOnly: true
             {{- if .Values.tls.enabled }}
-            - name: {{ include "valkey.fullname" . }}-tls
+            - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
               mountPath: /tls
             {{- end }}
             {{- if .Values.auth.enabled }}
@@ -159,7 +159,7 @@ spec:
                       path: inline-password
               {{- end }}
         {{- if .Values.tls.enabled }}
-        - name: {{ include "valkey.fullname" . }}-tls
+        - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
           secret:
             secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
             defaultMode: 0400

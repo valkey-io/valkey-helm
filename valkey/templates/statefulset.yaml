@@ -14,7 +14,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  serviceName: {{ include "valkey.fullname" . }}-headless
+  serviceName: {{ include "valkey.headlessServiceName" . }}
   replicas: {{ add (int .Values.replica.replicas) 1 }}
   podManagementPolicy: OrderedReady
   {{- if .Values.replica.persistentVolumeClaimRetentionPolicy }}
