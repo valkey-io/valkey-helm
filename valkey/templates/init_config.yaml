@@ -230,6 +230,7 @@ data:
       echo "protected-mode no"
       echo "bind * -::*"
       echo "dir /data"
+      echo "loglevel {{ .Values.valkeyLogLevel }}"
     } >>"$VALKEY_CONFIG_TMP"
 
     {{- if .Values.auth.enabled }}
