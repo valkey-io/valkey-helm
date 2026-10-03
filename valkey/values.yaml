@@ -509,8 +509,12 @@ haproxy:
       client: 1m
       server: 1m
       # Timeout for long lived bidirectional connections such as pub/sub.
-      # 0s keeps SUBSCRIBE connections open indefinitely.
-      tunnel: 0s
+      # Replaces the client and server timeouts once a connection is
+      # established, so an idle SUBSCRIBE is only dropped after this long.
+      # 0 does not mean unlimited: it unsets the tunnel timeout and an idle
+      # SUBSCRIBE is dropped after the client timeout instead. 24d is close to
+      # the largest value HAProxy accepts.
+      tunnel: 24d
 
   tls:
     # With tls.enabled, HAProxy forwards the encrypted stream untouched and the

@@ -611,7 +611,7 @@ tls:
 | haproxy.config.timeout.connect | string | `"5s"` |  |
 | haproxy.config.timeout.client | string | `"1m"` |  |
 | haproxy.config.timeout.server | string | `"1m"` |  |
-| haproxy.config.timeout.tunnel | string | `"0s"` | Keeps pub/sub connections open |
+| haproxy.config.timeout.tunnel | string | `"24d"` | Keeps idle pub/sub connections open, 0 falls back to the client timeout |
 | haproxy.tls.verify | string | `"required"` | Certificate validation towards the nodes, including each pod name |
 | haproxy.tls.clientCertFile | string | `""` | Combined cert+key, required with tls.requireClientCertificate |
 | haproxy.podDisruptionBudget.enabled | bool | `false` | Keep HAProxy replicas available across node drains |

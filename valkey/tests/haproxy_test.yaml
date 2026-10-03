@@ -56,13 +56,23 @@ tests:
     asserts:
       - matchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'timeout tunnel 0s'
+          pattern: 'timeout tunnel 24d'
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: 'option clitcpka'
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: 'option srvtcpka'
+
+  - it: should refuse a tunnel timeout of zero
+    set:
+      haproxy.config.timeout.tunnel: 0s
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      # HAProxy reads 0 as unset, so idle SUBSCRIBE connections would be
+      # dropped after timeout.client instead of being kept open.
+      - failedTemplate:
+          errorPattern: "haproxy.config.timeout.tunnel must be greater than 0.*"
 
   - it: should render one server per valkey pod
     set:

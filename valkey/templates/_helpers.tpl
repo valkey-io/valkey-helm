@@ -362,6 +362,9 @@ Validate haproxy configuration
       {{- fail "haproxy.podDisruptionBudget needs either minAvailable or maxUnavailable. A budget with neither is accepted by the API server but protects nothing." }}
     {{- end }}
   {{- end }}
+  {{- if regexMatch "^0+(us|ms|s|m|h|d)?$" (toString .Values.haproxy.config.timeout.tunnel) }}
+    {{- fail "haproxy.config.timeout.tunnel must be greater than 0. HAProxy treats 0 as unset rather than unlimited, so idle pub/sub connections would be dropped after timeout.client. Use a large value such as 24d instead." }}
+  {{- end }}
   {{- if and .Values.tls.enabled .Values.tls.requireClientCertificate (not .Values.haproxy.tls.clientCertFile) }}
     {{- fail "tls.requireClientCertificate needs haproxy.tls.clientCertFile. HAProxy loads a client certificate from a single file holding both the certificate and its private key, which tls.serverPublicKey and tls.serverKey do not provide separately." }}
   {{- end }}
