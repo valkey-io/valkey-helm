@@ -229,6 +229,50 @@ tests:
           path: spec.template.spec.securityContext.fsGroup
           value: 99
 
+  - it: should mount only the CA certificate from the TLS secret
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      # The secret also holds the Valkey server's private key.
+      - equal:
+          path: spec.template.spec.volumes[1].secret.items
+          value:
+            - key: ca.crt
+              path: ca.crt
+
+  - it: should mount the client certificate bundle next to the CA
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+      haproxy.tls.clientCertFile: "client.pem"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[1].secret.items
+          value:
+            - key: ca.crt
+              path: ca.crt
+            - key: client.pem
+              path: client.pem
+
+  - it: should not mount the TLS secret when HAProxy reads nothing from it
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      haproxy.tls.verify: none
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      # An empty items list would project every key, so the volume is omitted.
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 1
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 1
+
   - it: should fail when a client certificate is required but no bundle is given
     set:
       tls.enabled: true

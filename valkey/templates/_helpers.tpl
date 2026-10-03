@@ -341,6 +341,24 @@ HAProxy never holds a client's identity.
 {{/*
 Per-server certificate identity options for an HAProxy backend.
 */}}
+{{/*
+Keys of tls.existingSecret that HAProxy reads, as a JSON list. Only these are
+mounted, so the Valkey server's private key never reaches the HAProxy pods.
+Must stay in line with the files valkey.haproxy.serverTlsOptions references.
+*/}}
+{{- define "valkey.haproxy.tlsFiles" -}}
+{{- $files := list -}}
+{{- if .Values.tls.enabled -}}
+{{- if eq .Values.haproxy.tls.verify "required" -}}
+{{- $files = append $files .Values.tls.caPublicKey -}}
+{{- end -}}
+{{- if .Values.tls.requireClientCertificate -}}
+{{- $files = append $files .Values.haproxy.tls.clientCertFile -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $files -}}
+{{- end -}}
+
 {{- define "valkey.haproxy.serverTlsIdentityOptions" -}}
 {{- $root := .root -}}
 {{- if and $root.Values.tls.enabled (eq $root.Values.haproxy.tls.verify "required") -}}

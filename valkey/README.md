@@ -216,6 +216,7 @@ Doing so would put one proxy certificate in front of every client, and on a node
 It follows that clients which cannot speak TLS cannot use this proxy against a TLS enabled cluster, because the nodes themselves listen on the TLS port only.
 
 HAProxy does speak TLS for its own health checks, and `haproxy.tls.verify` decides how far it validates the nodes.
+Of `tls.existingSecret` it only mounts what those checks read, `tls.caPublicKey` and, when set, `haproxy.tls.clientCertFile`, so the Valkey server's private key never reaches the HAProxy pods.
 
 `required`, the default, validates the certificate against `tls.caPublicKey` and checks that it covers the DNS name of the pod being checked.
 That second part is what usually surprises people: HAProxy checks each node separately, so a certificate issued for the service name alone fails, and every backend goes down with `Server presented an SSL certificate different from the configured one`.

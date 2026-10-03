@@ -1,5 +1,6 @@
 {{- if .Values.haproxy.enabled }}
 {{- include "valkey.validateHaproxyConfig" . }}
+{{- $tlsFiles := include "valkey.haproxy.tlsFiles" . | fromJsonArray }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -94,7 +95,7 @@ spec:
             - name: haproxy-config
               mountPath: /usr/local/etc/haproxy
               readOnly: true
-            {{- if .Values.tls.enabled }}
+            {{- if $tlsFiles }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
               readOnly: true
@@ -106,10 +107,17 @@ spec:
         - name: haproxy-config
           configMap:
             name: {{ include "valkey.fullname" . }}-haproxy
-        {{- if .Values.tls.enabled }}
+        {{- if $tlsFiles }}
         - name: {{ include "valkey.fullname" . }}-tls
           secret:
             secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            # Only the keys HAProxy reads. The secret also holds the Valkey
+            # server's private key, which the proxy has no use for.
+            items:
+              {{- range $tlsFiles }}
+              - key: {{ . }}
+                path: {{ . }}
+              {{- end }}
             # The group bit is what makes these readable for the non-root
             # HAProxy user, combined with fsGroup on the pod.
             defaultMode: 0440
