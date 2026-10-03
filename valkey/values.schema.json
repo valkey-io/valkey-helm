@@ -717,7 +717,14 @@
             "type": "string"
         },
         "valkeyLogLevel": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+                "debug",
+                "verbose",
+                "notice",
+                "warning",
+                "nothing"
+            ]
         },
         "workloadAnnotations": {
             "type": "object"
