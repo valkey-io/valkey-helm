@@ -66,6 +66,8 @@ spec:
               {{- if .Values.dataStorage.subPath }}
               subPath: {{ .Values.dataStorage.subPath }}
               {{- end }}
+            - name: valkey-conf
+              mountPath: /valkey-conf
             - name: scripts
               mountPath: /scripts
             {{- if .Values.valkeyConfig }}
@@ -106,7 +108,7 @@ spec:
           image: {{ include "valkey.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: [ "valkey-server" ]
-          args: [ "/data/conf/valkey.conf" ]
+          args: [ "/valkey-conf/valkey.conf" ]
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
@@ -131,6 +133,8 @@ spec:
               {{- if .Values.dataStorage.subPath }}
               subPath: {{ .Values.dataStorage.subPath }}
               {{- end }}
+            - name: valkey-conf
+              mountPath: /valkey-conf
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullname" . }}-tls
               mountPath: /tls
@@ -183,13 +187,35 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.metrics.exporter.extraVolumeMounts }}
+          {{- if or .Values.metrics.exporter.extraVolumeMounts .Values.tls.enabled }}
           volumeMounts:
-            {{- toYaml . | nindent 12 }}
+            {{- if .Values.tls.enabled }}
+            - name: {{ include "valkey.fullname" . }}-tls
+              mountPath: /tls
+            {{- end }}
+            {{- with .Values.metrics.exporter.extraVolumeMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           env:
             - name: REDIS_ALIAS
               value: {{ include "valkey.fullname" . }}
+            - name: REDIS_ADDR
+              {{- if .Values.tls.enabled }}
+              value: "rediss://localhost:{{ .Values.service.port }}"
+              {{- else }}
+              value: "redis://localhost:{{ .Values.service.port }}"
+              {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: REDIS_EXPORTER_TLS_CA_CERT_FILE
+              value: "/tls/{{ .Values.tls.caPublicKey }}"
+            - name: REDIS_EXPORTER_TLS_CLIENT_CERT_FILE
+              value: /tls/{{ .Values.tls.serverPublicKey }}
+            - name: REDIS_EXPORTER_TLS_CLIENT_KEY_FILE
+              value: /tls/{{ .Values.tls.serverKey }}
+            - name: REDIS_EXPORTER_TLS_SERVER_NAME
+              value: '{{ include "valkey.fullname" . }}'
+            {{- end }}
             {{- if .Values.auth.enabled }}
             - name: REDIS_PASSWORD
               valueFrom:
@@ -213,6 +239,11 @@ spec:
       {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:
+        # Holds valkey.conf, which init.sh generates there. Memory backed
+        # because the file can carry credentials in plain text.
+        - name: valkey-conf
+          emptyDir:
+            medium: Memory
         - name: scripts
           configMap:
             name: {{ include "valkey.fullname" . }}-init-scripts

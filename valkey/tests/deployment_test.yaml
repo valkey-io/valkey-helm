@@ -489,3 +489,35 @@ tests:
       - equal:
           path: spec.template.spec.runtimeClassName
           value: "gvisor"
+  # Regression test for #264: init.sh writes the config under /valkey-conf, so
+  # the Deployment has to mount that volume in both containers and start the
+  # server from the same path.
+  - it: should start valkey-server from the config init.sh generates
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [ "/valkey-conf/valkey.conf" ]
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: valkey-conf
+            mountPath: /valkey-conf
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-conf
+            mountPath: /valkey-conf
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-conf
+            emptyDir:
+              medium: Memory
+
+  - it: should generate the config at the path the Deployment starts from
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'VALKEY_CONFIG=\$\{VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf\}'
