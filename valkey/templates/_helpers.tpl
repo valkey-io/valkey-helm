@@ -36,12 +36,20 @@ Common labels
 {{- define "valkey.labels" -}}
 helm.sh/chart: {{ include "valkey.chart" . }}
 {{ include "valkey.selectorLabels" . }}
-{{- if or .Values.image.tag .Chart.AppVersion }}
-app.kubernetes.io/version: {{ mustRegexReplaceAllLiteral "@sha.*" .Values.image.tag "" | default .Chart.AppVersion | trunc 63 | trimSuffix "-" | quote }}
-{{- end }}
+{{- include "valkey.versionLabel" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- with .Values.commonLabels }}
 {{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{/*
+The app.kubernetes.io/version label, the Valkey version being deployed,
+shared by every resource of the release (with a leading newline)
+*/}}
+{{- define "valkey.versionLabel" -}}
+{{- if or .Values.image.tag .Chart.AppVersion }}
+app.kubernetes.io/version: {{ mustRegexReplaceAllLiteral "@sha.*" .Values.image.tag "" | default .Chart.AppVersion | trunc 63 | trimSuffix "-" | quote }}
 {{- end }}
 {{- end }}
 
@@ -340,6 +348,7 @@ Common labels for the HAProxy resources
 {{- define "valkey.haproxy.labels" -}}
 helm.sh/chart: {{ include "valkey.chart" . }}
 {{ include "valkey.haproxy.selectorLabels" . }}
+{{- include "valkey.versionLabel" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- with .Values.commonLabels }}
 {{- toYaml . | nindent 0 }}

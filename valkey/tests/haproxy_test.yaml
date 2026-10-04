@@ -584,3 +584,12 @@ tests:
     asserts:
       - notExists:
           path: spec.template.spec.runtimeClassName
+
+  - it: should label the HAProxy resources with the release's Valkey version
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "9.1.2"
+      - notExists:
+          path: spec.selector.matchLabels["app.kubernetes.io/version"]
