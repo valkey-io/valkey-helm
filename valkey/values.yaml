@@ -718,7 +718,8 @@ metrics:
     enabled: false
     # Port name or number to scrape metrics from
     port: metrics
-    # Extra labels for the ServiceMonitor resource
+    # Extra labels for the ServiceMonitor resource, e.g. the labels a
+    # Prometheus serviceMonitorSelector matches on (release: kube-prometheus-stack)
     extraLabels: {}
     # Extra annotations for the ServiceMonitor resource
     annotations: {}
@@ -732,8 +733,6 @@ metrics:
     metricRelabelings: []
     # Set honorLabels to true to preserve original metric labels
     honorLabels: false
-    # Extra labels to help Prometheus discover ServiceMonitor resources
-    additionalLabels: {}
     # Pod labels to copy onto the generated metrics
     podTargetLabels: []
     # Maximum number of samples to collect per scrape (an integer; false for no limit)
@@ -745,9 +744,10 @@ metrics:
     enabled: false
     # Port name or number to scrape metrics from
     port: metrics
-    # Extra labels for the ServiceMonitor resource
+    # Extra labels for the PodMonitor resource, e.g. the labels a
+    # Prometheus podMonitorSelector matches on (release: kube-prometheus-stack)
     extraLabels: {}
-    # Extra annotations for the ServiceMonitor resource
+    # Extra annotations for the PodMonitor resource
     annotations: {}
     # Frequency for Prometheus to scrape pod metrics
     interval: 30s
@@ -759,8 +759,6 @@ metrics:
     metricRelabelings: []
     # If true, keeps original labels from the pod metrics
     honorLabels: false
-    # Additional labels for Prometheus to find PodMonitor resources
-    additionalLabels: {}
     # Pod labels to attach to the metrics
     podTargetLabels: []
     # Maximum samples to scrape from each Pod (an integer; false for no limit)

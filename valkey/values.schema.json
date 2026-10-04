@@ -378,9 +378,6 @@
                 "podMonitor": {
                     "type": "object",
                     "properties": {
-                        "additionalLabels": {
-                            "type": "object"
-                        },
                         "annotations": {
                             "type": "object"
                         },
@@ -475,9 +472,6 @@
                 "serviceMonitor": {
                     "type": "object",
                     "properties": {
-                        "additionalLabels": {
-                            "type": "object"
-                        },
                         "annotations": {
                             "type": "object"
                         },

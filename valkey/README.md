@@ -492,10 +492,9 @@ tls:
 | metrics.exporter.tlsServerName | string | `""` | Server name expected in the Valkey certificate with TLS, defaults to the service name |
 | metrics.exporter.resources | object | `{}` |  |
 | metrics.exporter.securityContext | object | `{}` |  |
-| metrics.podMonitor.additionalLabels | object | `{}` |  |
 | metrics.podMonitor.annotations | object | `{}` |  |
 | metrics.podMonitor.enabled | bool | `false` |  |
-| metrics.podMonitor.extraLabels | object | `{}` |  |
+| metrics.podMonitor.extraLabels | object | `{}` | Labels on the PodMonitor, e.g. for a Prometheus `podMonitorSelector` |
 | metrics.podMonitor.honorLabels | bool | `false` |  |
 | metrics.podMonitor.interval | string | `"30s"` |  |
 | metrics.podMonitor.metricRelabelings | list | `[]` |  |
@@ -515,10 +514,9 @@ tls:
 | metrics.service.ports.http | int | `9121` |  |
 | metrics.service.type | string | `"ClusterIP"` |  |
 | metrics.service.appProtocol | string | `""` |  |
-| metrics.serviceMonitor.additionalLabels | object | `{}` |  |
 | metrics.serviceMonitor.annotations | object | `{}` |  |
 | metrics.serviceMonitor.enabled | bool | `false` |  |
-| metrics.serviceMonitor.extraLabels | object | `{}` |  |
+| metrics.serviceMonitor.extraLabels | object | `{}` | Labels on the ServiceMonitor, e.g. for a Prometheus `serviceMonitorSelector` |
 | metrics.serviceMonitor.honorLabels | bool | `false` |  |
 | metrics.serviceMonitor.interval | string | `"30s"` |  |
 | metrics.serviceMonitor.metricRelabelings | list | `[]` |  |
