@@ -216,7 +216,9 @@ Stable names and selectors for the independent Sentinel StatefulSet.
 {{- end -}}
 
 {{- define "valkey.sentinel.headlessServiceName" -}}
-{{- printf "%s-headless" (include "valkey.sentinel.fullname" . | trunc 54 | trimSuffix "-") -}}
+{{- /* Shortening "<fullname>-sentinel" first could cut "-sentinel" off
+       entirely and collide with the Valkey headless service */}}
+{{- include "valkey.fullnameWithSuffix" (list . "sentinel-hl") -}}
 {{- end -}}
 
 {{- define "valkey.sentinel.selectorLabels" -}}

@@ -7,6 +7,7 @@ templates:
   - templates/statefulset.yaml
   - templates/init_config.yaml
   - templates/secret.yaml
+  - templates/sentinel-headless-service.yaml
 set:
   # The longest full name the chart produces; every suffixed name must
   # still fit the 63 characters Kubernetes allows for Service, container,
@@ -96,3 +97,12 @@ tests:
             configMap:
               name: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-init-scripts
               defaultMode: 0555
+
+  # Shortening "<fullname>-sentinel" to make room for a headless suffix used
+  # to cut "-sentinel" off and give both headless services the same name.
+  - it: should keep the Sentinel headless service name distinct and within 63 characters
+    template: templates/sentinel-headless-service.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: '^a{51}-sentinel-hl$'
