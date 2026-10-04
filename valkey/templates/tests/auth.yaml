@@ -1,5 +1,6 @@
 {{- if .Values.auth.enabled }}
-{{- if include "valkey.hasInlinePasswords" . | eq "true" }}
+{{- /* The first user with an inline password. valkey.hasInlinePasswords also
+       counts the Sentinel password, which gives no user to test with. */}}
 {{- $firstUsername := "" }}
 {{- range $username, $user := .Values.auth.aclUsers }}
   {{- if $user.password }}
@@ -8,6 +9,7 @@
     {{- end }}
   {{- end }}
 {{- end }}
+{{- if $firstUsername }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -19,9 +21,18 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   restartPolicy: Never
+  {{- include "valkey.imagePullSecrets" . | nindent 2 }}
+  automountServiceAccountToken: false
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
   containers:
     - name: test-auth
       image: {{ include "valkey.image" . | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       command:
         - sh
         - -c
@@ -35,7 +46,7 @@ spec:
 
           {{- if .Values.tls.enabled }}
           # TLS flags
-          TLS_FLAGS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }}"
+          TLS_FLAGS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }}{{ if .Values.tls.requireClientCertificate }} --cert /tls/{{ .Values.tls.serverPublicKey }} --key /tls/{{ .Values.tls.serverKey }}{{ end }}"
           {{- else }}
           TLS_FLAGS=""
           {{- end }}
@@ -82,8 +93,8 @@ spec:
     {{- end }}
 {{- end }}
 {{- end }}
----
 {{- if and .Values.auth.enabled .Values.auth.usersExistingSecret }}
+---
 apiVersion: v1
 kind: Pod
 metadata:
@@ -95,9 +106,18 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   restartPolicy: Never
+  {{- include "valkey.imagePullSecrets" . | nindent 2 }}
+  automountServiceAccountToken: false
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
   containers:
     - name: test-auth
       image: {{ include "valkey.image" . | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       command:
         - sh
         - -c
@@ -107,7 +127,7 @@ spec:
 
           {{- if .Values.tls.enabled }}
           # TLS flags
-          TLS_FLAGS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }}"
+          TLS_FLAGS="--tls --cacert /tls/{{ .Values.tls.caPublicKey }}{{ if .Values.tls.requireClientCertificate }} --cert /tls/{{ .Values.tls.serverPublicKey }} --key /tls/{{ .Values.tls.serverKey }}{{ end }}"
           {{- else }}
           TLS_FLAGS=""
           {{- end }}
