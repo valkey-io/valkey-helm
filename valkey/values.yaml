@@ -581,7 +581,11 @@ haproxy:
     readOnlyRootFilesystem: true
     runAsNonRoot: true
 
-  # Scheduling for the HAProxy pods, falls back to the top level values
+  # Scheduling for the HAProxy pods. nodeSelector and tolerations fall back
+  # to the top level values when left empty; affinity and
+  # topologySpreadConstraints do not, as those written for the Valkey pods
+  # select the Valkey pods' labels. priorityClassName and runtimeClassName
+  # come from the top level values.
   nodeSelector: {}
   affinity: {}
   tolerations: []

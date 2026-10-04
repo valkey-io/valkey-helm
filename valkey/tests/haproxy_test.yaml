@@ -569,3 +569,18 @@ tests:
       - equal:
           path: spec.loadBalancerSourceRanges
           value: ["10.0.0.1/32", "192.168.0.0/16"]
+
+  - it: should use the top level runtimeClassName like the Valkey and Sentinel pods
+    set:
+      runtimeClassName: gvisor
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.runtimeClassName
+          value: gvisor
+
+  - it: should leave runtimeClassName unset by default
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.runtimeClassName
