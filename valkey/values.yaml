@@ -581,7 +581,11 @@ haproxy:
     readOnlyRootFilesystem: true
     runAsNonRoot: true
 
-  # Scheduling for the HAProxy pods, falls back to the top level values
+  # Scheduling for the HAProxy pods. nodeSelector and tolerations fall back
+  # to the top level values when left empty; affinity and
+  # topologySpreadConstraints do not, as those written for the Valkey pods
+  # select the Valkey pods' labels. priorityClassName and runtimeClassName
+  # come from the top level values.
   nodeSelector: {}
   affinity: {}
   tolerations: []
@@ -669,7 +673,7 @@ metrics:
       repository: oliver006/redis_exporter
       # Image pull policy (Always, IfNotPresent, Never)
       pullPolicy: IfNotPresent
-      # Image tag (leave empty to use latest)
+      # Image tag (required when metrics.enabled is true)
       tag: "v1.88.0"
     resources: {}
       # Example:
@@ -718,7 +722,8 @@ metrics:
     enabled: false
     # Port name or number to scrape metrics from
     port: metrics
-    # Extra labels for the ServiceMonitor resource
+    # Extra labels for the ServiceMonitor resource, e.g. the labels a
+    # Prometheus serviceMonitorSelector matches on (release: kube-prometheus-stack)
     extraLabels: {}
     # Extra annotations for the ServiceMonitor resource
     annotations: {}
@@ -732,22 +737,21 @@ metrics:
     metricRelabelings: []
     # Set honorLabels to true to preserve original metric labels
     honorLabels: false
-    # Extra labels to help Prometheus discover ServiceMonitor resources
-    additionalLabels: {}
     # Pod labels to copy onto the generated metrics
     podTargetLabels: []
-    # Maximum number of samples to collect per Pod scrape
+    # Maximum number of samples to collect per scrape (an integer; false for no limit)
     sampleLimit: false
-    # Maximum number of scrape targets allowed
+    # Maximum number of scrape targets allowed (an integer; false for no limit)
     targetLimit: false
   podMonitor:
     # Enable PodMonitor resource for scraping pod metrics
     enabled: false
     # Port name or number to scrape metrics from
     port: metrics
-    # Extra labels for the ServiceMonitor resource
+    # Extra labels for the PodMonitor resource, e.g. the labels a
+    # Prometheus podMonitorSelector matches on (release: kube-prometheus-stack)
     extraLabels: {}
-    # Extra annotations for the ServiceMonitor resource
+    # Extra annotations for the PodMonitor resource
     annotations: {}
     # Frequency for Prometheus to scrape pod metrics
     interval: 30s
@@ -759,13 +763,11 @@ metrics:
     metricRelabelings: []
     # If true, keeps original labels from the pod metrics
     honorLabels: false
-    # Additional labels for Prometheus to find PodMonitor resources
-    additionalLabels: {}
     # Pod labels to attach to the metrics
     podTargetLabels: []
-    # Maximum samples to scrape from each Pod
+    # Maximum samples to scrape from each Pod (an integer; false for no limit)
     sampleLimit: false
-    # Maximum number of pods to scrape
+    # Maximum number of pods to scrape (an integer; false for no limit)
     targetLimit: false
 
   # PrometheusRule configuration for alerting rules (used by kube-prometheus-stack)

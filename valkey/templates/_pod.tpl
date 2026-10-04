@@ -49,7 +49,7 @@ spec:
   securityContext:
     {{- toYaml .Values.podSecurityContext | nindent 4 }}
   initContainers:
-    - name: {{ include "valkey.fullname" . }}-init
+    - name: {{ include "valkey.fullnameWithSuffix" (list . "init") }}
       image: {{ include "valkey.image" . }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
       {{- with .Values.securityContext }}
@@ -89,7 +89,7 @@ spec:
         # This container asks Sentinel which node is the master, and over
         # TLS that query needs the CA to verify the answer. Without Sentinel
         # it makes no connection at all, so it gets no key material.
-        - name: {{ include "valkey.fullname" . }}-tls
+        - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
           mountPath: /tls
           readOnly: true
         {{- end }}
@@ -194,7 +194,7 @@ spec:
           readOnly: true
         {{- end }}
         {{- if .Values.tls.enabled }}
-        - name: {{ include "valkey.fullname" . }}-tls
+        - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
           mountPath: /tls
         {{- end }}
         {{- if .Values.auth.enabled }}
@@ -270,7 +270,7 @@ spec:
       {{- if or .Values.metrics.exporter.extraVolumeMounts $exporterTlsMount }}
       volumeMounts:
         {{- if $exporterTlsMount }}
-        - name: {{ include "valkey.fullname" . }}-tls
+        - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
           mountPath: /tls
         {{- end }}
         {{- with .Values.metrics.exporter.extraVolumeMounts }}
@@ -376,7 +376,7 @@ spec:
         defaultMode: {{ .defaultMode | default 0440 }}
     {{- end }}
     {{- if .Values.tls.enabled }}
-    - name: {{ include "valkey.fullname" . }}-tls
+    - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
       secret:
         secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
         defaultMode: 0400

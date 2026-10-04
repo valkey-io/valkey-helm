@@ -191,7 +191,7 @@ tests:
     asserts:
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-valkey-sentinel-headless
+          value: RELEASE-NAME-valkey-sentinel-hl
       - equal:
           path: spec.clusterIP
           value: None
@@ -368,7 +368,7 @@ tests:
           pattern: 'sentinel get-master-addr-by-name mymaster'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'peer="RELEASE-NAME-valkey-sentinel-headless\.NAMESPACE\.svc\.cluster\.local"'
+          pattern: 'peer="RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
       - notMatchRegex:
           path: data["init.sh"]
           pattern: 'replica\.sentinel\.replicas'
@@ -432,7 +432,7 @@ tests:
     asserts:
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: '-h RELEASE-NAME-valkey-sentinel-headless -p 26379 sentinel failover mymaster'
+          pattern: '-h RELEASE-NAME-valkey-sentinel-hl -p 26379 sentinel failover mymaster'
 
   - it: should escape sentinel configuration credentials
     template: templates/sentinel-configmap.yaml

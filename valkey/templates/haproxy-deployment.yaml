@@ -45,6 +45,9 @@ spec:
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName | quote }}
       {{- end }}
+      {{- if .Values.runtimeClassName }}
+      runtimeClassName: {{ .Values.runtimeClassName | quote }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.haproxy.podSecurityContext | nindent 8 }}
       {{- with .Values.haproxy.extraInitContainers }}
@@ -103,7 +106,7 @@ spec:
               mountPath: /usr/local/etc/haproxy
               readOnly: true
             {{- if $tlsFiles }}
-            - name: {{ include "valkey.fullname" . }}-tls
+            - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
               mountPath: /tls
               readOnly: true
             {{- end }}
@@ -115,7 +118,7 @@ spec:
           configMap:
             name: {{ include "valkey.fullname" . }}-haproxy
         {{- if $tlsFiles }}
-        - name: {{ include "valkey.fullname" . }}-tls
+        - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
           secret:
             secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
             # Only the keys HAProxy reads. The secret also holds the Valkey

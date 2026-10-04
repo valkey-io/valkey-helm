@@ -206,3 +206,19 @@ tests:
           content:
             name: RELEASE-NAME-valkey-tls
             mountPath: /tls
+
+  - it: should fail with a clear message when the exporter image tag is empty
+    set:
+      metrics.exporter.image.tag: ""
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.exporter.image.tag must not be empty"
+
+  - it: should not require the exporter image tag when metrics are disabled
+    set:
+      metrics.enabled: false
+      metrics.exporter.image.tag: ""
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notFailedTemplate: {}

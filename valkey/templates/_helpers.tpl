@@ -36,12 +36,20 @@ Common labels
 {{- define "valkey.labels" -}}
 helm.sh/chart: {{ include "valkey.chart" . }}
 {{ include "valkey.selectorLabels" . }}
-{{- if or .Values.image.tag .Chart.AppVersion }}
-app.kubernetes.io/version: {{ mustRegexReplaceAllLiteral "@sha.*" .Values.image.tag "" | default .Chart.AppVersion | trunc 63 | trimSuffix "-" | quote }}
-{{- end }}
+{{- include "valkey.versionLabel" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- with .Values.commonLabels }}
 {{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{/*
+The app.kubernetes.io/version label, the Valkey version being deployed,
+shared by every resource of the release (with a leading newline)
+*/}}
+{{- define "valkey.versionLabel" -}}
+{{- if or .Values.image.tag .Chart.AppVersion }}
+app.kubernetes.io/version: {{ mustRegexReplaceAllLiteral "@sha.*" .Values.image.tag "" | default .Chart.AppVersion | trunc 63 | trimSuffix "-" | quote }}
 {{- end }}
 {{- end }}
 
@@ -75,6 +83,7 @@ Returns the Valkey container image
 Returns the Valkey exporter container image
 */}}
 {{- define "valkey.metrics.exporter.image" -}}
+{{- $_ := required "metrics.exporter.image.tag must not be empty: set it to an exporter version, e.g. the chart's default in values.yaml" .Values.metrics.exporter.image.tag -}}
 {{- include "valkey.common.image" (dict "image" .Values.metrics.exporter.image "global" .Values.global) }}
 {{- end -}}
 
@@ -182,7 +191,21 @@ Validate auth configuration
 Headless service name for replication
 */}}
 {{- define "valkey.headlessServiceName" -}}
-{{ include "valkey.fullname" . }}-headless
+{{ include "valkey.fullnameWithSuffix" (list . "headless") }}
+{{- end -}}
+
+{{/*
+The full name with "-<suffix>" appended, the full name shortened first so
+that the result still fits the 63 characters allowed for Service, container
+and volume names. Names that already fit come out unchanged. Only for names
+with that limit: ConfigMaps, Secrets, Deployments and the like allow 253
+characters and keep the plain "<fullname>-<suffix>".
+Usage: include "valkey.fullnameWithSuffix" (list . "read")
+*/}}
+{{- define "valkey.fullnameWithSuffix" -}}
+{{- $root := index . 0 -}}
+{{- $suffix := index . 1 -}}
+{{- printf "%s-%s" (include "valkey.fullname" $root | trunc (int (sub 62 (len $suffix))) | trimSuffix "-") $suffix -}}
 {{- end -}}
 
 {{/*
@@ -193,7 +216,9 @@ Stable names and selectors for the independent Sentinel StatefulSet.
 {{- end -}}
 
 {{- define "valkey.sentinel.headlessServiceName" -}}
-{{- printf "%s-headless" (include "valkey.sentinel.fullname" . | trunc 54 | trimSuffix "-") -}}
+{{- /* Shortening "<fullname>-sentinel" first could cut "-sentinel" off
+       entirely and collide with the Valkey headless service */}}
+{{- include "valkey.fullnameWithSuffix" (list . "sentinel-hl") -}}
 {{- end -}}
 
 {{- define "valkey.sentinel.selectorLabels" -}}
@@ -314,7 +339,7 @@ app.kubernetes.io/name plus instance without a component, so sharing the Valkey
 name would make those select the proxy pods as well.
 */}}
 {{- define "valkey.haproxy.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "valkey.name" . }}-haproxy
+app.kubernetes.io/name: {{ printf "%s-haproxy" (include "valkey.name" . | trunc 55 | trimSuffix "-") }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: haproxy
 {{- end -}}
@@ -325,6 +350,7 @@ Common labels for the HAProxy resources
 {{- define "valkey.haproxy.labels" -}}
 helm.sh/chart: {{ include "valkey.chart" . }}
 {{ include "valkey.haproxy.selectorLabels" . }}
+{{- include "valkey.versionLabel" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- with .Values.commonLabels }}
 {{- toYaml . | nindent 0 }}

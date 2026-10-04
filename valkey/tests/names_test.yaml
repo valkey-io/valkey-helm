@@ -1,0 +1,108 @@
+suite: resource names fit their length limits
+templates:
+  - templates/service-headless.yaml
+  - templates/service-read.yaml
+  - templates/metrics-svc.yaml
+  - templates/haproxy-service.yaml
+  - templates/statefulset.yaml
+  - templates/init_config.yaml
+  - templates/secret.yaml
+  - templates/sentinel-headless-service.yaml
+set:
+  # The longest full name the chart produces; every suffixed name must
+  # still fit the 63 characters Kubernetes allows for Service, container,
+  # volume names and label values.
+  fullnameOverride: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  replica.enabled: true
+  replica.persistence.size: 1Gi
+  replica.sentinel.enabled: true
+  replica.sentinel.password: sentinel-password
+  haproxy.enabled: true
+  metrics.enabled: true
+  tls.enabled: true
+  tls.existingSecret: valkey-tls
+tests:
+  - it: should keep the headless service name within 63 characters
+    template: templates/service-headless.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: '^a{54}-headless$'
+
+  - it: should keep the read service name within 63 characters
+    template: templates/service-read.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: '^a{58}-read$'
+
+  - it: should keep the metrics service name within 63 characters
+    template: templates/metrics-svc.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: '^a{55}-metrics$'
+
+  - it: should keep the haproxy service name and label within 63 characters
+    template: templates/haproxy-service.yaml
+    set:
+      nameOverride: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: '^a{55}-haproxy$'
+      - matchRegex:
+          path: spec.selector["app.kubernetes.io/name"]
+          pattern: '^a{55}-haproxy$'
+
+  - it: should keep the init container and TLS volume names within 63 characters
+    template: templates/statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.serviceName
+          pattern: '^a{54}-headless$'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].name
+          pattern: '^a{58}-init$'
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-tls
+            secret:
+              secretName: valkey-tls
+              defaultMode: 0400
+
+  - it: should use the shortened headless name in the init scripts
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '\.a{54}-headless\.NAMESPACE\.svc'
+
+  # ConfigMap names allow 253 characters, so this one keeps the full name
+  - it: should keep the full name for the init scripts ConfigMap
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: '^a{63}-init-scripts$'
+
+  - it: should mount the init scripts ConfigMap under its full name
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: scripts
+            configMap:
+              name: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-init-scripts
+              defaultMode: 0555
+
+  # Shortening "<fullname>-sentinel" to make room for a headless suffix used
+  # to cut "-sentinel" off and give both headless services the same name.
+  - it: should keep the Sentinel headless service name distinct and within 63 characters
+    template: templates/sentinel-headless-service.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: '^a{51}-sentinel-hl$'

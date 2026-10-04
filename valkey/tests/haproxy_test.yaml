@@ -559,3 +559,37 @@ tests:
     asserts:
       - notExists:
           path: spec.template.metadata.annotations["checksum/secret"]
+
+  - it: should render several loadBalancerSourceRanges as a yaml list
+    set:
+      haproxy.service.type: LoadBalancer
+      haproxy.service.loadBalancerSourceRanges: ["10.0.0.1/32", "192.168.0.0/16"]
+    template: templates/haproxy-service.yaml
+    asserts:
+      - equal:
+          path: spec.loadBalancerSourceRanges
+          value: ["10.0.0.1/32", "192.168.0.0/16"]
+
+  - it: should use the top level runtimeClassName like the Valkey and Sentinel pods
+    set:
+      runtimeClassName: gvisor
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.runtimeClassName
+          value: gvisor
+
+  - it: should leave runtimeClassName unset by default
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.runtimeClassName
+
+  - it: should label the HAProxy resources with the release's Valkey version
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "9.1.2"
+      - notExists:
+          path: spec.selector.matchLabels["app.kubernetes.io/version"]

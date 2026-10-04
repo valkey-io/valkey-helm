@@ -1,0 +1,53 @@
+suite: network policy
+templates:
+  - templates/netpolicy.yaml
+tests:
+  - it: should carry the chart's standard labels and commonLabels
+    set:
+      commonLabels:
+        team: data
+      networkPolicy:
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    app: client
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - equal:
+          path: metadata.labels.team
+          value: data
+
+  - it: should add networkPolicy.labels on top of the chart's labels
+    set:
+      commonLabels:
+        team: data
+      networkPolicy:
+        labels:
+          policy-tier: restricted
+          team: overridden
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    app: client
+    asserts:
+      - equal:
+          path: metadata.labels.policy-tier
+          value: restricted
+      - equal:
+          path: metadata.labels.team
+          value: overridden
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey
+
+  - it: should not render a policy by default
+    asserts:
+      - hasDocuments:
+          count: 0

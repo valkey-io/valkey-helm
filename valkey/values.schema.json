@@ -378,9 +378,6 @@
                 "podMonitor": {
                     "type": "object",
                     "properties": {
-                        "additionalLabels": {
-                            "type": "object"
-                        },
                         "annotations": {
                             "type": "object"
                         },
@@ -409,13 +406,21 @@
                             "type": "array"
                         },
                         "sampleLimit": {
-                            "type": "boolean"
+                            "oneOf": [
+                                { "type": "integer", "minimum": 0 },
+                                { "const": false },
+                                { "type": "null" }
+                            ]
                         },
                         "scrapeTimeout": {
                             "type": "string"
                         },
                         "targetLimit": {
-                            "type": "boolean"
+                            "oneOf": [
+                                { "type": "integer", "minimum": 0 },
+                                { "const": false },
+                                { "type": "null" }
+                            ]
                         }
                     }
                 },
@@ -467,9 +472,6 @@
                 "serviceMonitor": {
                     "type": "object",
                     "properties": {
-                        "additionalLabels": {
-                            "type": "object"
-                        },
                         "annotations": {
                             "type": "object"
                         },
@@ -498,13 +500,21 @@
                             "type": "array"
                         },
                         "sampleLimit": {
-                            "type": "boolean"
+                            "oneOf": [
+                                { "type": "integer", "minimum": 0 },
+                                { "const": false },
+                                { "type": "null" }
+                            ]
                         },
                         "scrapeTimeout": {
                             "type": "string"
                         },
                         "targetLimit": {
-                            "type": "boolean"
+                            "oneOf": [
+                                { "type": "integer", "minimum": 0 },
+                                { "const": false },
+                                { "type": "null" }
+                            ]
                         }
                     }
                 }
