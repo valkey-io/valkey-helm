@@ -75,6 +75,7 @@ Returns the Valkey container image
 Returns the Valkey exporter container image
 */}}
 {{- define "valkey.metrics.exporter.image" -}}
+{{- $_ := required "metrics.exporter.image.tag must not be empty: set it to an exporter version, e.g. the chart's default in values.yaml" .Values.metrics.exporter.image.tag -}}
 {{- include "valkey.common.image" (dict "image" .Values.metrics.exporter.image "global" .Values.global) }}
 {{- end -}}
 

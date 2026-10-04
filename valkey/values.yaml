@@ -669,7 +669,7 @@ metrics:
       repository: oliver006/redis_exporter
       # Image pull policy (Always, IfNotPresent, Never)
       pullPolicy: IfNotPresent
-      # Image tag (leave empty to use latest)
+      # Image tag (required when metrics.enabled is true)
       tag: "v1.88.0"
     resources: {}
       # Example:
