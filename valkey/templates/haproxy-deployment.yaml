@@ -112,7 +112,18 @@ spec:
             - name: haproxy-config
               mountPath: /usr/local/etc/haproxy
               readOnly: true
-            {{- if $tlsFiles }}
+            {{- if and $tlsFiles .Values.tls.volume }}
+            {{- /* A volume source cannot be narrowed down like the Secret's
+                   items, so only the files HAProxy reads are mounted, one by
+                   one. The rest, the server's private key included, stays
+                   out of the container. */}}
+            {{- range $tlsFiles | uniq }}
+            - name: {{ include "valkey.fullnameWithSuffix" (list $ "tls") }}
+              mountPath: /tls/{{ . }}
+              subPath: {{ . }}
+              readOnly: true
+            {{- end }}
+            {{- else if $tlsFiles }}
             - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
               mountPath: /tls
               readOnly: true
@@ -126,8 +137,12 @@ spec:
             name: {{ include "valkey.fullname" . }}-haproxy
         {{- if $tlsFiles }}
         - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
+          {{- if .Values.tls.volume }}
+          {{- /* The container mounts only the files it reads, with subPath */}}
+          {{- include "valkey.tls.volumeSource" . | nindent 10 }}
+          {{- else }}
           secret:
-            secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
+            secretName: {{ required "TLS needs tls.existingSecret or tls.volume." .Values.tls.existingSecret }}
             # Only the keys HAProxy reads. The secret also holds the Valkey
             # server's private key, which the proxy has no use for.
             items:
@@ -138,6 +153,7 @@ spec:
             # The group bit is what makes these readable for the non-root
             # HAProxy user, combined with fsGroup on the pod.
             defaultMode: 0440
+          {{- end }}
         {{- end }}
         {{- with .Values.haproxy.extraVolumes }}
         {{- toYaml . | nindent 8 }}

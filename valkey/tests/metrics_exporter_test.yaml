@@ -169,7 +169,9 @@ tests:
             name: REDIS_EXPORTER_TLS_CA_CERT_FILE
             value: /tls/ca.crt
 
-  - it: should not mount /tls twice when extraVolumeMounts already mounts it
+  # The 0.x workaround for an exporter without TLS files; the chart mounts
+  # them now, and Kubernetes rejects two mounts on one path.
+  - it: should refuse a /tls mount in metrics.exporter.extraVolumeMounts
     set:
       replica.enabled: true
       persistence.enabled: true
@@ -181,19 +183,8 @@ tests:
           mountPath: /tls/
     template: templates/statefulset.yaml
     asserts:
-      - lengthEqual:
-          path: spec.template.spec.containers[1].volumeMounts
-          count: 1
-      - contains:
-          path: spec.template.spec.containers[1].volumeMounts
-          content:
-            name: my-exporter-tls
-            mountPath: /tls/
-      - contains:
-          path: spec.template.spec.containers[1].env
-          content:
-            name: REDIS_EXPORTER_TLS_CA_CERT_FILE
-            value: /tls/ca.crt
+      - failedTemplate:
+          errorPattern: "metrics.exporter.extraVolumeMounts mounts /tls, which the chart uses for the TLS files.*See UPGRADE.md."
 
   - it: should keep its own /tls mount next to unrelated extraVolumeMounts
     set:

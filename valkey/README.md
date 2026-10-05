@@ -549,6 +549,39 @@ tls:
   existingSecret: "valkey-tls-secret"
 ```
 
+`tls.serverPublicKey`, `tls.serverKey` and `tls.caPublicKey` name the files: the keys in the Secret, and the file names under `/tls` in the pods.
+A cert-manager Secret, for example, needs `serverPublicKey: tls.crt` and `serverKey: tls.key`.
+
+### TLS files from another volume
+
+When the files do not come from a single Secret, set `tls.volume` to any volume source instead of `tls.existingSecret`.
+For example, a cert-manager certificate issued through ACME has no `ca.crt` in its Secret; a projected volume can add the CA bundle from a trust-manager ConfigMap, under the file names the chart expects:
+
+```yaml
+tls:
+  enabled: true
+  volume:
+    projected:
+      sources:
+        - secret:
+            name: valkey-cert
+            items:
+              - {key: tls.crt, path: server.crt}
+              - {key: tls.key, path: server.key}
+        - configMap:
+            name: valkey-ca-bundle
+            items:
+              - {key: trust-bundle.pem, path: ca.crt}
+```
+
+The volume is mounted at `/tls` in every pod that reads TLS files: the Valkey pods, the Sentinel pods, the HAProxy pods and the test pods. Before choosing one:
+
+* It must be a volume type that several pods can mount at the same time. A ReadWriteOnce PersistentVolumeClaim, for one, only works with a single pod.
+* Every file in it, private keys included, is readable in the Valkey, Sentinel and test pods. HAProxy mounts only the files it reads, the CA and its own client certificate, with `subPath`; the rest of the volume is still attached to its pods, but not visible in the container. Files mounted with `subPath` are not updated when they change, so restart HAProxy after rotating them; HAProxy only reads them on startup anyway.
+* The files must be readable by the users those pods run as.
+
+TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on any other path the chart uses, are refused.
+
 ## Values
 
 | Key | Type | Default | Description |
@@ -566,7 +599,7 @@ tls:
 | extraEnv | list | `[]` | Additional EnvVar entries for the Valkey container (value or valueFrom) |
 | extraInitContainers | list | `[]` | Additional init containers in the Valkey pod |
 | extraVolumes | list | `[]` | Additional volumes for the Valkey pod |
-| extraVolumeMounts | list | `[]` | Mounts of extraVolumes into the Valkey container |
+| extraVolumeMounts | list | `[]` | Mounts of extraVolumes into the Valkey container; the chart's own paths are refused |
 | fullnameOverride | string | `""` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.registry | string | `""` |  |
@@ -713,7 +746,7 @@ tls:
 | haproxy.securityContext | object | see values.yaml |  |
 | haproxy.extraInitContainers | list | `[]` |  |
 | haproxy.extraVolumes | list | `[]` |  |
-| haproxy.extraVolumeMounts | list | `[]` |  |
+| haproxy.extraVolumeMounts | list | `[]` | /tls and /usr/local/etc/haproxy are refused |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
@@ -776,13 +809,14 @@ tls:
 | startupProbe.periodSeconds | int | `10` |  |
 | startupProbe.timeoutSeconds | int | `1` |  |
 | terminationGracePeriodSeconds | int | `30` | Valkey pods, standalone and replication; must exceed sentinel.preStopFailoverTimeoutSeconds |
-| tls.caPublicKey | string | `"ca.crt"` |  |
+| tls.caPublicKey | string | `"ca.crt"` | CA certificate file, in the Secret or the volume |
 | tls.dhParamKey | string | `""` |  |
 | tls.enabled | bool | `false` |  |
-| tls.existingSecret | string | `""` |  |
+| tls.existingSecret | string | `""` | Secret holding the TLS files; set this or tls.volume |
+| tls.volume | object | `{}` | Any other volume source holding the TLS files, mounted at /tls in every pod that reads them |
 | tls.requireClientCertificate | bool | `false` |  |
-| tls.serverKey | string | `"server.key"` |  |
-| tls.serverPublicKey | string | `"server.crt"` |  |
+| tls.serverKey | string | `"server.key"` | Server private key file |
+| tls.serverPublicKey | string | `"server.crt"` | Server certificate file |
 | tolerations | list | `[]` |  |
 | topologySpreadConstraints | list | `[]` | Valkey pods only, see sentinel.topologySpreadConstraints |
 | valkeyLogLevel | string | `"notice"` |  |

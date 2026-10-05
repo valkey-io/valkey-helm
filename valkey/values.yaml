@@ -224,6 +224,10 @@ persistence:
 # volume type). extraVolumeMounts mounts them into the Valkey container,
 # metrics.exporter.extraVolumeMounts into the exporter, and containers from
 # extraInitContainers/extraContainers declare their own volumeMounts.
+# The paths the chart mounts itself are refused, and so is anything below
+# them: /data, /valkey-conf, /scripts, /sentinel-scripts, /sentinel-auth,
+# /tls, /valkey-users-secret and /valkey-auth-secret (only /tls for the
+# exporter). TLS files go into tls.existingSecret or tls.volume.
 extraVolumes: []
 #  - name: valkey-extra-conf
 #    secret:
@@ -669,7 +673,8 @@ haproxy:
   tolerations: null
   topologySpreadConstraints: []
 
-  # Additional init containers, volumes and volume mounts
+  # Additional init containers, volumes and volume mounts. Mounts on /tls or
+  # /usr/local/etc/haproxy, or below them, are refused.
   extraInitContainers: []
   extraVolumes: []
   extraVolumeMounts: []
@@ -677,15 +682,40 @@ haproxy:
 tls:
   # Enable TLS
   enabled: false
-  # Name of the Secret containing TLS keys (required)
+  # Name of the Secret holding the TLS files. Set this or volume.
   existingSecret: ""
-  # Secret key name containing server public certificate
+  # Any other volume source holding the TLS files, instead of existingSecret,
+  # e.g. a projected volume combining a cert-manager Secret with a CA bundle
+  # from a ConfigMap, or a CSI volume. It is mounted at /tls in every pod that
+  # reads TLS files: the Valkey pods, the Sentinel pods, the HAProxy pods and
+  # the test pods. So:
+  # - it must be a volume type several pods can mount at once; a
+  #   ReadWriteOnce PersistentVolumeClaim, for one, works for a single pod only;
+  # - every file in it, private keys included, is readable in the Valkey,
+  #   Sentinel and test pods. HAProxy mounts only the files it reads, with
+  #   subPath, so they are not updated when they change: restart HAProxy
+  #   after rotating them;
+  # - the files must be readable by those pods' users.
+  # volume:
+  #   projected:
+  #     sources:
+  #       - secret:
+  #           name: valkey-cert
+  #           items:
+  #             - {key: tls.crt, path: server.crt}
+  #             - {key: tls.key, path: server.key}
+  #       - configMap:
+  #           name: valkey-ca-bundle
+  #           items:
+  #             - {key: trust-bundle.pem, path: ca.crt}
+  volume: {}
+  # File holding the server certificate, in the Secret or the volume
   serverPublicKey: server.crt
-  # Secret key name containing server private key
+  # File holding the server private key
   serverKey: server.key
-  # Secret key name containing Certificate Authority public certificate
+  # File holding the Certificate Authority certificate
   caPublicKey: ca.crt
-  # Secret key name containing DH parameters (optional)
+  # File holding the DH parameters (optional)
   dhParamKey: ""
   # Require that clients authenticate with a certificate
   requireClientCertificate: false

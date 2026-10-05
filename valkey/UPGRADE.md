@@ -110,6 +110,16 @@ Replication, from `replica.persistence`: move the block to the top level as `per
 
 ---
 
+### Mounts on the chart's own paths are refused
+
+**What changed:** `extraVolumeMounts`, `metrics.exporter.extraVolumeMounts` and `haproxy.extraVolumeMounts` may not mount on, or below, a path the chart mounts itself, such as `/data` or `/tls`. The exporter now gets the TLS files from the chart.
+
+**Who is affected:** releases that mounted the TLS Secret into the exporter at `/tls` themselves, or mount anything on a chart path.
+
+**How to configure:** remove the exporter's `/tls` mount. Move other mounts to a path of their own; TLS files that are not in `tls.existingSecret` go into `tls.volume`.
+
+---
+
 ### `networkPolicy` is a structured block
 
 **What changed:** the NetworkPolicy is created only with `networkPolicy.enabled: true` and is built from options; `networkPolicy.ingress` and `networkPolicy.egress` are replaced by `extraIngress` and `extraEgress`, which add rules on top of the chart's own. The chart refuses to render while the old keys are set.

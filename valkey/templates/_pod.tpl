@@ -10,6 +10,7 @@ Include it under the workload's spec.template with nindent 4.
 {{- $sentinel := and $replicated .Values.sentinel.enabled }}
 {{- $preStopFailover := and $sentinel .Values.sentinel.preStopFailover }}
 {{- $storage := .Values.persistence -}}
+{{- include "valkey.validateMountPaths" . }}
 metadata:
   labels:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
@@ -237,18 +238,9 @@ spec:
       {{- range .Values.metrics.exporter.extraEnv }}
       {{- $_ := set $exporterEnvs .name true }}
       {{- end }}
-      {{- /* A /tls mount the user already added through extraVolumeMounts
-             (the workaround before the chart mounted it) takes the place of
-             the chart's own, as Kubernetes rejects a repeated mountPath */}}
-      {{- $exporterTlsMount := .Values.tls.enabled }}
-      {{- range .Values.metrics.exporter.extraVolumeMounts }}
-      {{- if eq (.mountPath | toString | trimSuffix "/") "/tls" }}
-      {{- $exporterTlsMount = false }}
-      {{- end }}
-      {{- end }}
-      {{- if or .Values.metrics.exporter.extraVolumeMounts $exporterTlsMount }}
+      {{- if or .Values.metrics.exporter.extraVolumeMounts .Values.tls.enabled }}
       volumeMounts:
-        {{- if $exporterTlsMount }}
+        {{- if .Values.tls.enabled }}
         - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
           mountPath: /tls
         {{- end }}
@@ -325,9 +317,7 @@ spec:
     {{- end }}
     {{- if .Values.tls.enabled }}
     - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
-      secret:
-        secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
-        defaultMode: 0400
+      {{- include "valkey.tls.volumeSource" . | nindent 6 }}
     {{- end }}
     {{- if .Values.auth.enabled }}
     {{- if .Values.auth.usersExistingSecret }}

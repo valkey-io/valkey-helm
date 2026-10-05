@@ -947,6 +947,9 @@
                 },
                 "serverPublicKey": {
                     "type": "string"
+                },
+                "volume": {
+                    "type": "object"
                 }
             }
         },

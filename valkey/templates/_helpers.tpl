@@ -543,9 +543,57 @@ TLS options for HAProxy's checks of the Sentinels. The check connects with
 Per-server certificate identity options for an HAProxy backend.
 */}}
 {{/*
+Source of the TLS volume, mounted at /tls by every pod that reads TLS files:
+tls.volume as given, or tls.existingSecret as a secret volume. Exactly one of
+the two must be set when TLS is enabled.
+*/}}
+{{- define "valkey.tls.volumeSource" -}}
+{{- $tls := .Values.tls }}
+{{- if and $tls.existingSecret $tls.volume }}
+  {{- fail "tls.existingSecret and tls.volume are both set. Use tls.existingSecret for a Secret, or tls.volume for any other volume source." }}
+{{- end }}
+{{- if $tls.volume }}
+{{- toYaml $tls.volume }}
+{{- else }}
+secret:
+  secretName: {{ required "TLS needs tls.existingSecret or tls.volume." $tls.existingSecret }}
+  defaultMode: 0400
+{{- end }}
+{{- end -}}
+
+{{/*
+Mount paths the chart uses itself. A mount from extraVolumeMounts on one of
+them, or below one, would hide or be hidden by the chart's own.
+*/}}
+{{- define "valkey.validateMountPaths" -}}
+{{- $checks := list
+  (list "extraVolumeMounts" .Values.extraVolumeMounts (list "/data" "/valkey-conf" "/scripts" "/sentinel-scripts" "/sentinel-auth" "/tls" "/valkey-users-secret" "/valkey-auth-secret"))
+  (list "metrics.exporter.extraVolumeMounts" .Values.metrics.exporter.extraVolumeMounts (list "/tls"))
+  (list "haproxy.extraVolumeMounts" .Values.haproxy.extraVolumeMounts (list "/tls" "/usr/local/etc/haproxy"))
+}}
+{{- range $checks }}
+  {{- $value := index . 0 }}
+  {{- $reserved := index . 2 }}
+  {{- range (index . 1) }}
+    {{- $path := .mountPath | toString | trimSuffix "/" }}
+    {{- range $reserved }}
+      {{- if or (eq $path .) (hasPrefix (printf "%s/" .) $path) }}
+        {{- if eq . "/tls" }}
+          {{- fail (printf "%s mounts %s, which the chart uses for the TLS files. The chart mounts tls.existingSecret or tls.volume there itself; put any other TLS files into tls.volume. See UPGRADE.md." $value $path) }}
+        {{- end }}
+        {{- fail (printf "%s mounts %s, which the chart uses itself (%s). Mount it somewhere else." $value $path (join ", " $reserved)) }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Keys of tls.existingSecret that HAProxy reads, as a JSON list. Only these are
 mounted, so the Valkey server's private key never reaches the HAProxy pods.
-Must stay in line with the files valkey.haproxy.serverTlsOptions references.
+With a tls.volume, which cannot be narrowed down like this, they are mounted
+one by one with subPath instead. Must stay in line with the files
+valkey.haproxy.serverTlsOptions references.
 */}}
 {{- define "valkey.haproxy.tlsFiles" -}}
 {{- $files := list -}}
