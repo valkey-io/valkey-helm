@@ -78,7 +78,7 @@ See [examples/ha-sentinel.yaml](examples/ha-sentinel.yaml) for a complete values
 Spread Sentinel pods across failure domains so one node or zone cannot remove the quorum.
 The Sentinel pods are scheduled with their own `replica.sentinel.affinity`, `topologySpreadConstraints`, `nodeSelector` and `tolerations`, and labelled with their own `replica.sentinel.podLabels` and `podAnnotations`.
 The top level `affinity`, `topologySpreadConstraints`, `podLabels` and `podAnnotations` apply to the Valkey pods only, because rules written for the Valkey pods select the Valkey pods' labels; the HAProxy pods likewise take `haproxy.podLabels` and `haproxy.podAnnotations`.
-`nodeSelector` and `tolerations` fall back to the top level values when the Sentinel ones are empty.
+`nodeSelector` and `tolerations` fall back to the top level values when the Sentinel ones are unset (`null`, the default); set them to `{}` / `[]` to schedule the Sentinels without any. The HAProxy values work the same way.
 
 ```yaml
 replica:
@@ -608,13 +608,13 @@ tls:
 | replica.sentinel.persistentVolumeClaimRetentionPolicy | object | `{}` | PVC retention policy for the Sentinel StatefulSet |
 | replica.sentinel.podLabels | object | `{}` | Sentinel pod labels; top level podLabels do not apply |
 | replica.sentinel.podAnnotations | object | `{}` | Sentinel pod annotations; top level podAnnotations do not apply |
-| replica.sentinel.nodeSelector | object | `{}` | Defaults to nodeSelector |
-| replica.sentinel.tolerations | list | `[]` | Defaults to tolerations |
+| replica.sentinel.nodeSelector | object | `null` | null inherits nodeSelector; {} for none |
+| replica.sentinel.tolerations | list | `null` | null inherits tolerations; [] for none |
 | replica.sentinel.affinity | object | `{}` | Top level affinity does not apply |
 | replica.sentinel.topologySpreadConstraints | list | `[]` | Top level topologySpreadConstraints do not apply |
 | replica.sentinel.podDisruptionBudget.enabled | bool | `false` | Keep a Sentinel quorum available across node drains |
 | replica.sentinel.podDisruptionBudget.minAvailable | int | `null` | Takes precedence over maxUnavailable |
-| replica.sentinel.podDisruptionBudget.maxUnavailable | int | `1` |  |
+| replica.sentinel.podDisruptionBudget.maxUnavailable | int | `1` | Must keep max(quorum, majority) Sentinels running |
 | replica.sentinel.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
 | haproxy.enabled | bool | `false` | Route non Sentinel-aware clients to the current master |
 | haproxy.replicas | int | `3` |  |
@@ -640,6 +640,8 @@ tls:
 | haproxy.podDisruptionBudget.minAvailable | int | `null` | Takes precedence over maxUnavailable |
 | haproxy.podDisruptionBudget.maxUnavailable | int | `1` |  |
 | haproxy.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
+| haproxy.nodeSelector | object | `null` | null inherits nodeSelector; {} for none |
+| haproxy.tolerations | list | `null` | null inherits tolerations; [] for none |
 | haproxy.podLabels | object | `{}` | HAProxy pod labels; top level podLabels do not apply |
 | haproxy.podAnnotations | object | `{}` | HAProxy pod annotations; top level podAnnotations do not apply |
 | haproxy.resources | object | `{}` |  |

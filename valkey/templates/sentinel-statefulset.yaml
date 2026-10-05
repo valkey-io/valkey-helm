@@ -178,7 +178,13 @@ spec:
             defaultMode: 0400
         {{- end }}
         {{- end }}
-      {{- with .Values.replica.sentinel.nodeSelector | default .Values.nodeSelector }}
+      {{- /* Unset (null) inherits the top level value; an explicit empty value
+             means no nodeSelector for these pods. */}}
+      {{- $nodeSelector := .Values.replica.sentinel.nodeSelector }}
+      {{- if kindIs "invalid" $nodeSelector }}
+      {{- $nodeSelector = .Values.nodeSelector }}
+      {{- end }}
+      {{- with $nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -190,7 +196,13 @@ spec:
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.replica.sentinel.tolerations | default .Values.tolerations }}
+      {{- /* Unset (null) inherits the top level value; an explicit empty value
+             means no tolerations for these pods. */}}
+      {{- $tolerations := .Values.replica.sentinel.tolerations }}
+      {{- if kindIs "invalid" $tolerations }}
+      {{- $tolerations = .Values.tolerations }}
+      {{- end }}
+      {{- with $tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

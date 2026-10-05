@@ -184,7 +184,7 @@
                     }
                 },
                 "nodeSelector": {
-                    "type": "object"
+                    "type": ["object", "null"]
                 },
                 "podAnnotations": {
                     "type": "object"
@@ -296,7 +296,7 @@
                     }
                 },
                 "tolerations": {
-                    "type": "array"
+                    "type": ["array", "null"]
                 },
                 "topologySpreadConstraints": {
                     "type": "array"
@@ -641,7 +641,7 @@
                             "type": "string"
                         },
                         "nodeSelector": {
-                            "type": "object"
+                            "type": ["object", "null"]
                         },
                         "orphanCheckSeconds": {
                             "type": "integer"
@@ -791,7 +791,7 @@
                             "type": "integer"
                         },
                         "tolerations": {
-                            "type": "array"
+                            "type": ["array", "null"]
                         },
                         "topologySpreadConstraints": {
                             "type": "array"

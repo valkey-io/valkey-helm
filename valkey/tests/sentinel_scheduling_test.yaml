@@ -212,15 +212,15 @@ tests:
           path: spec.template.metadata.labels["app.kubernetes.io/component"]
           value: sentinel
 
-  - it: should honour minAvailable of zero rather than falling back
+  - it: should prefer minAvailable over maxUnavailable
     set:
       replica.sentinel.podDisruptionBudget.enabled: true
-      replica.sentinel.podDisruptionBudget.minAvailable: 0
+      replica.sentinel.podDisruptionBudget.minAvailable: 2
     template: templates/sentinel-pdb.yaml
     asserts:
       - equal:
           path: spec.minAvailable
-          value: 0
+          value: 2
       - notExists:
           path: spec.maxUnavailable
 
@@ -252,3 +252,89 @@ tests:
       - equal:
           path: spec.selector.matchLabels["app.kubernetes.io/name"]
           value: valkey
+
+  - it: should place Sentinels without a nodeSelector or tolerations when set to empty
+    set:
+      nodeSelector:
+        pool: valkey
+      tolerations:
+        - key: valkey
+          operator: Exists
+      replica.sentinel.nodeSelector: {}
+      replica.sentinel.tolerations: []
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.nodeSelector
+      - notExists:
+          path: spec.template.spec.tolerations
+
+  - it: should fail on a Sentinel budget that leaves fewer Sentinels than the quorum
+    set:
+      replica.sentinel.quorum: 3
+      replica.sentinel.podDisruptionBudget.enabled: true
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "replica.sentinel.podDisruptionBudget.maxUnavailable \\(1\\) lets voluntary evictions leave 2 of 3 Sentinels running, but a failover needs 3.*"
+
+  - it: should accept a quorum of all Sentinels with a budget that allows no eviction
+    set:
+      replica.sentinel.quorum: 3
+      replica.sentinel.podDisruptionBudget.enabled: true
+      replica.sentinel.podDisruptionBudget.maxUnavailable: 0
+    template: templates/sentinel-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 0
+
+  - it: should accept a quorum of three with four Sentinels and one eviction
+    set:
+      replica.sentinel.replicas: 4
+      replica.sentinel.quorum: 3
+      replica.sentinel.podDisruptionBudget.enabled: true
+    template: templates/sentinel-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+
+  - it: should require a majority even when the quorum is lower
+    set:
+      replica.sentinel.replicas: 5
+      replica.sentinel.quorum: 2
+      replica.sentinel.podDisruptionBudget.enabled: true
+      replica.sentinel.podDisruptionBudget.maxUnavailable: 3
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: ".*leave 2 of 5 Sentinels running, but a failover needs 3.*"
+
+  - it: should fail on a minAvailable below the quorum
+    set:
+      replica.sentinel.podDisruptionBudget.enabled: true
+      replica.sentinel.podDisruptionBudget.minAvailable: 1
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "replica.sentinel.podDisruptionBudget.minAvailable \\(1\\) lets voluntary evictions leave 1 of 3.*"
+
+  - it: should round a maxUnavailable percentage up as Kubernetes does
+    set:
+      replica.sentinel.podDisruptionBudget.enabled: true
+      replica.sentinel.podDisruptionBudget.maxUnavailable: "34%"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: ".*maxUnavailable \\(34%\\) lets voluntary evictions leave 1 of 3.*"
+
+  - it: should accept percentages that keep the quorum
+    set:
+      replica.sentinel.podDisruptionBudget.enabled: true
+      replica.sentinel.podDisruptionBudget.minAvailable: "60%"
+    template: templates/sentinel-pdb.yaml
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: "60%"

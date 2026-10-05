@@ -458,7 +458,8 @@ replica:
     podAnnotations: {}
 
     # Scheduling for the Sentinel pods. nodeSelector and tolerations fall back
-    # to the top level values when left empty; affinity and
+    # to the top level values when unset (null); set them to {} / [] to place
+    # the Sentinels without any. affinity and
     # topologySpreadConstraints do not, as those written for the Valkey pods
     # select the Valkey pods' labels. priorityClassName and runtimeClassName
     # come from the top level values.
@@ -472,14 +473,15 @@ replica:
     #         matchLabels:
     #           app.kubernetes.io/instance: <release name>
     #           app.kubernetes.io/component: sentinel
-    nodeSelector: {}
+    nodeSelector: null
     affinity: {}
-    tolerations: []
+    tolerations: null
     topologySpreadConstraints: []
 
     # PodDisruptionBudget for the Sentinel pods. Without one, a node drain can
     # evict enough Sentinels at once to lose the quorum, and no failover can
-    # be authorized until they are back.
+    # be authorized until they are back. The chart refuses a budget that lets
+    # fewer than max(quorum, majority of replicas) Sentinels keep running.
     podDisruptionBudget:
       # Enable the PodDisruptionBudget
       enabled: false
@@ -629,13 +631,14 @@ haproxy:
   podAnnotations: {}
 
   # Scheduling for the HAProxy pods. nodeSelector and tolerations fall back
-  # to the top level values when left empty; affinity and
+  # to the top level values when unset (null); set them to {} / [] to place
+  # the HAProxy pods without any. affinity and
   # topologySpreadConstraints do not, as those written for the Valkey pods
   # select the Valkey pods' labels. priorityClassName and runtimeClassName
   # come from the top level values.
-  nodeSelector: {}
+  nodeSelector: null
   affinity: {}
-  tolerations: []
+  tolerations: null
   topologySpreadConstraints: []
 
   # Additional init containers, volumes and volume mounts
