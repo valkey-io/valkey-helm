@@ -431,7 +431,7 @@ auth:
 
 replica:
   enabled: true
-  replicas: 2
+  replicas: 3  # Valkey pods, the master included
   replicationUser: "replication-user"  # Must be defined in auth.aclUsers
 ```
 
@@ -611,7 +611,7 @@ tls:
 | readinessProbe.successThreshold | int | `1` |  |
 | readinessProbe.timeoutSeconds | int | `1` |  |
 | replica.enabled | bool | `false` |  |
-| replica.replicas | int | `2` |  |
+| replica.replicas | int | `3` | Valkey pods, the master included; at least 1 (2 with Sentinel) |
 | replica.replicationUser | string | `"default"` |  |
 | replica.disklessSync | bool | `false` |  |
 | replica.minReplicasToWrite | int | `0` |  |

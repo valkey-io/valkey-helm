@@ -248,8 +248,9 @@ auth:
 replica:
   enabled: false
 
-  # Number of replica instances (total pods = replicas + 1 master)
-  replicas: 2
+  # Number of Valkey pods, the master included: 1 runs the master alone,
+  # 3 runs a master and two replicas. Sentinel needs at least 2.
+  replicas: 3
 
   # Username for replicas to authenticate to master, ignored if auth.enabled is false.
   # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.

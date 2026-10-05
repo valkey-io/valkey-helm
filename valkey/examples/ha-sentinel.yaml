@@ -17,8 +17,8 @@
 
 replica:
   enabled: true
-  # 2 replicas + 1 master
-  replicas: 2
+  # Valkey pods, the master included: 1 master + 2 replicas
+  replicas: 3
 
   # Used both for replication and by Sentinel to monitor the nodes
   replicationUser: replicator

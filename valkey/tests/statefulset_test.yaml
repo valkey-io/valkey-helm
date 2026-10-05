@@ -562,3 +562,37 @@ tests:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 65532
+
+  - it: should run as many pods as replica.replicas, the master included
+    set:
+      replica.enabled: true
+      replica.replicas: 3
+      persistence.enabled: true
+      persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should accept a master without replicas
+    set:
+      replica.enabled: true
+      replica.replicas: 1
+      persistence.enabled: true
+      persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: should refuse zero Valkey pods
+    set:
+      replica.enabled: true
+      replica.replicas: 0
+      persistence.enabled: true
+      persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate: {}

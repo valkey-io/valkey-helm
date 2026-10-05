@@ -78,7 +78,7 @@ tests:
 
   - it: should render one server per valkey pod
     set:
-      replica.replicas: 4
+      replica.replicas: 5
     template: templates/haproxy-configmap.yaml
     asserts:
       - matchRegex:

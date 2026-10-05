@@ -278,6 +278,9 @@ would start on an empty volume.
 {{- define "valkey.validatePersistence" -}}
 {{- include "valkey.validateRemovedValues" . }}
 {{- $p := .Values.persistence }}
+{{- if and .Values.replica.enabled (lt (int .Values.replica.replicas) 1) }}
+  {{- fail "replica.replicas counts the Valkey pods, the master included, and must be at least 1." }}
+{{- end }}
 {{- if .Values.replica.enabled }}
   {{- if not (and $p.enabled $p.size) }}
     {{- fail "Replication requires persistent storage, otherwise a restarted primary comes back empty and its replicas copy the empty dataset. Please set persistence.enabled=true and persistence.size (e.g. '5Gi')." }}
@@ -355,8 +358,8 @@ Validate sentinel configuration
     {{- fail "Sentinel requires replication. Please set replica.enabled=true along with replica.sentinel.enabled=true" }}
   {{- end }}
   {{- $sentinels := int .Values.replica.sentinel.replicas }}
-  {{- if lt (int .Values.replica.replicas) 1 }}
-    {{- fail "Sentinel requires at least one Valkey replica. Please set replica.replicas to 1 or more." }}
+  {{- if lt (int .Values.replica.replicas) 2 }}
+    {{- fail "Sentinel requires at least one Valkey replica to promote. Please set replica.replicas, which counts the master too, to 2 or more." }}
   {{- end }}
   {{- if lt $sentinels 3 }}
     {{- fail (printf "Sentinel requires at least 3 instances to form a quorum. Please set replica.sentinel.replicas to 3 or more (currently %d)." $sentinels) }}

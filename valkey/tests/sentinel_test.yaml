@@ -35,7 +35,7 @@ tests:
 
   - it: should fail without a valkey replica to promote
     set:
-      replica.replicas: 0
+      replica.replicas: 1
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
@@ -1026,3 +1026,12 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: should accept a master and one replica for Sentinel
+    set:
+      replica.replicas: 2
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2

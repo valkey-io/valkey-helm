@@ -1,6 +1,6 @@
 {{- if .Values.haproxy.enabled }}
 {{- $port := .Values.service.port }}
-{{- $pods := add (int .Values.replica.replicas) 1 | int }}
+{{- $pods := int .Values.replica.replicas }}
 {{- $checkUser := .Values.haproxy.checkUser | default "default" }}
 apiVersion: v1
 kind: ConfigMap

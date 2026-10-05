@@ -579,7 +579,8 @@
                     "type": "object"
                 },
                 "replicas": {
-                    "type": "integer"
+                    "type": "integer",
+                    "minimum": 1
                 },
                 "replicationUser": {
                     "type": "string"

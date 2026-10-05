@@ -1,7 +1,7 @@
 {{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
 {{- $sentinelPort := .Values.replica.sentinel.port }}
 {{- $masterSet := .Values.replica.sentinel.masterSet }}
-{{- $valkeyPods := add (int .Values.replica.replicas) 1 }}
+{{- $valkeyPods := int .Values.replica.replicas }}
 {{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
 apiVersion: v1
 kind: ConfigMap

@@ -1,4 +1,4 @@
-{{- $pods := add (int .Values.replica.replicas) 1 }}
+{{- $pods := int .Values.replica.replicas }}
 {{- $initMonitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
 {{- $initMonitorKey := $initMonitorUser }}
 {{- if and .Values.auth.enabled (hasKey .Values.auth.aclUsers $initMonitorUser) }}

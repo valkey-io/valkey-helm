@@ -17,7 +17,7 @@ App version:  {{ .Chart.AppVersion }}
 ================================================================================
 
 Your Valkey deployment is running in REPLICATION mode with Sentinel:
-- {{ add (int .Values.replica.replicas) 1 }} Valkey pods, 1 of them the master at any time
+- {{ .Values.replica.replicas }} Valkey pods, 1 of them the master at any time
 - {{ .Values.replica.sentinel.replicas }} Sentinels in a separate StatefulSet, quorum {{ .Values.replica.sentinel.quorum }}
 
 Sentinel promotes a replica when the master stops responding for
@@ -69,7 +69,7 @@ forwards to the node Sentinel promoted:
 
 Your Valkey deployment is running in REPLICATION mode:
 - 1 Master  ({{ include "valkey.fullname" . }}-0)
-- {{ .Values.replica.replicas }} Replica(s)
+- {{ sub (int .Values.replica.replicas) 1 }} Replica(s)
 {{- end }}
 
 {{- if .Values.replica.service.enabled }}
@@ -99,12 +99,12 @@ READ Operations (Load-balanced across all pods):
 
 Direct Pod Access:
 {{- if .Values.replica.sentinel.enabled }}
-{{- range $i := until (add (int .Values.replica.replicas) 1 | int) }}
+{{- range $i := until (int .Values.replica.replicas) }}
   Pod:     {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
 {{- end }}
 {{- else }}
   Master:  {{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
-{{- range $i := until (int .Values.replica.replicas) }}
+{{- range $i := until (sub (int .Values.replica.replicas) 1 | int) }}
   Replica: {{ include "valkey.fullname" $ }}-{{ add $i 1 }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
 {{- end }}
 {{- end }}
