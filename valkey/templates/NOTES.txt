@@ -68,7 +68,7 @@ forwards to the node Sentinel promoted:
 ================================================================================
 
 Your Valkey deployment is running in REPLICATION mode:
-- 1 Master  ({{ include "valkey.fullname" . }}-0)
+- 1 Master  ({{ include "valkey.statefulsetName" . }}-0)
 - {{ sub (int .Values.replica.replicas) 1 }} Replica(s)
 {{- end }}
 
@@ -100,12 +100,12 @@ READ Operations (Load-balanced across all pods):
 Direct Pod Access:
 {{- if .Values.sentinel.enabled }}
 {{- range $i := until (int .Values.replica.replicas) }}
-  Pod:     {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
+  Pod:     {{ include "valkey.statefulsetName" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
 {{- end }}
 {{- else }}
-  Master:  {{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+  Master:  {{ include "valkey.statefulsetName" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
 {{- range $i := until (sub (int .Values.replica.replicas) 1 | int) }}
-  Replica: {{ include "valkey.fullname" $ }}-{{ add $i 1 }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
+  Replica: {{ include "valkey.statefulsetName" $ }}-{{ add $i 1 }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
 {{- end }}
 {{- end }}
 

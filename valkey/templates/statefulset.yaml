@@ -6,7 +6,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "valkey.fullname" . }}
+  name: {{ include "valkey.statefulsetName" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/component: valkey

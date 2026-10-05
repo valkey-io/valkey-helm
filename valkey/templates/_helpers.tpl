@@ -211,8 +211,22 @@ Usage: include "valkey.fullnameWithSuffix" (list . "read")
 {{/*
 Stable names and selectors for the independent Sentinel StatefulSet.
 */}}
+{{/*
+StatefulSet names are kept to 52 characters: Kubernetes labels every pod with
+controller-revision-hash: <statefulset name>-<10 character hash>, and a label
+value longer than 63 characters makes every pod creation fail. The pods'
+names, and so their DNS names, follow the StatefulSet name.
+*/}}
+{{- define "valkey.statefulsetName" -}}
+{{- include "valkey.fullname" . | trunc 52 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Name of the Sentinel StatefulSet, Service and PodDisruptionBudget, 52
+characters at most for the same reason.
+*/}}
 {{- define "valkey.sentinel.fullname" -}}
-{{- printf "%s-sentinel" (include "valkey.fullname" . | trunc 54 | trimSuffix "-") -}}
+{{- printf "%s-sentinel" (include "valkey.fullname" . | trunc 43 | trimSuffix "-") -}}
 {{- end -}}
 
 {{/*

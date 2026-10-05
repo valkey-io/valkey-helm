@@ -630,3 +630,14 @@ tests:
           value: valkey
       - notExists:
           path: spec.selector.matchLabels["app.kubernetes.io/component"]
+
+  - it: should keep the default StatefulSet name
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey

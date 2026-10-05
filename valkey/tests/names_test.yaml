@@ -8,6 +8,10 @@ templates:
   - templates/init_config.yaml
   - templates/secret.yaml
   - templates/sentinel-headless-service.yaml
+  - templates/sentinel-statefulset.yaml
+  - templates/sentinel-configmap.yaml
+  - templates/haproxy-configmap.yaml
+  - templates/service.yaml
 set:
   # The longest full name the chart produces; every suffixed name must
   # still fit the 63 characters Kubernetes allows for Service, container,
@@ -104,3 +108,57 @@ tests:
       - matchRegex:
           path: metadata.name
           pattern: '^a{51}-sentinel-hl$'
+
+  # Kubernetes labels each StatefulSet pod controller-revision-hash:
+  # <statefulset name>-<10 character hash>, so a StatefulSet name above 52
+  # characters makes every pod creation fail.
+  - it: should keep the Valkey StatefulSet name within 52 characters
+    template: templates/statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: '^a{52}$'
+
+  - it: should keep the Sentinel StatefulSet name within 52 characters
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: '^a{43}-sentinel$'
+
+  - it: should address the Valkey pods by the StatefulSet name
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'SELF_HOST="a{52}-\$POD_INDEX\.a{54}-headless\.'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'MASTER_HOST="a{52}-0\.a{54}-headless\.'
+
+  - it: should address the Valkey pods by the StatefulSet name in the Sentinel scripts
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'DEFAULT_MASTER_HOST="a{52}-0\.'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'node="a{52}-\$\{i\}\.a{54}-headless\.'
+
+  - it: should address the Valkey pods by the StatefulSet name in HAProxy
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server a{52}-0 a{52}-0\.a{54}-headless\.'
+
+  - it: should select the first Valkey pod by the StatefulSet name
+    set:
+      sentinel.enabled: false
+      haproxy.enabled: false
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-0
