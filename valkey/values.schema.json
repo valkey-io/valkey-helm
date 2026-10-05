@@ -28,47 +28,6 @@
         "commonLabels": {
             "type": "object"
         },
-        "dataStorage": {
-            "type": "object",
-            "properties": {
-                "accessModes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "annotations": {
-                    "type": "object"
-                },
-                "className": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "hostPath": {
-                    "type": "string"
-                },
-                "keepPvc": {
-                    "type": "boolean"
-                },
-                "labels": {
-                    "type": "object"
-                },
-                "persistentVolumeClaimName": {
-                    "type": "string"
-                },
-                "requestedSize": {
-                    "type": "string"
-                },
-                "subPath": {
-                    "type": "string"
-                },
-                "volumeName": {
-                    "type": "string"
-                }
-            }
-        },
         "deploymentStrategy": {
             "type": "string",
             "enum": [
@@ -76,19 +35,16 @@
                 "Recreate"
             ]
         },
-        "env": {
-            "type": "object"
+        "extraConfig": {
+            "type": "string"
+        },
+        "extraContainers": {
+            "type": "array"
+        },
+        "extraEnv": {
+            "type": "array"
         },
         "extraInitContainers": {
-            "type": "array"
-        },
-        "extraSecretValkeyConfigs": {
-            "type": "boolean"
-        },
-        "extraValkeyConfigs": {
-            "type": "array"
-        },
-        "extraValkeySecrets": {
             "type": "array"
         },
         "extraVolumeMounts": {
@@ -341,14 +297,11 @@
                         "command": {
                             "type": "array"
                         },
-                        "extraEnvs": {
-                            "type": "object"
+                        "extraEnv": {
+                            "type": "array"
                         },
                         "tlsServerName": {
                             "type": "string"
-                        },
-                        "extraExporterSecrets": {
-                            "type": "array"
                         },
                         "extraVolumeMounts": {
                             "type": "array"
@@ -390,7 +343,7 @@
                         "enabled": {
                             "type": "boolean"
                         },
-                        "extraLabels": {
+                        "labels": {
                             "type": "object"
                         },
                         "honorLabels": {
@@ -436,10 +389,10 @@
                         "enabled": {
                             "type": "boolean"
                         },
-                        "extraAnnotations": {
+                        "annotations": {
                             "type": "object"
                         },
-                        "extraLabels": {
+                        "labels": {
                             "type": "object"
                         },
                         "rules": {
@@ -459,7 +412,7 @@
                         "enabled": {
                             "type": "boolean"
                         },
-                        "extraLabels": {
+                        "labels": {
                             "type": "object"
                         },
                         "ports": {
@@ -484,7 +437,7 @@
                         "enabled": {
                             "type": "boolean"
                         },
-                        "extraLabels": {
+                        "labels": {
                             "type": "object"
                         },
                         "honorLabels": {
@@ -530,10 +483,77 @@
             "type": "string"
         },
         "networkPolicy": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+                "allowExternal": {
+                    "type": "boolean"
+                },
+                "allowExternalEgress": {
+                    "type": "boolean"
+                },
+                "annotations": {
+                    "type": "object"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "extraEgress": {
+                    "type": "array"
+                },
+                "extraIngress": {
+                    "type": "array"
+                },
+                "ingressNSMatchLabels": {
+                    "type": "object"
+                },
+                "ingressNSPodMatchLabels": {
+                    "type": "object"
+                },
+                "labels": {
+                    "type": "object"
+                }
+            }
         },
         "nodeSelector": {
             "type": "object"
+        },
+        "persistence": {
+            "type": "object",
+            "properties": {
+                "accessModes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "annotations": {
+                    "type": "object"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "existingClaim": {
+                    "type": "string"
+                },
+                "hostPath": {
+                    "type": "string"
+                },
+                "keepOnUninstall": {
+                    "type": "boolean"
+                },
+                "labels": {
+                    "type": "object"
+                },
+                "size": {
+                    "type": "string"
+                },
+                "storageClass": {
+                    "type": "string"
+                },
+                "subPath": {
+                    "type": "string"
+                }
+            }
         },
         "podAnnotations": {
             "type": "object"
@@ -584,219 +604,15 @@
                 "minReplicasToWrite": {
                     "type": "integer"
                 },
-                "persistence": {
-                    "type": "object",
-                    "properties": {
-                        "accessModes": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        },
-                        "size": {
-                            "type": "string"
-                        },
-                        "storageClass": {
-                            "type": "string"
-                        }
-                    }
-                },
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"
                 },
                 "replicas": {
-                    "type": "integer"
+                    "type": "integer",
+                    "minimum": 1
                 },
                 "replicationUser": {
                     "type": "string"
-                },
-                "sentinel": {
-                    "type": "object",
-                    "properties": {
-                        "affinity": {
-                            "type": "object"
-                        },
-                        "downAfterMilliseconds": {
-                            "type": "integer"
-                        },
-                        "enabled": {
-                            "type": "boolean"
-                        },
-                        "extraConfig": {
-                            "type": "string"
-                        },
-                        "failoverTimeout": {
-                            "type": "integer"
-                        },
-                        "initialTopologyWaitSeconds": {
-                            "type": "integer"
-                        },
-                        "masterRecordRefreshSeconds": {
-                            "type": "integer"
-                        },
-                        "masterSet": {
-                            "type": "string"
-                        },
-                        "monitorUser": {
-                            "type": "string"
-                        },
-                        "nodeSelector": {
-                            "type": ["object", "null"]
-                        },
-                        "orphanCheckSeconds": {
-                            "type": "integer"
-                        },
-                        "password": {
-                            "type": "string"
-                        },
-                        "passwordKey": {
-                            "type": "string"
-                        },
-                        "parallelSyncs": {
-                            "type": "integer"
-                        },
-                        "persistence": {
-                            "type": "object",
-                            "properties": {
-                                "accessModes": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
-                                },
-                                "enabled": {
-                                    "type": "boolean"
-                                },
-                                "size": {
-                                    "type": "string"
-                                },
-                                "storageClass": {
-                                    "type": "string"
-                                }
-                            }
-                        },
-                        "persistentVolumeClaimRetentionPolicy": {
-                            "type": "object"
-                        },
-                        "podAnnotations": {
-                            "type": "object"
-                        },
-                        "podDisruptionBudget": {
-                            "type": "object",
-                            "properties": {
-                                "enabled": {
-                                    "type": "boolean"
-                                },
-                                "minAvailable": {
-                                    "oneOf": [
-                                        {
-                                            "type": "integer",
-                                            "minimum": 0
-                                        },
-                                        {
-                                            "type": "string",
-                                            "pattern": "^[0-9]+%$"
-                                        },
-                                        {
-                                            "type": "null"
-                                        }
-                                    ]
-                                },
-                                "maxUnavailable": {
-                                    "oneOf": [
-                                        {
-                                            "type": "integer",
-                                            "minimum": 0
-                                        },
-                                        {
-                                            "type": "string",
-                                            "pattern": "^[0-9]+%$"
-                                        },
-                                        {
-                                            "type": "null"
-                                        }
-                                    ]
-                                },
-                                "unhealthyPodEvictionPolicy": {
-                                    "type": [
-                                        "string",
-                                        "null"
-                                    ],
-                                    "enum": [
-                                        "IfHealthyBudget",
-                                        "AlwaysAllow",
-                                        "",
-                                        null
-                                    ]
-                                }
-                            }
-                        },
-                        "podLabels": {
-                            "type": "object"
-                        },
-                        "port": {
-                            "type": "integer"
-                        },
-                        "preStopFailover": {
-                            "type": "boolean"
-                        },
-                        "preStopFailoverTimeoutSeconds": {
-                            "type": "integer"
-                        },
-                        "quorum": {
-                            "type": "integer"
-                        },
-                        "replicas": {
-                            "type": "integer"
-                        },
-                        "resources": {
-                            "type": "object"
-                        },
-                        "securityContext": {
-                            "type": "object"
-                        },
-                        "service": {
-                            "type": "object",
-                            "properties": {
-                                "annotations": {
-                                    "type": "object"
-                                },
-                                "appProtocol": {
-                                    "type": "string"
-                                },
-                                "clusterIP": {
-                                    "type": "string"
-                                },
-                                "enabled": {
-                                    "type": "boolean"
-                                },
-                                "loadBalancerClass": {
-                                    "type": "string"
-                                },
-                                "loadBalancerSourceRanges": {
-                                    "type": "array"
-                                },
-                                "nodePort": {
-                                    "type": "integer"
-                                },
-                                "port": {
-                                    "type": "integer"
-                                },
-                                "type": {
-                                    "type": "string"
-                                }
-                            }
-                        },
-                        "startupTimeoutSeconds": {
-                            "type": "integer"
-                        },
-                        "tolerations": {
-                            "type": ["array", "null"]
-                        },
-                        "topologySpreadConstraints": {
-                            "type": "array"
-                        }
-                    }
                 },
                 "service": {
                     "type": "object",
@@ -860,6 +676,201 @@
                 },
                 "runAsUser": {
                     "type": "integer"
+                }
+            }
+        },
+        "sentinel": {
+            "type": "object",
+            "properties": {
+                "affinity": {
+                    "type": "object"
+                },
+                "downAfterMilliseconds": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "existingSecret": {
+                    "type": "string"
+                },
+                "extraConfig": {
+                    "type": "string"
+                },
+                "failoverTimeout": {
+                    "type": "integer"
+                },
+                "initialTopologyWaitSeconds": {
+                    "type": "integer"
+                },
+                "masterRecordRefreshSeconds": {
+                    "type": "integer"
+                },
+                "masterSet": {
+                    "type": "string"
+                },
+                "minReadySeconds": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "monitorUser": {
+                    "type": "string"
+                },
+                "nodeSelector": {
+                    "type": ["object", "null"]
+                },
+                "orphanCheckSeconds": {
+                    "type": "integer"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "passwordKey": {
+                    "type": "string"
+                },
+                "parallelSyncs": {
+                    "type": "integer"
+                },
+                "persistence": {
+                    "type": "object",
+                    "properties": {
+                        "accessModes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "size": {
+                            "type": "string"
+                        },
+                        "storageClass": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "persistentVolumeClaimRetentionPolicy": {
+                    "type": "object"
+                },
+                "podAnnotations": {
+                    "type": "object"
+                },
+                "podDisruptionBudget": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "minAvailable": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "string",
+                                    "pattern": "^[0-9]+%$"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "maxUnavailable": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "string",
+                                    "pattern": "^[0-9]+%$"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "unhealthyPodEvictionPolicy": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "IfHealthyBudget",
+                                "AlwaysAllow",
+                                "",
+                                null
+                            ]
+                        }
+                    }
+                },
+                "podLabels": {
+                    "type": "object"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "preStopFailover": {
+                    "type": "boolean"
+                },
+                "preStopFailoverTimeoutSeconds": {
+                    "type": "integer"
+                },
+                "quorum": {
+                    "type": "integer"
+                },
+                "replicas": {
+                    "type": "integer"
+                },
+                "resources": {
+                    "type": "object"
+                },
+                "securityContext": {
+                    "type": "object"
+                },
+                "service": {
+                    "type": "object",
+                    "properties": {
+                        "annotations": {
+                            "type": "object"
+                        },
+                        "appProtocol": {
+                            "type": "string"
+                        },
+                        "clusterIP": {
+                            "type": "string"
+                        },
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "loadBalancerClass": {
+                            "type": "string"
+                        },
+                        "loadBalancerSourceRanges": {
+                            "type": "array"
+                        },
+                        "nodePort": {
+                            "type": "integer"
+                        },
+                        "port": {
+                            "type": "integer"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "startupTimeoutSeconds": {
+                    "type": "integer"
+                },
+                "tolerations": {
+                    "type": ["array", "null"]
+                },
+                "topologySpreadConstraints": {
+                    "type": "array"
                 }
             }
         },
@@ -936,6 +947,9 @@
                 },
                 "serverPublicKey": {
                     "type": "string"
+                },
+                "volume": {
+                    "type": "object"
                 }
             }
         },
@@ -994,9 +1008,6 @@
                     ]
                 }
             }
-        },
-        "valkeyConfig": {
-            "type": "string"
         },
         "valkeyLogLevel": {
             "type": "string",

@@ -137,7 +137,7 @@ Check if there are any users with inline passwords
     {{- $hasInlinePasswords = true -}}
   {{- end -}}
 {{- end -}}
-{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.password -}}
+{{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.password -}}
   {{- $hasInlinePasswords = true -}}
 {{- end -}}
 {{- $hasInlinePasswords -}}
@@ -151,7 +151,7 @@ Returns "true" or "false".
 */}}
 {{- define "valkey.renderAuthSecret" -}}
 {{- $userSecret := and .Values.auth.enabled (or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig) -}}
-{{- $sentinelSecret := and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.password -}}
+{{- $sentinelSecret := and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.password -}}
 {{- if or $userSecret $sentinelSecret -}}
 true
 {{- else -}}
@@ -211,14 +211,71 @@ Usage: include "valkey.fullnameWithSuffix" (list . "read")
 {{/*
 Stable names and selectors for the independent Sentinel StatefulSet.
 */}}
+{{/*
+StatefulSet names are kept to 52 characters: Kubernetes labels every pod with
+controller-revision-hash: <statefulset name>-<10 character hash>, and a label
+value longer than 63 characters makes every pod creation fail. The pods'
+names, and so their DNS names, follow the StatefulSet name.
+*/}}
+{{- define "valkey.statefulsetName" -}}
+{{- include "valkey.fullname" . | trunc 52 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Name of the Sentinel StatefulSet, Service and PodDisruptionBudget, 52
+characters at most for the same reason.
+*/}}
 {{- define "valkey.sentinel.fullname" -}}
-{{- printf "%s-sentinel" (include "valkey.fullname" . | trunc 54 | trimSuffix "-") -}}
+{{- printf "%s-sentinel" (include "valkey.fullname" . | trunc 43 | trimSuffix "-") -}}
+{{- end -}}
+
+{{/*
+The Sentinel password, as the single file /sentinel-auth/password. Mounted by
+the Sentinel pods and by the Valkey pods, which ask Sentinel for the master
+on startup and for a failover before shutting down. The Valkey server itself
+never uses it. Not optional: a missing Secret or key keeps the pod from
+starting, with the reason in its events, rather than leaving it without one.
+*/}}
+{{- define "valkey.sentinel.authVolume" -}}
+- name: sentinel-auth
+  secret:
+    {{- if .Values.sentinel.existingSecret }}
+    secretName: {{ tpl .Values.sentinel.existingSecret . }}
+    {{- else }}
+    secretName: {{ include "valkey.fullname" . }}-auth
+    {{- end }}
+    defaultMode: 0400
+    items:
+      - key: {{ ternary .Values.sentinel.passwordKey "sentinel-password" (not (empty .Values.sentinel.existingSecret)) }}
+        path: password
+{{- end -}}
+
+{{/*
+Label that admits a pod to the Valkey port when networkPolicy.allowExternal is
+false. A label name is limited to 63 characters, so the fullname is shortened
+to leave room for the suffix.
+*/}}
+{{- define "valkey.networkPolicy.clientLabel" -}}
+{{- printf "%s-client" (include "valkey.fullname" . | trunc 56 | trimSuffix "-") -}}
 {{- end -}}
 
 {{- define "valkey.sentinel.headlessServiceName" -}}
 {{- /* Shortening "<fullname>-sentinel" first could cut "-sentinel" off
        entirely and collide with the Valkey headless service */}}
 {{- include "valkey.fullnameWithSuffix" (list . "sentinel-hl") -}}
+{{- end -}}
+
+{{/*
+Labels for the Sentinel resources, matching the Sentinel pods' name.
+*/}}
+{{- define "valkey.sentinel.labels" -}}
+helm.sh/chart: {{ include "valkey.chart" . }}
+{{ include "valkey.sentinel.selectorLabels" . }}
+{{- include "valkey.versionLabel" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.commonLabels }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
 {{- end -}}
 
 {{- define "valkey.sentinel.selectorLabels" -}}
@@ -228,13 +285,75 @@ app.kubernetes.io/component: sentinel
 {{- end -}}
 
 {{/*
-Validate replica persistence configuration
+Refuse values that were removed or renamed in 1.0. Ignoring them would drop
+settings silently, and for persistence it would cost the data: a standalone
+release that still sets dataStorage.enabled would render without its PVC, so
+Helm would delete the claim and the pod would start on an empty volume.
 */}}
-{{- define "valkey.validateReplicaPersistence" -}}
-{{- if .Values.replica.enabled }}
-  {{- if not .Values.replica.persistence.size }}
-    {{- fail "Replica mode requires persistent storage. Please set replica.persistence.size (e.g., '5Gi')" }}
+{{- define "valkey.validateRemovedValues" -}}
+{{- $removed := list
+  (list "dataStorage" "dataStorage was replaced by persistence (dataStorage.requestedSize is now persistence.size, className is storageClass, persistentVolumeClaimName is existingClaim, keepPvc is keepOnUninstall). The PVC name does not change.")
+  (list "replica.persistence" "replica.persistence was replaced by persistence: set persistence.enabled=true and move size, storageClass and accessModes there. The PVC names do not change.")
+  (list "valkeyConfig" "valkeyConfig was renamed to extraConfig.")
+  (list "extraValkeySecrets" "extraValkeySecrets was removed: add a secret volume to extraVolumes and mount it with extraVolumeMounts.")
+  (list "extraValkeyConfigs" "extraValkeyConfigs was removed: add a configMap volume to extraVolumes and mount it with extraVolumeMounts.")
+  (list "extraSecretValkeyConfigs" "extraSecretValkeyConfigs was removed: mount the files with extraVolumes and extraVolumeMounts, and load them with include <path> in extraConfig.")
+  (list "env" "env was replaced by extraEnv, a list of Kubernetes EnvVar entries (name, value or valueFrom).")
+  (list "metrics.exporter.extraEnvs" "metrics.exporter.extraEnvs was replaced by metrics.exporter.extraEnv, a list of Kubernetes EnvVar entries (name, value or valueFrom).")
+  (list "metrics.exporter.extraExporterSecrets" "metrics.exporter.extraExporterSecrets was removed: add a secret volume to extraVolumes and mount it with metrics.exporter.extraVolumeMounts.")
+  (list "metrics.service.extraLabels" "metrics.service.extraLabels was renamed to metrics.service.labels.")
+  (list "metrics.serviceMonitor.extraLabels" "metrics.serviceMonitor.extraLabels was renamed to metrics.serviceMonitor.labels.")
+  (list "metrics.podMonitor.extraLabels" "metrics.podMonitor.extraLabels was renamed to metrics.podMonitor.labels.")
+  (list "metrics.prometheusRule.extraLabels" "metrics.prometheusRule.extraLabels was renamed to metrics.prometheusRule.labels.")
+  (list "metrics.prometheusRule.extraAnnotations" "metrics.prometheusRule.extraAnnotations was renamed to metrics.prometheusRule.annotations.")
+  (list "networkPolicy.ingress" "networkPolicy.ingress was replaced by networkPolicy.extraIngress: set networkPolicy.enabled=true and networkPolicy.allowExternal=false, otherwise the policy also admits every client on the Valkey port.")
+  (list "networkPolicy.egress" "networkPolicy.egress was replaced by networkPolicy.extraEgress: set networkPolicy.enabled=true and networkPolicy.allowExternalEgress=false, otherwise the policy also allows all egress.")
+}}
+{{- range $removed }}
+  {{- $path := splitList "." (index . 0) }}
+  {{- $node := $.Values }}
+  {{- $found := true }}
+  {{- range $path }}
+    {{- if and $found (kindIs "map" $node) (hasKey $node .) }}
+      {{- $node = index $node . }}
+    {{- else }}
+      {{- $found = false }}
+    {{- end }}
   {{- end }}
+  {{- if $found }}
+    {{- fail (printf "%s See UPGRADE.md." (index . 1)) }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Validate the persistence configuration.
+
+The 0.x dataStorage and replica.persistence values are refused rather than
+ignored: a standalone release that still sets dataStorage.enabled would
+otherwise render without its PVC, so Helm would delete the claim and the pod
+would start on an empty volume.
+*/}}
+{{- define "valkey.validatePersistence" -}}
+{{- include "valkey.validateRemovedValues" . }}
+{{- $p := .Values.persistence }}
+{{- if and .Values.replica.enabled (lt (int .Values.replica.replicas) 1) }}
+  {{- fail "replica.replicas counts the Valkey pods, the master included, and must be at least 1." }}
+{{- end }}
+{{- if .Values.replica.enabled }}
+  {{- if not (and $p.enabled $p.size) }}
+    {{- fail "Replication requires persistent storage, otherwise a restarted primary comes back empty and its replicas copy the empty dataset. Please set persistence.enabled=true and persistence.size (e.g. '5Gi')." }}
+  {{- end }}
+  {{- if or $p.existingClaim $p.hostPath $p.keepOnUninstall }}
+    {{- fail "persistence.existingClaim, persistence.hostPath and persistence.keepOnUninstall only apply to standalone mode. In replication mode the StatefulSet creates one PVC per pod, named valkey-data-<statefulset>-<index>; pre-create claims with those names to reuse existing volumes." }}
+  {{- end }}
+{{- else if and $p.enabled (not (or $p.size $p.existingClaim $p.hostPath)) }}
+  {{- fail "persistence.enabled needs persistence.size, persistence.existingClaim or persistence.hostPath." }}
+{{- else if and (not $p.enabled) (or $p.size $p.existingClaim $p.hostPath) }}
+  {{- /* 0.x mounted persistentVolumeClaimName and hostPath even with
+         dataStorage.enabled false; silently switching those to an emptyDir
+         would start Valkey on an empty data directory. */}}
+  {{- fail "persistence.size, persistence.existingClaim or persistence.hostPath is set but persistence.enabled is false. Set persistence.enabled=true to use the volume, or remove them to run without persistence." }}
 {{- end }}
 {{- end -}}
 
@@ -293,36 +412,36 @@ have to be given twice: once inside sentinel_kwargs and once beside it.
 Validate sentinel configuration
 */}}
 {{- define "valkey.validateSentinelConfig" -}}
-{{- if .Values.replica.sentinel.enabled }}
+{{- if .Values.sentinel.enabled }}
   {{- if not .Values.replica.enabled }}
-    {{- fail "Sentinel requires replication. Please set replica.enabled=true along with replica.sentinel.enabled=true" }}
+    {{- fail "Sentinel requires replication. Please set replica.enabled=true along with sentinel.enabled=true" }}
   {{- end }}
-  {{- $sentinels := int .Values.replica.sentinel.replicas }}
-  {{- if lt (int .Values.replica.replicas) 1 }}
-    {{- fail "Sentinel requires at least one Valkey replica. Please set replica.replicas to 1 or more." }}
+  {{- $sentinels := int .Values.sentinel.replicas }}
+  {{- if lt (int .Values.replica.replicas) 2 }}
+    {{- fail "Sentinel requires at least one Valkey replica to promote. Please set replica.replicas, which counts the master too, to 2 or more." }}
   {{- end }}
   {{- if lt $sentinels 3 }}
-    {{- fail (printf "Sentinel requires at least 3 instances to form a quorum. Please set replica.sentinel.replicas to 3 or more (currently %d)." $sentinels) }}
+    {{- fail (printf "Sentinel requires at least 3 instances to form a quorum. Please set sentinel.replicas to 3 or more (currently %d)." $sentinels) }}
   {{- end }}
-  {{- if lt (int .Values.replica.sentinel.quorum) 2 }}
-    {{- fail "replica.sentinel.quorum must be at least 2, a quorum of 1 allows a single Sentinel to trigger a failover on its own." }}
+  {{- if lt (int .Values.sentinel.quorum) 2 }}
+    {{- fail "sentinel.quorum must be at least 2, a quorum of 1 allows a single Sentinel to trigger a failover on its own." }}
   {{- end }}
-  {{- if gt (int .Values.replica.sentinel.quorum) $sentinels }}
-    {{- fail (printf "replica.sentinel.quorum (%d) cannot be greater than replica.sentinel.replicas (%d)." (int .Values.replica.sentinel.quorum) $sentinels) }}
+  {{- if gt (int .Values.sentinel.quorum) $sentinels }}
+    {{- fail (printf "sentinel.quorum (%d) cannot be greater than sentinel.replicas (%d)." (int .Values.sentinel.quorum) $sentinels) }}
   {{- end }}
-  {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
-    {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
+  {{- if and .Values.sentinel.preStopFailover (ge (int .Values.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
+    {{- fail (printf "sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
   {{- end }}
-  {{- if .Values.replica.sentinel.podDisruptionBudget.enabled }}
-    {{- if and (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.maxUnavailable) }}
-      {{- fail "replica.sentinel.podDisruptionBudget needs either minAvailable or maxUnavailable. A budget with neither is accepted by the API server but protects nothing." }}
+  {{- if .Values.sentinel.podDisruptionBudget.enabled }}
+    {{- if and (kindIs "invalid" .Values.sentinel.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.sentinel.podDisruptionBudget.maxUnavailable) }}
+      {{- fail "sentinel.podDisruptionBudget needs either minAvailable or maxUnavailable. A budget with neither is accepted by the API server but protects nothing." }}
     {{- end }}
     {{- /* A failover needs quorum Sentinels to agree the master is down and a
            majority of all Sentinels to elect the leader that performs it, so
            the budget must keep max(quorum, majority) Sentinels running.
            Kubernetes rounds percentages up for both fields. */}}
-    {{- $pdb := .Values.replica.sentinel.podDisruptionBudget }}
-    {{- $needed := max (int .Values.replica.sentinel.quorum) (add (div $sentinels 2) 1) }}
+    {{- $pdb := .Values.sentinel.podDisruptionBudget }}
+    {{- $needed := max (int .Values.sentinel.quorum) (add (div $sentinels 2) 1) }}
     {{- $field := ternary "maxUnavailable" "minAvailable" (kindIs "invalid" $pdb.minAvailable) }}
     {{- $value := ternary $pdb.maxUnavailable $pdb.minAvailable (kindIs "invalid" $pdb.minAvailable) }}
     {{- $count := 0 }}
@@ -333,19 +452,22 @@ Validate sentinel configuration
     {{- end }}
     {{- $kept := ternary (sub $sentinels $count) $count (eq $field "maxUnavailable") }}
     {{- if lt (int $kept) (int $needed) }}
-      {{- fail (printf "replica.sentinel.podDisruptionBudget.%s (%v) lets voluntary evictions leave %d of %d Sentinels running, but a failover needs %d: replica.sentinel.quorum (%d) to agree and a majority of all Sentinels to elect a leader. Add Sentinels, lower the quorum, or tighten the budget." $field $value (int $kept) $sentinels (int $needed) (int .Values.replica.sentinel.quorum)) }}
+      {{- fail (printf "sentinel.podDisruptionBudget.%s (%v) lets voluntary evictions leave %d of %d Sentinels running, but a failover needs %d: sentinel.quorum (%d) to agree and a majority of all Sentinels to elect a leader. Add Sentinels, lower the quorum, or tighten the budget." $field $value (int $kept) $sentinels (int $needed) (int .Values.sentinel.quorum)) }}
     {{- end }}
   {{- end }}
-  {{- $bootstrapWait := int .Values.replica.sentinel.initialTopologyWaitSeconds }}
-  {{- $sentinelStartup := int .Values.replica.sentinel.startupTimeoutSeconds }}
+  {{- $bootstrapWait := int .Values.sentinel.initialTopologyWaitSeconds }}
+  {{- $sentinelStartup := int .Values.sentinel.startupTimeoutSeconds }}
   {{- if lt $bootstrapWait (add $sentinelStartup 30) }}
-    {{- fail (printf "replica.sentinel.initialTopologyWaitSeconds (%d) must be at least 30s above replica.sentinel.startupTimeoutSeconds (%d), which is %d. A pod with no recorded topology has nothing to be told until the Sentinels finish that discovery and bootstrap a master, so a shorter wait leaves the init container exiting just before the answer arrives." $bootstrapWait $sentinelStartup (add $sentinelStartup 30)) }}
+    {{- fail (printf "sentinel.initialTopologyWaitSeconds (%d) must be at least 30s above sentinel.startupTimeoutSeconds (%d), which is %d. A pod with no recorded topology has nothing to be told until the Sentinels finish that discovery and bootstrap a master, so a shorter wait leaves the init container exiting just before the answer arrives." $bootstrapWait $sentinelStartup (add $sentinelStartup 30)) }}
   {{- end }}
-  {{- if and (not .Values.replica.sentinel.password) (not .Values.auth.usersExistingSecret) }}
-    {{- fail "replica.sentinel.password is required when Sentinel is enabled, unless auth.usersExistingSecret supplies replica.sentinel.passwordKey." }}
+  {{- if and .Values.sentinel.password .Values.sentinel.existingSecret }}
+    {{- fail "Set either sentinel.password or sentinel.existingSecret, not both." }}
+  {{- end }}
+  {{- if not (or .Values.sentinel.password .Values.sentinel.existingSecret) }}
+    {{- fail "Sentinel requires its own password: set sentinel.password, or sentinel.existingSecret with the password under sentinel.passwordKey." }}
   {{- end }}
   {{- if .Values.auth.enabled }}
-    {{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
+    {{- $monitorUser := .Values.sentinel.monitorUser | default .Values.replica.replicationUser }}
     {{- if not (hasKey .Values.auth.aclUsers $monitorUser) }}
       {{- fail (printf "Sentinel monitor user '%s' must be defined in auth.aclUsers. Sentinel needs it to reach the monitored Valkey nodes." $monitorUser) }}
     {{- end }}
@@ -404,12 +526,74 @@ HAProxy never holds a client's identity.
 {{- end -}}
 
 {{/*
+TLS options for HAProxy's checks of the Sentinels. The check connects with
+"tcp-check connect ssl", so check-ssl is not needed here.
+*/}}
+{{- define "valkey.haproxy.sentinelTlsOptions" -}}
+{{- if .Values.tls.enabled }}
+{{- if eq .Values.haproxy.tls.verify "required" }} ca-file /tls/{{ .Values.tls.caPublicKey }} verify required
+{{- else }} verify none
+{{- end }}
+{{- if .Values.tls.requireClientCertificate }} crt /tls/{{ .Values.haproxy.tls.clientCertFile }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Per-server certificate identity options for an HAProxy backend.
 */}}
 {{/*
+Source of the TLS volume, mounted at /tls by every pod that reads TLS files:
+tls.volume as given, or tls.existingSecret as a secret volume. Exactly one of
+the two must be set when TLS is enabled.
+*/}}
+{{- define "valkey.tls.volumeSource" -}}
+{{- $tls := .Values.tls }}
+{{- if and $tls.existingSecret $tls.volume }}
+  {{- fail "tls.existingSecret and tls.volume are both set. Use tls.existingSecret for a Secret, or tls.volume for any other volume source." }}
+{{- end }}
+{{- if $tls.volume }}
+{{- toYaml $tls.volume }}
+{{- else }}
+secret:
+  secretName: {{ required "TLS needs tls.existingSecret or tls.volume." $tls.existingSecret }}
+  defaultMode: 0400
+{{- end }}
+{{- end -}}
+
+{{/*
+Mount paths the chart uses itself. A mount from extraVolumeMounts on one of
+them, or below one, would hide or be hidden by the chart's own.
+*/}}
+{{- define "valkey.validateMountPaths" -}}
+{{- $checks := list
+  (list "extraVolumeMounts" .Values.extraVolumeMounts (list "/data" "/valkey-conf" "/scripts" "/sentinel-scripts" "/sentinel-auth" "/tls" "/valkey-users-secret" "/valkey-auth-secret"))
+  (list "metrics.exporter.extraVolumeMounts" .Values.metrics.exporter.extraVolumeMounts (list "/tls"))
+  (list "haproxy.extraVolumeMounts" .Values.haproxy.extraVolumeMounts (list "/tls" "/usr/local/etc/haproxy"))
+}}
+{{- range $checks }}
+  {{- $value := index . 0 }}
+  {{- $reserved := index . 2 }}
+  {{- range (index . 1) }}
+    {{- $path := .mountPath | toString | trimSuffix "/" }}
+    {{- range $reserved }}
+      {{- if or (eq $path .) (hasPrefix (printf "%s/" .) $path) }}
+        {{- if eq . "/tls" }}
+          {{- fail (printf "%s mounts %s, which the chart uses for the TLS files. The chart mounts tls.existingSecret or tls.volume there itself; put any other TLS files into tls.volume. See UPGRADE.md." $value $path) }}
+        {{- end }}
+        {{- fail (printf "%s mounts %s, which the chart uses itself (%s). Mount it somewhere else." $value $path (join ", " $reserved)) }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Keys of tls.existingSecret that HAProxy reads, as a JSON list. Only these are
 mounted, so the Valkey server's private key never reaches the HAProxy pods.
-Must stay in line with the files valkey.haproxy.serverTlsOptions references.
+With a tls.volume, which cannot be narrowed down like this, they are mounted
+one by one with subPath instead. Must stay in line with the files
+valkey.haproxy.serverTlsOptions references.
 */}}
 {{- define "valkey.haproxy.tlsFiles" -}}
 {{- $files := list -}}
@@ -427,7 +611,7 @@ Must stay in line with the files valkey.haproxy.serverTlsOptions references.
 {{- define "valkey.haproxy.serverTlsIdentityOptions" -}}
 {{- $root := .root -}}
 {{- if and $root.Values.tls.enabled (eq $root.Values.haproxy.tls.verify "required") -}}
-{{- $host := printf "%s-%d.%s.%s.svc.%s" (include "valkey.fullname" $root) .index (include "valkey.headlessServiceName" $root) $root.Release.Namespace $root.Values.clusterDomain -}}
+{{- $host := printf "%s-%d.%s.%s.svc.%s" (include "valkey.statefulsetName" $root) .index (include "valkey.headlessServiceName" $root) $root.Release.Namespace $root.Values.clusterDomain -}}
 {{- printf " verifyhost %s" $host -}}
 {{- end -}}
 {{- end -}}
@@ -437,8 +621,8 @@ Validate haproxy configuration
 */}}
 {{- define "valkey.validateHaproxyConfig" -}}
 {{- if .Values.haproxy.enabled }}
-  {{- if not (and .Values.replica.enabled .Values.replica.sentinel.enabled) }}
-    {{- fail "HAProxy routes clients to whichever node Sentinel promoted. Please set replica.enabled=true and replica.sentinel.enabled=true, or disable haproxy." }}
+  {{- if not (and .Values.replica.enabled .Values.sentinel.enabled) }}
+    {{- fail "HAProxy routes clients to whichever node Sentinel promoted. Please set replica.enabled=true and sentinel.enabled=true, or disable haproxy." }}
   {{- end }}
   {{- if .Values.haproxy.podDisruptionBudget.enabled }}
     {{- if and (kindIs "invalid" .Values.haproxy.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.haproxy.podDisruptionBudget.maxUnavailable) }}

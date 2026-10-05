@@ -19,6 +19,16 @@ A Helm chart for Kubernetes
 * <https://github.com/valkey-io/valkey-helm.git>
 * <https://valkey.io>
 
+## Requirements
+
+Valkey 9.0 or later.
+The chart replaces a Sentinel master through a coordinated failover (`SENTINEL FAILOVER <master> COORDINATED`), which Valkey added in 9.0.
+The default image already is a 9.x release; if you pin `image.tag`, pin a 9.x version.
+
+## Upgrading
+
+Breaking changes and the steps to migrate an existing release are listed in [UPGRADE.md](UPGRADE.md).
+
 ## Deployment Modes
 
 ### Standalone Mode (Default)
@@ -38,7 +48,7 @@ helm install valkey valkey/valkey
 Deploy Valkey with master-replica architecture for read scaling and data redundancy:
 
 ```bash
-helm install valkey valkey/valkey --set replica.enabled=true --set replica.persistence.size=5Gi
+helm install valkey valkey/valkey --set replica.enabled=true --set persistence.enabled=true --set persistence.size=5Gi
 ```
 
 **IMPORTANT**
@@ -76,28 +86,27 @@ Valkey still needs at least one replica to provide a failover target.
 See [examples/ha-sentinel.yaml](examples/ha-sentinel.yaml) for a complete values file.
 
 Spread Sentinel pods across failure domains so one node or zone cannot remove the quorum.
-The Sentinel pods are scheduled with their own `replica.sentinel.affinity`, `topologySpreadConstraints`, `nodeSelector` and `tolerations`, and labelled with their own `replica.sentinel.podLabels` and `podAnnotations`.
+The Sentinel pods are scheduled with their own `sentinel.affinity`, `topologySpreadConstraints`, `nodeSelector` and `tolerations`, and labelled with their own `sentinel.podLabels` and `podAnnotations`.
 The top level `affinity`, `topologySpreadConstraints`, `podLabels` and `podAnnotations` apply to the Valkey pods only, because rules written for the Valkey pods select the Valkey pods' labels; the HAProxy pods likewise take `haproxy.podLabels` and `haproxy.podAnnotations`.
 `nodeSelector` and `tolerations` fall back to the top level values when the Sentinel ones are unset (`null`, the default); set them to `{}` / `[]` to schedule the Sentinels without any. The HAProxy values work the same way.
 
 ```yaml
-replica:
-  sentinel:
-    topologySpreadConstraints:
-      - maxSkew: 1
-        topologyKey: kubernetes.io/hostname
-        whenUnsatisfiable: ScheduleAnyway
-        labelSelector:
-          matchLabels:
-            app.kubernetes.io/instance: valkey
-            app.kubernetes.io/component: sentinel
-    # Keep a Sentinel majority through node drains
-    podDisruptionBudget:
-      enabled: true
-      maxUnavailable: 1
+sentinel:
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/instance: valkey
+          app.kubernetes.io/component: sentinel
+  # Keep a Sentinel majority through node drains
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
 ```
 
-The Valkey PodDisruptionBudget (`podDisruptionBudget`) does not cover the Sentinel pods; `replica.sentinel.podDisruptionBudget` creates a separate one for them.
+The Valkey PodDisruptionBudget (`podDisruptionBudget`) does not cover the Sentinel pods; `sentinel.podDisruptionBudget` creates a separate one for them.
 
 **Services:**
 
@@ -123,45 +132,55 @@ Writes sent to the `valkey` service directly may land on a replica and fail with
 
 **Authentication:**
 
-Set `replica.sentinel.password` to a credential used only for the Sentinel endpoint, even when Valkey authentication is disabled.
-With `auth.usersExistingSecret`, store that credential under `replica.sentinel.passwordKey` (default: `sentinel`) instead.
+Set `sentinel.password` to a credential used only for the Sentinel endpoint, even when Valkey authentication is disabled, or point `sentinel.existingSecret` at a Secret holding it under `sentinel.passwordKey` (default: `sentinel`).
+Clients, the Sentinels among themselves and the Valkey pods' scripts use it; the Valkey server never does.
 Valkey user passwords are deliberately not accepted by Sentinel, so restrictions on application ACL users cannot be bypassed through Sentinel commands.
-Sentinel reaches the Valkey nodes as `replica.sentinel.monitorUser`, which defaults to `replica.replicationUser`.
+Sentinel reaches the Valkey nodes as `sentinel.monitorUser`, which defaults to `replica.replicationUser`.
 That user must be allowed to promote a replica, otherwise every failover aborts with `-failover-abort-slave-timeout`.
 A starting pod asks the other nodes which of them is the primary as the same user, rather than as `replica.replicationUser`, whose documented minimum cannot run `INFO`.
 The minimum permissions are:
 
 ```text
 ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof +replicaof
-+config|rewrite +client|setname +client|kill +script|kill +psync +replconf
++config|rewrite +client +failover +script|kill +psync +replconf
 ```
 
+`+failover` and `+client` are what Sentinel needs for the coordinated failover described below, as listed in the [Sentinel documentation](https://valkey.io/topics/sentinel/).
+
 Sentinel can be enabled on an existing replication release without changing the Valkey StatefulSet's immutable fields.
-Changing `replica.sentinel.persistence.enabled` later changes the Sentinel StatefulSet's `volumeClaimTemplates` and therefore requires recreating that StatefulSet.
+Changing `sentinel.persistence.enabled` later changes the Sentinel StatefulSet's `volumeClaimTemplates` and therefore requires recreating that StatefulSet.
 
 **Credentials on disk:**
 
 Valkey needs the replication password in plain text in its configuration, and `CONFIG REWRITE` writes it back on every failover even if the chart does not.
 The configuration therefore lives on a memory backed `emptyDir` rather than on the data volume, so no credential is written to persistent storage.
-The ACL file is hashed and also memory backed, and the Sentinel state is memory backed for the same reason, since Sentinel rewrites `auth-pass` and `sentinel-pass` into `sentinel.conf`.
+The ACL file holds only password hashes and sits next to it on the same volume, and the Sentinel state is memory backed for the same reason, since Sentinel rewrites `auth-pass` and `sentinel-pass` into `sentinel.conf`.
 Only the RDB or AOF and the init log stay on the data volume.
 
-Enabling `replica.sentinel.persistence` opts out of this and puts `sentinel.conf`, credentials included, on a PersistentVolume.
+Enabling `sentinel.persistence` opts out of this and puts `sentinel.conf`, credentials included, on a PersistentVolume.
 It is off by default and not needed, because each Sentinel rediscovers the current master on startup.
 
 **Failover behaviour:**
 
-A master that stops responding for `replica.sentinel.downAfterMilliseconds` is replaced within a few seconds.
-When a master pod is terminated by a rolling update, its `preStop` hook asks Sentinel to promote a replica first, so the failover happens before the pod goes away rather than after.
+A master that stops responding for `sentinel.downAfterMilliseconds` is replaced within a few seconds.
+When a master pod is terminated, by a rolling update or a node drain, its `preStop` hook asks Sentinel for a coordinated failover (`SENTINEL FAILOVER <master> COORDINATED`) before the pod goes away.
+Sentinel then has the master pause writes, wait until the chosen replica has all of them, and step down before that replica is promoted, so no acknowledged write is lost; clients writing during the handover wait briefly and then get an error or `-READONLY` and retry.
+If the replica cannot catch up, the handover is rolled back instead.
+
+`sentinel.minReadySeconds` keeps a rolling update from moving on until a restarted pod has been ready for that long.
+Sentinel still marks a restarted pod as down for several seconds after it is ready, and does not repoint a pod it considers down when it fails over, so without the delay a pod can be left following a master that is about to go away.
+
+A failover that is not planned, a crashed pod or a lost node, is not coordinated: Valkey replicates asynchronously, so the writes the master acknowledged last before it went away can be lost.
+The Sentinel documentation covers this under [consistency under partitions](https://valkey.io/topics/sentinel/).
 The replication topology survives a full restart of the StatefulSet: each pod asks Sentinel for the current master instead of assuming it is pod-0.
 
 On a cold start the Sentinels are restarting too, and a Sentinel cannot name a master until a Valkey node is up, so waiting for one would leave both halves waiting for each other.
-Each pod therefore mirrors the current master onto its data volume, as a host and a port with no credential in it, every `replica.sentinel.masterRecordRefreshSeconds`.
+Each pod therefore mirrors the current master onto its data volume, as a host and a port with no credential in it, every `sentinel.masterRecordRefreshSeconds`.
 A pod that finds no Sentinel first asks the other Valkey nodes whether one of them is already up as the primary, and follows that answer if it gets one.
 A node that is running outranks the record, both because a pod that was down across a failover still has its own name in its record, which would bring it back writable next to the node that was promoted, and because the record may name a node that has since been demoted.
 Only when nothing answers does the record decide, which is what puts nodes on the network for the Sentinels to find.
-A pod with neither a Sentinel, nor a running node, nor a record waits up to `replica.sentinel.initialTopologyWaitSeconds` for one of them and then refuses to start rather than guess.
-That wait is what a first install spends: the Sentinels bootstrap a master once their own `replica.sentinel.startupTimeoutSeconds` expires, and the pod is simply there to be told, so the chart refuses to render unless the wait is at least 30 seconds above it.
+A pod with neither a Sentinel, nor a running node, nor a record waits up to `sentinel.initialTopologyWaitSeconds` for one of them and then refuses to start rather than guess.
+That wait is what a first install spends: the Sentinels bootstrap a master once their own `sentinel.startupTimeoutSeconds` expires, and the pod is simply there to be told, so the chart refuses to render unless the wait is at least 30 seconds above it.
 
 The record is read from the config file Valkey rewrites when Sentinel changes a pod's role, so it needs no credentials.
 A rewrite empties that file before filling it again, and a check landing in between sees no `replicaof` line, which is indistinguishable from a promotion.
@@ -173,7 +192,7 @@ What can still happen is that a pod which was down during a failover comes back 
 Agreeing on a primary when no node can be reached is a consensus problem rather than a record keeping one, and this chart does not solve it.
 
 Sentinel cannot repair that on its own, because it only learns which nodes are replicas by asking the primary, and a node replicating from a replica is not in that answer.
-Each Sentinel therefore checks every `replica.sentinel.orphanCheckSeconds` for a node that is replicating from something other than the current primary and that Sentinel does not list, and points it back at the primary.
+Each Sentinel therefore checks every `sentinel.orphanCheckSeconds` for a node that is replicating from something other than the current primary and that Sentinel does not list, and points it back at the primary.
 It only touches nodes Sentinel cannot see, which are exactly the ones Sentinel is not reconfiguring itself, and it stands down entirely while the primary is not plainly up.
 A node that answers as a primary is left alone and logged rather than demoted.
 
@@ -186,8 +205,9 @@ When a client library does not support it, enable HAProxy to get a plain connect
 helm install valkey valkey/valkey -f examples/ha-sentinel.yaml --set haproxy.enabled=true
 ```
 
-HAProxy health checks every Valkey node with `INFO replication` and forwards the write port only to the node that answers `role:master`.
-The health check is the failover mechanism, so no sidecar, no runtime package installation and no admin socket are involved.
+HAProxy health checks every Valkey node with `INFO replication` and asks every Sentinel which node is the master.
+It forwards the write port only to the node that answers `role:master` and that a majority of the Sentinels name as the master.
+The health checks are the failover mechanism, so no sidecar, no runtime package installation and no admin socket are involved.
 
 **Services:**
 
@@ -207,15 +227,21 @@ Select the proxy pods with `app.kubernetes.io/name=valkey-haproxy` or `app.kuber
 **Failover behaviour:**
 
 A failover has two steps, and HAProxy only covers the second one.
-Sentinel first has to notice the failure (`replica.sentinel.downAfterMilliseconds`) and promote a replica; HAProxy then needs up to `haproxy.config.checkInterval` to see the new master in its health check.
+Sentinel first has to notice the failure (`sentinel.downAfterMilliseconds`) and promote a replica; HAProxy then needs up to `haproxy.config.checkInterval` to see the change in its health checks.
 End to end that is the sum of both, not `checkInterval` alone.
 Clients see connection errors in the meantime and must reconnect, which is what a Sentinel-aware client would also do.
-A short `-READONLY` window is still possible while a recovered old master is being demoted by Sentinel.
+
+HAProxy follows the Sentinels rather than `role:master` alone because an old master keeps answering `role:master` for several seconds after Sentinel has promoted a replica, and the writes it takes in that time are discarded when it resyncs.
+The write port therefore also depends on the Sentinels: while a majority of them is unreachable, HAProxy closes new connections even if the master itself is healthy.
+
+When the old master goes away on its own `preStop` hook, it steps down before the new master is promoted, so connections that are already open get `-READONLY` and are closed by HAProxy at the next health check instead of writing to a stale master.
+After an unplanned failover, they stay on the old master until Sentinel demotes it if it comes back.
 
 **Authentication:**
 
 HAProxy authenticates its health check as `haproxy.checkUser`, which defaults to the `default` user and needs `+info` and `+ping`.
-The password is passed to HAProxy as an environment variable read from the existing secret, so it never lands in a ConfigMap.
+It authenticates to the Sentinels as the `sentinel` user, with the Sentinel password.
+Both passwords are passed to HAProxy as environment variables read from their secrets, so they never land in a ConfigMap.
 
 **TLS:**
 
@@ -227,16 +253,16 @@ HAProxy never terminates a client's TLS connection.
 Doing so would put one proxy certificate in front of every client, and on a node that maps a certificate to a user, every client would inherit that user's rights.
 It follows that clients which cannot speak TLS cannot use this proxy against a TLS enabled cluster, because the nodes themselves listen on the TLS port only.
 
-HAProxy does speak TLS for its own health checks, and `haproxy.tls.verify` decides how far it validates the nodes.
+HAProxy does speak TLS for its own health checks, and `haproxy.tls.verify` decides how far it validates the nodes and the Sentinels.
 Of `tls.existingSecret` it only mounts what those checks read, `tls.caPublicKey` and, when set, `haproxy.tls.clientCertFile`, so the Valkey server's private key never reaches the HAProxy pods.
 
 `required`, the default, validates the certificate against `tls.caPublicKey` and checks that it covers the DNS name of the pod being checked.
-That second part is what usually surprises people: HAProxy checks each node separately, so a certificate issued for the service name alone fails, and every backend goes down with `Server presented an SSL certificate different from the configured one`.
-Either add the pod names to the certificate, as `<release>-valkey-<index>.<release>-valkey-headless.<namespace>.svc.<clusterDomain>`, or set `haproxy.tls.verify: none`, which keeps the health check encrypted but stops validating what it is talking to.
+That second part is what usually surprises people: HAProxy checks each pod separately, so a certificate issued for the service name alone fails, and every backend goes down with `Server presented an SSL certificate different from the configured one`.
+Either add the pod names to the certificate, as `<release>-valkey-<index>.<release>-valkey-headless.<namespace>.svc.<clusterDomain>` for the nodes and `<release>-valkey-sentinel-<index>.<release>-valkey-sentinel-hl.<namespace>.svc.<clusterDomain>` for the Sentinels, or set `haproxy.tls.verify: none`, which keeps the health checks encrypted but stops validating what they are talking to.
 
 **Client certificates:**
 
-With `tls.requireClientCertificate`, the nodes ask for a certificate on every connection, so HAProxy needs one of its own to health check them.
+With `tls.requireClientCertificate`, the nodes and the Sentinels ask for a certificate on every connection, so HAProxy needs one of its own to health check them.
 HAProxy reads a certificate and its private key from a single file, so the separate `tls.serverPublicKey` and `tls.serverKey` entries cannot serve as one.
 Naming the key after the certificate, as `client.pem.key`, does not work either: that fallback is for `bind` lines, not for the backend `crt` used here.
 
@@ -263,7 +289,7 @@ haproxy:
     clientCertFile: client.pem
 ```
 
-The same certificate is presented to every node, so it needs no SAN of its own, only a signature from `tls.caPublicKey`.
+The same certificate is presented to every node and Sentinel, so it needs no SAN of its own, only a signature from `tls.caPublicKey`.
 Leaving `haproxy.tls.clientCertFile` empty fails the install rather than starting a proxy whose health checks are refused by every node.
 
 ## Cluster Mode
@@ -276,26 +302,34 @@ To follow progress or get involved, see the [weekly meeting wiki](https://github
 
 ## Storage
 
+The `persistence` block configures the Valkey data directory (`/data`) in both modes.
+The volume and claim names do not depend on these values: the standalone PVC is named `<fullname>`, and the replication PVCs `valkey-data-<statefulset>-<index>`.
+
 ### Standalone Storage
 
 Persistence is optional. By default, data is stored in an ephemeral volume and lost on pod restart.
 
+The standalone Deployment uses the `Recreate` strategy (`deploymentStrategy`): on an upgrade the old pod stops before the new one starts, so the data volume is never attached to two pods, at the cost of a short downtime.
+
 **Enable persistent storage:**
 
 ```yaml
-dataStorage:
+persistence:
   enabled: true
-  requestedSize: 10Gi
-  className: "fast-ssd"  # Optional
+  size: 10Gi
+  storageClass: "fast-ssd"  # Optional
 ```
 
-**Use existing PVC:**
+**Use an existing PVC** (or `hostPath` for a hostPath volume):
 
 ```yaml
-dataStorage:
+persistence:
   enabled: true
-  persistentVolumeClaimName: "my-existing-pvc"
+  existingClaim: "my-existing-pvc"
 ```
+
+When more than one is set, `existingClaim` wins over `size`, which wins over `hostPath`.
+`keepOnUninstall: true` keeps the chart created PVC on `helm uninstall`.
 
 ### Replication Storage
 
@@ -304,10 +338,46 @@ Persistent storage is **mandatory** in replication mode. Without it, the primary
 ```yaml
 replica:
   enabled: true
-  persistence:
-    size: 10Gi  # Required
-    storageClass: "fast-ssd"  # Optional
+persistence:
+  enabled: true
+  size: 10Gi  # Required
+  storageClass: "fast-ssd"  # Optional
 ```
+
+Each pod gets its own PVC from the StatefulSet's `volumeClaimTemplates`.
+`existingClaim`, `hostPath` and `keepOnUninstall` do not apply; to reuse existing volumes, create the claims as `valkey-data-<statefulset>-<index>` before installing.
+Kubernetes does not allow changing `volumeClaimTemplates`, so `persistence.labels` and `persistence.annotations` only apply to new installs, and changing `accessModes` or `storageClass` later requires recreating the StatefulSet.
+
+## Customizing Valkey
+
+Each kind of customization has one value:
+
+* `extraConfig`: raw lines appended to the generated `valkey.conf` (templated).
+* `extraVolumes`: additional volumes for the Valkey pod, of any type (Secret, ConfigMap, ...). `extraVolumeMounts` mounts them into the Valkey container and `metrics.exporter.extraVolumeMounts` into the exporter; containers from `extraInitContainers` and `extraContainers` declare their own `volumeMounts`.
+* `extraEnv`: additional environment variables for the Valkey container, as Kubernetes EnvVar entries (`metrics.exporter.extraEnv` for the exporter).
+
+To load configuration from a Secret or ConfigMap, mount it and `include` it:
+
+```yaml
+extraVolumes:
+  - name: extra-conf
+    secret:
+      secretName: my-valkey-conf
+extraVolumeMounts:
+  - name: extra-conf
+    mountPath: /extra-conf
+    readOnly: true
+extraConfig: |
+  include /extra-conf/valkey.conf
+extraEnv:
+  - name: MY_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: my-secret
+        key: token
+```
+
+Sentinel takes its own `sentinel.extraConfig`, appended to `sentinel.conf`.
 
 ## Authentication
 
@@ -364,6 +434,9 @@ auth:
     user guest on nopass ~public:* +@read
 ```
 
+The chart regenerates the ACL file from these values whenever a pod starts, so users added at runtime with `ACL SETUSER` last only until the next restart.
+A user allowed to run `ACL SAVE` or `CONFIG REWRITE` can still rewrite the generated files while the pod runs (`+@all` includes both): give application users narrower permissions, e.g. `+@all -@admin`.
+
 ### Replication with Authentication
 
 When using ACL authentication in replication mode, replicas need credentials to authenticate to the master:
@@ -380,7 +453,7 @@ auth:
 
 replica:
   enabled: true
-  replicas: 2
+  replicas: 3  # Valkey pods, the master included
   replicationUser: "replication-user"  # Must be defined in auth.aclUsers
 ```
 
@@ -432,6 +505,32 @@ podDisruptionBudget:
   minAvailable: 2  # Always keep at least 2 replicas running
 ```
 
+## NetworkPolicy
+
+Set `networkPolicy.enabled` to create a NetworkPolicy for the Valkey pods.
+By default it admits clients on the Valkey port from anywhere, opens the metrics port when `metrics.enabled` is set, and allows all egress.
+
+To admit only known clients, set `networkPolicy.allowExternal: false`.
+The Valkey port then accepts only:
+
+* pods labelled `<fullname>-client: "true"`, e.g. `valkey-client: "true"` for a release named `valkey`,
+* the other Valkey pods, for replication,
+* this release's Sentinel and HAProxy pods,
+* pods in the namespaces matched by `networkPolicy.ingressNSMatchLabels`, narrowed to `networkPolicy.ingressNSPodMatchLabels` when set.
+
+`networkPolicy.allowExternalEgress: false` limits egress to DNS, the other Valkey pods and this release's Sentinel pods.
+`networkPolicy.extraIngress` and `networkPolicy.extraEgress` add rules on top; Kubernetes admits a connection if any rule matches, so they can only widen what the options above allow.
+
+The policy applies to the Valkey pods only, not to the Sentinel or HAProxy pods.
+
+```yaml
+networkPolicy:
+  enabled: true
+  allowExternal: false
+  ingressNSMatchLabels:
+    kubernetes.io/metadata.name: my-app
+```
+
 ## TLS
 
 This chart supports TLS encryption for Valkey connections.
@@ -450,40 +549,62 @@ tls:
   existingSecret: "valkey-tls-secret"
 ```
 
+`tls.serverPublicKey`, `tls.serverKey` and `tls.caPublicKey` name the files: the keys in the Secret, and the file names under `/tls` in the pods.
+A cert-manager Secret, for example, needs `serverPublicKey: tls.crt` and `serverKey: tls.key`.
+
+### TLS files from another volume
+
+When the files do not come from a single Secret, set `tls.volume` to any volume source instead of `tls.existingSecret`.
+For example, a cert-manager certificate issued through ACME has no `ca.crt` in its Secret; a projected volume can add the CA bundle from a trust-manager ConfigMap, under the file names the chart expects:
+
+```yaml
+tls:
+  enabled: true
+  volume:
+    projected:
+      sources:
+        - secret:
+            name: valkey-cert
+            items:
+              - {key: tls.crt, path: server.crt}
+              - {key: tls.key, path: server.key}
+        - configMap:
+            name: valkey-ca-bundle
+            items:
+              - {key: trust-bundle.pem, path: ca.crt}
+```
+
+The volume is mounted at `/tls` in every pod that reads TLS files: the Valkey pods, the Sentinel pods, the HAProxy pods and the test pods. Before choosing one:
+
+* It must be a volume type that several pods can mount at the same time. A ReadWriteOnce PersistentVolumeClaim, for one, only works with a single pod.
+* Every file in it, private keys included, is readable in the Valkey, Sentinel and test pods. HAProxy mounts only the files it reads, the CA and its own client certificate, with `subPath`; the rest of the volume is still attached to its pods, but not visible in the container. Files mounted with `subPath` are not updated when they change, so restart HAProxy after rotating them; HAProxy only reads them on startup anyway.
+* The files must be readable by the users those pods run as.
+
+TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on any other path the chart uses, are refused.
+
 ## Values
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | global.imageRegistry | string | '' |  |
 | global.imagePullSecrets | list | `[]` |  |
-| affinity | object | `{}` | Valkey pods only, see replica.sentinel.affinity |
+| affinity | object | `{}` | Valkey pods only, see sentinel.affinity |
 | auth.aclConfig | string | `""` |  |
 | auth.aclUsers | object | `{}` | |
 | auth.enabled | bool | `false` |  |
 | auth.usersExistingSecret | string | `""` | |
-| dataStorage.accessModes[0] | string | `"ReadWriteOnce"` |  |
-| dataStorage.annotations | object | `{}` |  |
-| dataStorage.className | string | `""` |  |
-| dataStorage.enabled | bool | `false` |  |
-| dataStorage.keepPvc | bool | `false` |  |
-| dataStorage.labels | object | `{}` |  |
-| dataStorage.persistentVolumeClaimName | string | `""` |  |
-| dataStorage.requestedSize | string | `""` |  |
-| dataStorage.subPath | string | `""` |  |
-| dataStorage.volumeName | string | `"valkey-data"` |  |
-| dataStorage.hostPath | string | `""` |  |
-| deploymentStrategy | string | `"RollingUpdate"` |  |
-| env | object | `{}` |  |
-| extraSecretValkeyConfigs | bool | `false` |  |
-| extraVolumes | list | `[]` |  |
-| extraVolumeMounts | list | `[]` |  |
-| extraValkeyConfigs | list | `[]` |  |
-| extraValkeySecrets | list | `[]` |  |
+| deploymentStrategy | string | `"Recreate"` | Standalone Deployment strategy; RollingUpdate is only safe without persistence |
+| extraConfig | string | `""` | Raw lines appended to valkey.conf; supports templating and `include` |
+| extraContainers | list | `[]` | Additional containers in the Valkey pod |
+| extraEnv | list | `[]` | Additional EnvVar entries for the Valkey container (value or valueFrom) |
+| extraInitContainers | list | `[]` | Additional init containers in the Valkey pod |
+| extraVolumes | list | `[]` | Additional volumes for the Valkey pod |
+| extraVolumeMounts | list | `[]` | Mounts of extraVolumes into the Valkey container; the chart's own paths are refused |
 | fullnameOverride | string | `""` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.registry | string | `""` |  |
 | image.repository | string | `"docker.io/valkey/valkey"` |  |
-| image.tag | string | `""` |  |
+| image.tag | string | `""` | Defaults to the chart's appVersion; Valkey 9.0 or later is required |
 | imagePullSecrets | list | `[]` |  |
 | initResources | object | `{}` |  |
 | livenessProbe.customProbe | object | `{}` | Full probe spec to replace the default valkey-cli ping handler and timing |
@@ -495,18 +616,18 @@ tls:
 | metrics.enabled | bool | `false` |  |
 | metrics.exporter.args | list | `[]` |  |
 | metrics.exporter.command | list | `[]` |  |
-| metrics.exporter.extraEnvs | object | `{}` | Also overrides the REDIS_ADDR and REDIS_EXPORTER_TLS_* values the chart sets |
-| metrics.exporter.extraVolumeMounts | list | `[]` |  |
+| metrics.exporter.extraEnv | list | `[]` | EnvVar entries; also overrides the REDIS_ADDR and REDIS_EXPORTER_TLS_* values the chart sets |
+| metrics.exporter.extraVolumeMounts | list | `[]` | Mounts of extraVolumes into the exporter container |
 | metrics.exporter.image.pullPolicy | string | `"IfNotPresent"` |  |
 | metrics.exporter.image.repository | string | `"ghcr.io/oliver006/redis_exporter"` |  |
 | metrics.exporter.image.tag | string | `"v1.88.0"` |  |
 | metrics.exporter.port | int | `9121` |  |
 | metrics.exporter.tlsServerName | string | `""` | Server name expected in the Valkey certificate with TLS, defaults to the service name |
 | metrics.exporter.resources | object | `{}` |  |
-| metrics.exporter.securityContext | object | `{}` |  |
+| metrics.exporter.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsNonRoot":true}` | Merged with user values; `null` drops them |
 | metrics.podMonitor.annotations | object | `{}` |  |
 | metrics.podMonitor.enabled | bool | `false` |  |
-| metrics.podMonitor.extraLabels | object | `{}` | Labels on the PodMonitor, e.g. for a Prometheus `podMonitorSelector` |
+| metrics.podMonitor.labels | object | `{}` | Labels on the PodMonitor, e.g. for a Prometheus `podMonitorSelector` |
 | metrics.podMonitor.honorLabels | bool | `false` |  |
 | metrics.podMonitor.interval | string | `"30s"` |  |
 | metrics.podMonitor.metricRelabelings | list | `[]` |  |
@@ -517,18 +638,18 @@ tls:
 | metrics.podMonitor.scrapeTimeout | string | `""` |  |
 | metrics.podMonitor.targetLimit | bool | `false` |  |
 | metrics.prometheusRule.enabled | bool | `false` |  |
-| metrics.prometheusRule.extraAnnotations | object | `{}` |  |
-| metrics.prometheusRule.extraLabels | object | `{}` |  |
+| metrics.prometheusRule.annotations | object | `{}` |  |
+| metrics.prometheusRule.labels | object | `{}` |  |
 | metrics.prometheusRule.rules | list | `[]` |  |
 | metrics.service.annotations | object | `{}` |  |
 | metrics.service.enabled | bool | `true` |  |
-| metrics.service.extraLabels | object | `{}` |  |
+| metrics.service.labels | object | `{}` |  |
 | metrics.service.ports.http | int | `9121` |  |
 | metrics.service.type | string | `"ClusterIP"` |  |
 | metrics.service.appProtocol | string | `""` |  |
 | metrics.serviceMonitor.annotations | object | `{}` |  |
 | metrics.serviceMonitor.enabled | bool | `false` |  |
-| metrics.serviceMonitor.extraLabels | object | `{}` | Labels on the ServiceMonitor, e.g. for a Prometheus `serviceMonitorSelector` |
+| metrics.serviceMonitor.labels | object | `{}` | Labels on the ServiceMonitor, e.g. for a Prometheus `serviceMonitorSelector` |
 | metrics.serviceMonitor.honorLabels | bool | `false` |  |
 | metrics.serviceMonitor.interval | string | `"30s"` |  |
 | metrics.serviceMonitor.metricRelabelings | list | `[]` |  |
@@ -539,10 +660,28 @@ tls:
 | metrics.serviceMonitor.scrapeTimeout | string | `""` |  |
 | metrics.serviceMonitor.targetLimit | bool | `false` |  |
 | nameOverride | string | `""` |  |
-| networkPolicy | object | `{}` |  |
+| networkPolicy.enabled | bool | `false` | Create a NetworkPolicy for the Valkey pods |
+| networkPolicy.allowExternal | bool | `true` | Admit clients from any source; when false, only labelled clients, this release's pods and ingressNSMatchLabels |
+| networkPolicy.allowExternalEgress | bool | `true` | Allow all egress; when false, only DNS and this release's Valkey and Sentinel pods |
+| networkPolicy.ingressNSMatchLabels | object | `{}` | Namespaces admitted when allowExternal is false |
+| networkPolicy.ingressNSPodMatchLabels | object | `{}` | Pods admitted within those namespaces |
+| networkPolicy.extraIngress | list | `[]` | Ingress rules added as they are |
+| networkPolicy.extraEgress | list | `[]` | Egress rules added as they are |
+| networkPolicy.labels | object | `{}` |  |
+| networkPolicy.annotations | object | `{}` |  |
 | nodeSelector | object | `{}` |  |
-| podAnnotations | object | `{}` | Valkey pods only, see replica.sentinel.podAnnotations and haproxy.podAnnotations |
-| podLabels | object | `{}` | Valkey pods only, see replica.sentinel.podLabels and haproxy.podLabels |
+| persistence.enabled | bool | `false` | Required in replication mode |
+| persistence.size | string | `""` | PVC size (one per pod in replication) |
+| persistence.storageClass | string | `""` |  |
+| persistence.accessModes | list | `["ReadWriteOnce"]` |  |
+| persistence.subPath | string | `""` | Subpath of the volume mounted as /data |
+| persistence.labels | object | `{}` | PVC labels; replication: new installs only |
+| persistence.annotations | object | `{}` | PVC annotations; replication: new installs only |
+| persistence.existingClaim | string | `""` | Standalone only |
+| persistence.hostPath | string | `""` | Standalone only |
+| persistence.keepOnUninstall | bool | `false` | Standalone only |
+| podAnnotations | object | `{}` | Valkey pods only, see sentinel.podAnnotations and haproxy.podAnnotations |
+| podLabels | object | `{}` | Valkey pods only, see sentinel.podLabels and haproxy.podLabels |
 | commonLabels | object | `{}` |  |
 | podDisruptionBudget.enabled | bool | `false` |  |
 | podDisruptionBudget.minAvailable | int or string | `null` | Minimum pods available during disruptions |
@@ -561,7 +700,7 @@ tls:
 | readinessProbe.successThreshold | int | `1` |  |
 | readinessProbe.timeoutSeconds | int | `1` |  |
 | replica.enabled | bool | `false` |  |
-| replica.replicas | int | `2` |  |
+| replica.replicas | int | `3` | Valkey pods, the master included; at least 1 (2 with Sentinel) |
 | replica.replicationUser | string | `"default"` |  |
 | replica.disklessSync | bool | `false` |  |
 | replica.minReplicasToWrite | int | `0` |  |
@@ -574,48 +713,6 @@ tls:
 | replica.service.clusterIP | string | `""` |  |
 | replica.service.appProtocol | string | `""` |  |
 | replica.service.loadBalancerClass | string | `""` |  |
-| replica.persistence. |  | `""` |  |
-| replica.persistence.size | string | `""` | Required if replica is enabled |
-| replica.persistence.storageClass | string | `""` |  |
-| replica.persistence.accessModes | list | `""` |  |
-| replica.sentinel.enabled | bool | `false` | Run Valkey Sentinel for automatic failover |
-| replica.sentinel.replicas | int | `3` | Number of independently deployed Sentinel pods |
-| replica.sentinel.port | int | `26379` |  |
-| replica.sentinel.masterSet | string | `"mymaster"` |  |
-| replica.sentinel.initialTopologyWaitSeconds | int | `180` | How long a pod with no recorded topology waits to be told one before giving up |
-| replica.sentinel.masterRecordRefreshSeconds | int | `1` | How often the cold-start topology record is checked against the running config |
-| replica.sentinel.quorum | int | `2` | Sentinels that must agree before a failover starts |
-| replica.sentinel.downAfterMilliseconds | int | `5000` |  |
-| replica.sentinel.failoverTimeout | int | `60000` |  |
-| replica.sentinel.parallelSyncs | int | `1` |  |
-| replica.sentinel.monitorUser | string | `""` | Defaults to replica.replicationUser |
-| replica.sentinel.orphanCheckSeconds | int | `30` | How often each Sentinel looks for a node replicating from something it cannot see |
-| replica.sentinel.password | string | `""` | Dedicated Sentinel ACL password; required with Sentinel unless supplied by auth.usersExistingSecret |
-| replica.sentinel.passwordKey | string | `"sentinel"` | Key containing the Sentinel password in auth.usersExistingSecret |
-| replica.sentinel.preStopFailover | bool | `true` | Fail over before a master pod is terminated |
-| replica.sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
-| replica.sentinel.startupTimeoutSeconds | int | `60` |  |
-| replica.sentinel.extraConfig | string | `""` | Raw lines appended to sentinel.conf |
-| replica.sentinel.resources | object | `{}` |  |
-| replica.sentinel.securityContext | object | `{}` | Defaults to securityContext |
-| replica.sentinel.service.enabled | bool | `true` |  |
-| replica.sentinel.service.type | string | `"ClusterIP"` |  |
-| replica.sentinel.service.port | int | `26379` |  |
-| replica.sentinel.service.annotations | object | `{}` |  |
-| replica.sentinel.persistence.enabled | bool | `false` |  |
-| replica.sentinel.persistence.size | string | `"100Mi"` |  |
-| replica.sentinel.persistence.storageClass | string | `""` |  |
-| replica.sentinel.persistentVolumeClaimRetentionPolicy | object | `{}` | PVC retention policy for the Sentinel StatefulSet |
-| replica.sentinel.podLabels | object | `{}` | Sentinel pod labels; top level podLabels do not apply |
-| replica.sentinel.podAnnotations | object | `{}` | Sentinel pod annotations; top level podAnnotations do not apply |
-| replica.sentinel.nodeSelector | object | `null` | null inherits nodeSelector; {} for none |
-| replica.sentinel.tolerations | list | `null` | null inherits tolerations; [] for none |
-| replica.sentinel.affinity | object | `{}` | Top level affinity does not apply |
-| replica.sentinel.topologySpreadConstraints | list | `[]` | Top level topologySpreadConstraints do not apply |
-| replica.sentinel.podDisruptionBudget.enabled | bool | `false` | Keep a Sentinel quorum available across node drains |
-| replica.sentinel.podDisruptionBudget.minAvailable | int | `null` | Takes precedence over maxUnavailable |
-| replica.sentinel.podDisruptionBudget.maxUnavailable | int | `1` | Must keep max(quorum, majority) Sentinels running |
-| replica.sentinel.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
 | haproxy.enabled | bool | `false` | Route non Sentinel-aware clients to the current master |
 | haproxy.replicas | int | `3` |  |
 | haproxy.image.registry | string | `"docker.io"` |  |
@@ -627,7 +724,7 @@ tls:
 | haproxy.service.port | int | `6379` | Write port, follows the master |
 | haproxy.service.annotations | object | `{}` |  |
 | haproxy.config.maxconn | int | `4096` |  |
-| haproxy.config.checkInterval | string | `"2s"` | Time for HAProxy to notice a new master, on top of Sentinel's own detection |
+| haproxy.config.checkInterval | string | `"2s"` | How often HAProxy checks each node and Sentinel, the time it needs to notice a new master on top of Sentinel's own detection |
 | haproxy.config.checkTimeout | string | `"5s"` |  |
 | haproxy.config.healthPort | int | `8404` | Serves /healthz for the Kubernetes probes, not published |
 | haproxy.config.timeout.connect | string | `"5s"` |  |
@@ -649,12 +746,52 @@ tls:
 | haproxy.securityContext | object | see values.yaml |  |
 | haproxy.extraInitContainers | list | `[]` |  |
 | haproxy.extraVolumes | list | `[]` |  |
-| haproxy.extraVolumeMounts | list | `[]` |  |
+| haproxy.extraVolumeMounts | list | `[]` | /tls and /usr/local/etc/haproxy are refused |
 | resources | object | `{}` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
 | securityContext.runAsNonRoot | bool | `true` |  |
 | securityContext.runAsUser | int | `1000` |  |
+| sentinel.enabled | bool | `false` | Run Valkey Sentinel for automatic failover |
+| sentinel.replicas | int | `3` | Number of independently deployed Sentinel pods |
+| sentinel.port | int | `26379` |  |
+| sentinel.masterSet | string | `"mymaster"` |  |
+| sentinel.initialTopologyWaitSeconds | int | `180` | How long a pod with no recorded topology waits to be told one before giving up |
+| sentinel.masterRecordRefreshSeconds | int | `1` | How often the cold-start topology record is checked against the running config |
+| sentinel.quorum | int | `2` | Sentinels that must agree before a failover starts |
+| sentinel.downAfterMilliseconds | int | `5000` |  |
+| sentinel.failoverTimeout | int | `60000` |  |
+| sentinel.parallelSyncs | int | `1` |  |
+| sentinel.monitorUser | string | `""` | Defaults to replica.replicationUser |
+| sentinel.orphanCheckSeconds | int | `30` | How often each Sentinel looks for a node replicating from something it cannot see |
+| sentinel.password | string | `""` | Dedicated Sentinel password; this or existingSecret is required |
+| sentinel.existingSecret | string | `""` | Secret holding the Sentinel password, instead of sentinel.password |
+| sentinel.passwordKey | string | `"sentinel"` | Key of the Sentinel password in sentinel.existingSecret |
+| sentinel.preStopFailover | bool | `true` | Fail over before a master pod is terminated |
+| sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
+| sentinel.minReadySeconds | int | `15` | minReadySeconds of the Valkey StatefulSet, lets Sentinel catch up with a restarted pod during a rolling update |
+| sentinel.startupTimeoutSeconds | int | `60` |  |
+| sentinel.extraConfig | string | `""` | Raw lines appended to sentinel.conf; supports templating |
+| sentinel.resources | object | `{}` |  |
+| sentinel.securityContext | object | `{}` | Defaults to securityContext |
+| sentinel.service.enabled | bool | `true` |  |
+| sentinel.service.type | string | `"ClusterIP"` |  |
+| sentinel.service.port | int | `26379` |  |
+| sentinel.service.annotations | object | `{}` |  |
+| sentinel.persistence.enabled | bool | `false` |  |
+| sentinel.persistence.size | string | `"100Mi"` |  |
+| sentinel.persistence.storageClass | string | `""` |  |
+| sentinel.persistentVolumeClaimRetentionPolicy | object | `{}` | PVC retention policy for the Sentinel StatefulSet |
+| sentinel.podLabels | object | `{}` | Sentinel pod labels; top level podLabels do not apply |
+| sentinel.podAnnotations | object | `{}` | Sentinel pod annotations; top level podAnnotations do not apply |
+| sentinel.nodeSelector | object | `null` | null inherits nodeSelector; {} for none |
+| sentinel.tolerations | list | `null` | null inherits tolerations; [] for none |
+| sentinel.affinity | object | `{}` | Top level affinity does not apply |
+| sentinel.topologySpreadConstraints | list | `[]` | Top level topologySpreadConstraints do not apply |
+| sentinel.podDisruptionBudget.enabled | bool | `false` | Keep a Sentinel quorum available across node drains |
+| sentinel.podDisruptionBudget.minAvailable | int | `null` | Takes precedence over maxUnavailable |
+| sentinel.podDisruptionBudget.maxUnavailable | int | `1` | Must keep max(quorum, majority) Sentinels running |
+| sentinel.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
 | service.annotations | object | `{}` |  |
 | service.nodePort | int | `0` |  |
 | service.port | int | `6379` |  |
@@ -671,16 +808,16 @@ tls:
 | startupProbe.initialDelaySeconds | int | `0` |  |
 | startupProbe.periodSeconds | int | `10` |  |
 | startupProbe.timeoutSeconds | int | `1` |  |
-| terminationGracePeriodSeconds | int | `30` | Valkey pods, standalone and replication; must exceed replica.sentinel.preStopFailoverTimeoutSeconds |
-| tls.caPublicKey | string | `"ca.crt"` |  |
+| terminationGracePeriodSeconds | int | `30` | Valkey pods, standalone and replication; must exceed sentinel.preStopFailoverTimeoutSeconds |
+| tls.caPublicKey | string | `"ca.crt"` | CA certificate file, in the Secret or the volume |
 | tls.dhParamKey | string | `""` |  |
 | tls.enabled | bool | `false` |  |
-| tls.existingSecret | string | `""` |  |
+| tls.existingSecret | string | `""` | Secret holding the TLS files; set this or tls.volume |
+| tls.volume | object | `{}` | Any other volume source holding the TLS files, mounted at /tls in every pod that reads them |
 | tls.requireClientCertificate | bool | `false` |  |
-| tls.serverKey | string | `"server.key"` |  |
-| tls.serverPublicKey | string | `"server.crt"` |  |
+| tls.serverKey | string | `"server.key"` | Server private key file |
+| tls.serverPublicKey | string | `"server.crt"` | Server certificate file |
 | tolerations | list | `[]` |  |
-| topologySpreadConstraints | list | `[]` | Valkey pods only, see replica.sentinel.topologySpreadConstraints |
-| valkeyConfig | string | `""` |  |
+| topologySpreadConstraints | list | `[]` | Valkey pods only, see sentinel.topologySpreadConstraints |
 | valkeyLogLevel | string | `"notice"` |  |
 | workloadAnnotations | object | `{}` |  |

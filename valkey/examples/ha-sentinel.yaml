@@ -7,45 +7,47 @@
 # the notes printed after the install.
 #
 # SECURITY: the passwords below are placeholders. Replace all three credentials
-# before installing anywhere real, or drop the inline passwords and point
-# auth.usersExistingSecret at a secret you manage. The dedicated Sentinel
-# credential is required and must match replica.sentinel.passwordKey:
+# before installing anywhere real, or drop the inline passwords and use secrets
+# you manage: auth.usersExistingSecret for the Valkey users and
+# sentinel.existingSecret for the dedicated Sentinel credential, e.g.
 #
 #   kubectl create secret generic valkey-users \
-#     --from-literal=default=... --from-literal=replicator=... \
-#     --from-literal=sentinel=...
+#     --from-literal=default=... --from-literal=replicator=...
+#   kubectl create secret generic valkey-sentinel --from-literal=sentinel=...
 
 replica:
   enabled: true
-  # 2 replicas + 1 master
-  replicas: 2
-  persistence:
-    size: 1Gi
+  # Valkey pods, the master included: 1 master + 2 replicas
+  replicas: 3
 
   # Used both for replication and by Sentinel to monitor the nodes
   replicationUser: replicator
 
-  sentinel:
+sentinel:
+  enabled: true
+  replicas: 3
+  # Use a distinct credential for the Sentinel endpoint. In production,
+  # prefer sentinel.existingSecret instead.
+  password: "replace-with-a-sentinel-password"
+  quorum: 2
+  # Spread the Sentinel quorum across nodes when the cluster has capacity.
+  # The top level affinity and topologySpreadConstraints apply to the Valkey
+  # pods only.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: sentinel
+  # Keep a Sentinel majority through node drains
+  podDisruptionBudget:
     enabled: true
-    replicas: 3
-    # Use a distinct credential for the Sentinel endpoint. In production,
-    # prefer auth.usersExistingSecret and set passwordKey instead.
-    password: "replace-with-a-sentinel-password"
-    quorum: 2
-    # Spread the Sentinel quorum across nodes when the cluster has capacity.
-    # The top level affinity and topologySpreadConstraints apply to the Valkey
-    # pods only.
-    topologySpreadConstraints:
-      - maxSkew: 1
-        topologyKey: kubernetes.io/hostname
-        whenUnsatisfiable: ScheduleAnyway
-        labelSelector:
-          matchLabels:
-            app.kubernetes.io/component: sentinel
-    # Keep a Sentinel majority through node drains
-    podDisruptionBudget:
-      enabled: true
-      maxUnavailable: 1
+    maxUnavailable: 1
+
+persistence:
+  enabled: true
+  size: 1Gi
 
 auth:
   enabled: true
@@ -54,10 +56,11 @@ auth:
       permissions: "~* &* +@all"
       password: "REPLACE-ME"
     replicator:
-      # Sentinel needs all of these to monitor the nodes and to promote a
-      # replica, see replica.sentinel.monitorUser in values.yaml
+      # Sentinel needs all of these to monitor the nodes, to promote a
+      # replica and to run a coordinated failover; see sentinel.monitorUser in
+      # values.yaml
       permissions: >-
         on ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof
-        +replicaof +config|rewrite +client|setname +client|kill +script|kill
-        +psync +replconf
+        +replicaof +config|rewrite +client +failover +script|kill +psync
+        +replconf
       password: "REPLACE-ME-TOO"

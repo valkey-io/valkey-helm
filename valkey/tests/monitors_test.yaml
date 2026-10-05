@@ -50,11 +50,11 @@ tests:
     asserts:
       - failedTemplate: {}
 
-  # extraLabels is how the monitors are labelled for a Prometheus
+  # labels is how the monitors are labelled for a Prometheus
   # serviceMonitorSelector / podMonitorSelector.
-  - it: should add extraLabels to the ServiceMonitor
+  - it: should add labels to the ServiceMonitor
     set:
-      metrics.serviceMonitor.extraLabels:
+      metrics.serviceMonitor.labels:
         release: kube-prometheus-stack
     template: templates/servicemonitor.yaml
     asserts:
@@ -62,9 +62,9 @@ tests:
           path: metadata.labels.release
           value: kube-prometheus-stack
 
-  - it: should add extraLabels to the PodMonitor
+  - it: should add labels to the PodMonitor
     set:
-      metrics.podMonitor.extraLabels:
+      metrics.podMonitor.labels:
         release: kube-prometheus-stack
     template: templates/podmonitor.yaml
     asserts:

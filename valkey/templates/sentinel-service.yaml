@@ -1,37 +1,36 @@
-{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.service.enabled }}
+{{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.service.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "valkey.sentinel.fullname" . }}
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
-    app.kubernetes.io/component: sentinel
-  {{- with .Values.replica.sentinel.service.annotations }}
+    {{- include "valkey.sentinel.labels" . | nindent 4 }}
+  {{- with .Values.sentinel.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  type: {{ .Values.replica.sentinel.service.type }}
-  {{- if .Values.replica.sentinel.service.clusterIP }}
-  clusterIP: {{ .Values.replica.sentinel.service.clusterIP }}
+  type: {{ .Values.sentinel.service.type }}
+  {{- if .Values.sentinel.service.clusterIP }}
+  clusterIP: {{ .Values.sentinel.service.clusterIP }}
   {{- end }}
-  {{- if .Values.replica.sentinel.service.loadBalancerClass }}
-  loadBalancerClass: {{ .Values.replica.sentinel.service.loadBalancerClass }}
+  {{- if .Values.sentinel.service.loadBalancerClass }}
+  loadBalancerClass: {{ .Values.sentinel.service.loadBalancerClass }}
   {{- end }}
-  {{- with .Values.replica.sentinel.service.loadBalancerSourceRanges }}
+  {{- with .Values.sentinel.service.loadBalancerSourceRanges }}
   loadBalancerSourceRanges:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   ports:
     - name: sentinel
-      port: {{ .Values.replica.sentinel.service.port }}
+      port: {{ .Values.sentinel.service.port }}
       targetPort: sentinel
       protocol: TCP
-      {{- if and (eq .Values.replica.sentinel.service.type "NodePort") .Values.replica.sentinel.service.nodePort }}
-      nodePort: {{ .Values.replica.sentinel.service.nodePort }}
+      {{- if and (eq .Values.sentinel.service.type "NodePort") .Values.sentinel.service.nodePort }}
+      nodePort: {{ .Values.sentinel.service.nodePort }}
       {{- end }}
-      {{- if .Values.replica.sentinel.service.appProtocol }}
-      appProtocol: {{ .Values.replica.sentinel.service.appProtocol }}
+      {{- if .Values.sentinel.service.appProtocol }}
+      appProtocol: {{ .Values.sentinel.service.appProtocol }}
       {{- end }}
   selector:
     {{- include "valkey.sentinel.selectorLabels" . | nindent 4 }}

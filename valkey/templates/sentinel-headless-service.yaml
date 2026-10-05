@@ -1,18 +1,17 @@
-{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
+{{- if and .Values.replica.enabled .Values.sentinel.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "valkey.sentinel.headlessServiceName" . }}
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
-    app.kubernetes.io/component: sentinel
+    {{- include "valkey.sentinel.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   clusterIP: None
   publishNotReadyAddresses: true
   ports:
     - name: sentinel
-      port: {{ .Values.replica.sentinel.port }}
+      port: {{ .Values.sentinel.port }}
       targetPort: sentinel
       protocol: TCP
   selector:

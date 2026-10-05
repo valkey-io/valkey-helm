@@ -7,7 +7,7 @@ metadata:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/component: metrics
     app.kubernetes.io/part-of: valkey
-    {{- with .Values.metrics.service.extraLabels }}
+    {{- with .Values.metrics.service.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
   annotations:

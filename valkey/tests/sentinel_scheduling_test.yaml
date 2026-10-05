@@ -9,9 +9,10 @@ templates:
   - templates/sentinel-configmap.yaml
 set:
   replica.enabled: true
-  replica.persistence.size: "5Gi"
-  replica.sentinel.enabled: true
-  replica.sentinel.password: "sentinelpw"
+  persistence.enabled: true
+  persistence.size: "5Gi"
+  sentinel.enabled: true
+  sentinel.password: "sentinelpw"
 tests:
   - it: should not apply the Valkey affinity, spread constraints, pod labels or annotations to Sentinel
     set:
@@ -46,17 +47,17 @@ tests:
 
   - it: should render the Sentinel scheduling, labels and annotations
     set:
-      replica.sentinel.podLabels:
+      sentinel.podLabels:
         team: sentinel
-      replica.sentinel.podAnnotations:
+      sentinel.podAnnotations:
         note: sentinel
-      replica.sentinel.nodeSelector:
+      sentinel.nodeSelector:
         pool: sentinel
-      replica.sentinel.tolerations:
+      sentinel.tolerations:
         - key: sentinel
           operator: Exists
           effect: NoSchedule
-      replica.sentinel.affinity:
+      sentinel.affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100
@@ -65,7 +66,7 @@ tests:
                 labelSelector:
                   matchLabels:
                     app.kubernetes.io/component: sentinel
-      replica.sentinel.topologySpreadConstraints:
+      sentinel.topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
@@ -126,18 +127,18 @@ tests:
 
   - it: should keep the Sentinel values off the Valkey pods
     set:
-      replica.sentinel.podLabels:
+      sentinel.podLabels:
         team: sentinel
-      replica.sentinel.podAnnotations:
+      sentinel.podAnnotations:
         note: sentinel
-      replica.sentinel.nodeSelector:
+      sentinel.nodeSelector:
         pool: sentinel
-      replica.sentinel.tolerations:
+      sentinel.tolerations:
         - key: sentinel
           operator: Exists
-      replica.sentinel.affinity:
+      sentinel.affinity:
         podAntiAffinity: {}
-      replica.sentinel.topologySpreadConstraints:
+      sentinel.topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
@@ -164,8 +165,8 @@ tests:
 
   - it: should not render the Sentinel budget without Sentinel
     set:
-      replica.sentinel.enabled: false
-      replica.sentinel.podDisruptionBudget.enabled: true
+      sentinel.enabled: false
+      sentinel.podDisruptionBudget.enabled: true
     template: templates/sentinel-pdb.yaml
     asserts:
       - hasDocuments:
@@ -173,8 +174,8 @@ tests:
 
   - it: should render a Sentinel budget selecting only the Sentinel pods
     set:
-      replica.sentinel.podDisruptionBudget.enabled: true
-      replica.sentinel.podDisruptionBudget.unhealthyPodEvictionPolicy: AlwaysAllow
+      sentinel.podDisruptionBudget.enabled: true
+      sentinel.podDisruptionBudget.unhealthyPodEvictionPolicy: AlwaysAllow
     template: templates/sentinel-pdb.yaml
     asserts:
       - isKind:
@@ -202,7 +203,7 @@ tests:
 
   - it: should match the Sentinel pod labels with the budget selector
     set:
-      replica.sentinel.podDisruptionBudget.enabled: true
+      sentinel.podDisruptionBudget.enabled: true
     template: templates/sentinel-statefulset.yaml
     asserts:
       - equal:
@@ -214,8 +215,8 @@ tests:
 
   - it: should prefer minAvailable over maxUnavailable
     set:
-      replica.sentinel.podDisruptionBudget.enabled: true
-      replica.sentinel.podDisruptionBudget.minAvailable: 2
+      sentinel.podDisruptionBudget.enabled: true
+      sentinel.podDisruptionBudget.minAvailable: 2
     template: templates/sentinel-pdb.yaml
     asserts:
       - equal:
@@ -226,8 +227,8 @@ tests:
 
   - it: should honour maxUnavailable of zero
     set:
-      replica.sentinel.podDisruptionBudget.enabled: true
-      replica.sentinel.podDisruptionBudget.maxUnavailable: 0
+      sentinel.podDisruptionBudget.enabled: true
+      sentinel.podDisruptionBudget.maxUnavailable: 0
     template: templates/sentinel-pdb.yaml
     asserts:
       - equal:
@@ -236,13 +237,13 @@ tests:
 
   - it: should fail on a Sentinel budget with neither minAvailable nor maxUnavailable
     set:
-      replica.sentinel.podDisruptionBudget.enabled: true
-      replica.sentinel.podDisruptionBudget.minAvailable: null
-      replica.sentinel.podDisruptionBudget.maxUnavailable: null
+      sentinel.podDisruptionBudget.enabled: true
+      sentinel.podDisruptionBudget.minAvailable: null
+      sentinel.podDisruptionBudget.maxUnavailable: null
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "replica.sentinel.podDisruptionBudget needs either minAvailable or maxUnavailable.*"
+          errorPattern: "sentinel.podDisruptionBudget needs either minAvailable or maxUnavailable.*"
 
   - it: should keep the Valkey budget off the Sentinel pods
     set:
@@ -260,8 +261,8 @@ tests:
       tolerations:
         - key: valkey
           operator: Exists
-      replica.sentinel.nodeSelector: {}
-      replica.sentinel.tolerations: []
+      sentinel.nodeSelector: {}
+      sentinel.tolerations: []
     template: templates/sentinel-statefulset.yaml
     asserts:
       - notExists:
@@ -271,18 +272,18 @@ tests:
 
   - it: should fail on a Sentinel budget that leaves fewer Sentinels than the quorum
     set:
-      replica.sentinel.quorum: 3
-      replica.sentinel.podDisruptionBudget.enabled: true
+      sentinel.quorum: 3
+      sentinel.podDisruptionBudget.enabled: true
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "replica.sentinel.podDisruptionBudget.maxUnavailable \\(1\\) lets voluntary evictions leave 2 of 3 Sentinels running, but a failover needs 3.*"
+          errorPattern: "sentinel.podDisruptionBudget.maxUnavailable \\(1\\) lets voluntary evictions leave 2 of 3 Sentinels running, but a failover needs 3.*"
 
   - it: should accept a quorum of all Sentinels with a budget that allows no eviction
     set:
-      replica.sentinel.quorum: 3
-      replica.sentinel.podDisruptionBudget.enabled: true
-      replica.sentinel.podDisruptionBudget.maxUnavailable: 0
+      sentinel.quorum: 3
+      sentinel.podDisruptionBudget.enabled: true
+      sentinel.podDisruptionBudget.maxUnavailable: 0
     template: templates/sentinel-pdb.yaml
     asserts:
       - equal:
@@ -291,9 +292,9 @@ tests:
 
   - it: should accept a quorum of three with four Sentinels and one eviction
     set:
-      replica.sentinel.replicas: 4
-      replica.sentinel.quorum: 3
-      replica.sentinel.podDisruptionBudget.enabled: true
+      sentinel.replicas: 4
+      sentinel.quorum: 3
+      sentinel.podDisruptionBudget.enabled: true
     template: templates/sentinel-pdb.yaml
     asserts:
       - equal:
@@ -302,10 +303,10 @@ tests:
 
   - it: should require a majority even when the quorum is lower
     set:
-      replica.sentinel.replicas: 5
-      replica.sentinel.quorum: 2
-      replica.sentinel.podDisruptionBudget.enabled: true
-      replica.sentinel.podDisruptionBudget.maxUnavailable: 3
+      sentinel.replicas: 5
+      sentinel.quorum: 2
+      sentinel.podDisruptionBudget.enabled: true
+      sentinel.podDisruptionBudget.maxUnavailable: 3
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
@@ -313,17 +314,17 @@ tests:
 
   - it: should fail on a minAvailable below the quorum
     set:
-      replica.sentinel.podDisruptionBudget.enabled: true
-      replica.sentinel.podDisruptionBudget.minAvailable: 1
+      sentinel.podDisruptionBudget.enabled: true
+      sentinel.podDisruptionBudget.minAvailable: 1
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "replica.sentinel.podDisruptionBudget.minAvailable \\(1\\) lets voluntary evictions leave 1 of 3.*"
+          errorPattern: "sentinel.podDisruptionBudget.minAvailable \\(1\\) lets voluntary evictions leave 1 of 3.*"
 
   - it: should round a maxUnavailable percentage up as Kubernetes does
     set:
-      replica.sentinel.podDisruptionBudget.enabled: true
-      replica.sentinel.podDisruptionBudget.maxUnavailable: "34%"
+      sentinel.podDisruptionBudget.enabled: true
+      sentinel.podDisruptionBudget.maxUnavailable: "34%"
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
@@ -331,10 +332,26 @@ tests:
 
   - it: should accept percentages that keep the quorum
     set:
-      replica.sentinel.podDisruptionBudget.enabled: true
-      replica.sentinel.podDisruptionBudget.minAvailable: "60%"
+      sentinel.podDisruptionBudget.enabled: true
+      sentinel.podDisruptionBudget.minAvailable: "60%"
     template: templates/sentinel-pdb.yaml
     asserts:
       - equal:
           path: spec.minAvailable
           value: "60%"
+
+  - it: should label the Sentinel StatefulSet like its pods
+    set:
+      commonLabels:
+        team: data
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey-sentinel
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: sentinel
+      - equal:
+          path: metadata.labels.team
+          value: data

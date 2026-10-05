@@ -1,7 +1,10 @@
 {{- if .Values.haproxy.enabled }}
 {{- $port := .Values.service.port }}
-{{- $pods := add (int .Values.replica.replicas) 1 | int }}
+{{- $pods := int .Values.replica.replicas }}
 {{- $checkUser := .Values.haproxy.checkUser | default "default" }}
+{{- $sentinels := int .Values.sentinel.replicas }}
+{{- /* A majority, so that two nodes can never both have it */}}
+{{- $majority := add (div $sentinels 2) 1 }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -52,15 +55,22 @@ data:
       monitor-uri /healthz
       option dontlog-normal
 
-    # Only the node that answers "role:master" receives traffic. The health
-    # check is the failover mechanism, so no Sentinel watcher is needed.
+    # A node receives traffic only while it answers "role:master" and a
+    # majority of the Sentinels name it as the master. role:master alone is not
+    # enough: after a failover the old master keeps answering it until Sentinel
+    # demotes it, about ten seconds later, and every write it accepts in the
+    # meantime is discarded when it resyncs from the new master.
     backend valkey_master
-      # first, not the default roundrobin: if two nodes ever pass the role:master
-      # check at the same time, for example an old master that Sentinel has not
-      # demoted yet, roundrobin would split writes between them and the ones
-      # landing on the loser would be discarded. first sends every connection to
-      # the same node instead.
-      balance first
+      # Every server has weight 0, so the load balancing algorithm never picks
+      # one and only these rules route connections. A node also has to be the
+      # only one with a majority: HAProxy polls each Sentinel separately, so
+      # right after a failover a Sentinel can still count for the old master
+      # while it already counts for the new one. When no node qualifies the
+      # connection is closed rather than sent to a node that may be stale.
+      {{- range $i := until $pods }}
+      use-server {{ include "valkey.statefulsetName" $ }}-{{ $i }} if { srv_is_up(valkey_master/{{ include "valkey.statefulsetName" $ }}-{{ $i }}) } { nbsrv(sentinel_master_{{ $i }}) ge {{ $majority }} }
+        {{- range $j := until $pods }}{{ if ne $i $j }} { nbsrv(sentinel_master_{{ $j }}) lt {{ $majority }} }{{ end }}{{ end }}
+      {{- end }}
       option tcp-check
       # This rule opens the check connection, so ssl here is what encrypts it and
       # check-ssl or check-sni on a server line would be silently ignored. An sni
@@ -89,8 +99,31 @@ data:
       # replica during the first few seconds. fall 1 takes a demoted master out
       # immediately, and shutdown-sessions drops its connections so that clients
       # reconnect to the new master instead of holding a read-only one.
-      default-server check inter {{ .Values.haproxy.config.checkInterval }} fall 1 rise 1 init-addr last,libc,none init-state down resolvers kubernetes on-marked-down shutdown-sessions{{ include "valkey.haproxy.serverTlsOptions" . }}
+      default-server weight 0 check inter {{ .Values.haproxy.config.checkInterval }} fall 1 rise 1 init-addr last,libc,none init-state down resolvers kubernetes on-marked-down shutdown-sessions{{ include "valkey.haproxy.serverTlsOptions" . }}
       {{- range $i := until $pods }}
-      server {{ include "valkey.fullname" $ }}-{{ $i }} {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $port }}{{ include "valkey.haproxy.serverTlsIdentityOptions" (dict "root" $ "index" $i) }}
+      server {{ include "valkey.statefulsetName" $ }}-{{ $i }} {{ include "valkey.statefulsetName" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $port }}{{ include "valkey.haproxy.serverTlsIdentityOptions" (dict "root" $ "index" $i) }}
       {{- end }}
+    {{- range $i := until $pods }}
+    {{- $node := printf "%s-%d.%s.%s.svc.%s" (include "valkey.statefulsetName" $) $i (include "valkey.headlessServiceName" $) $.Release.Namespace $.Values.clusterDomain }}
+
+    # Up while a Sentinel names {{ include "valkey.statefulsetName" $ }}-{{ $i }} as the master, one server per Sentinel.
+    backend sentinel_master_{{ $i }}
+      option tcp-check
+      tcp-check connect{{ if $.Values.tls.enabled }} ssl{{ end }}
+      tcp-check send AUTH\ sentinel\ "${SENTINEL_CHECK_PASSWORD}"\r\n
+      tcp-check expect string +OK
+      tcp-check send SENTINEL\ get-master-addr-by-name\ {{ $.Values.sentinel.masterSet }}\r\n
+      # Sentinel has no QUIT and keeps the connection open, and an expect that
+      # does not match waits for more data until "timeout check". So first wait
+      # for the whole reply: the port line, an empty reply or an error. Then
+      # min-recv makes a different host a final answer instead of a timeout.
+      tcp-check expect rstring (\r\n[0-9]+\r\n|[*]-1\r\n|\r\n-)
+      tcp-check expect min-recv 1 string {{ $node }}\r\n
+      timeout check {{ $.Values.haproxy.config.checkTimeout }}
+      default-server check inter {{ $.Values.haproxy.config.checkInterval }} fall 1 rise 1 init-addr last,libc,none init-state down resolvers kubernetes{{ include "valkey.haproxy.sentinelTlsOptions" $ }}
+      {{- range $j := until $sentinels }}
+      {{- $sentinel := printf "%s-%d.%s.%s.svc.%s" (include "valkey.sentinel.fullname" $) $j (include "valkey.sentinel.headlessServiceName" $) $.Release.Namespace $.Values.clusterDomain }}
+      server {{ include "valkey.sentinel.fullname" $ }}-{{ $j }} {{ $sentinel }}:{{ $.Values.sentinel.port }}{{ if and $.Values.tls.enabled (eq $.Values.haproxy.tls.verify "required") }} verifyhost {{ $sentinel }}{{ end }}
+      {{- end }}
+    {{- end }}
 {{- end }}

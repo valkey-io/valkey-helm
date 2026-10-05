@@ -1,0 +1,189 @@
+suite: values removed or renamed in 1.0
+templates:
+  - templates/deploy_valkey.yaml
+  - templates/statefulset.yaml
+  - templates/init_config.yaml
+  - templates/secret.yaml
+  - templates/configmap.yaml
+tests:
+  - it: should refuse dataStorage
+    set:
+      dataStorage:
+        enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "dataStorage was replaced by persistence.*See UPGRADE.md."
+
+  # Enabled defaults to false, so these rules would otherwise vanish on upgrade
+  # and open the traffic they restricted.
+  - it: should refuse networkPolicy.ingress
+    set:
+      networkPolicy.ingress:
+        - from:
+            - podSelector:
+                matchLabels:
+                  app: client
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "networkPolicy.ingress was replaced by networkPolicy.extraIngress.*allowExternal=false.*See UPGRADE.md."
+
+  - it: should refuse networkPolicy.egress
+    set:
+      networkPolicy.egress:
+        - to:
+            - ipBlock:
+                cidr: 10.0.0.0/8
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "networkPolicy.egress was replaced by networkPolicy.extraEgress.*allowExternalEgress=false.*See UPGRADE.md."
+
+  - it: should refuse replica.persistence
+    set:
+      replica.persistence.size: 5Gi
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 5Gi
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "replica.persistence was replaced by persistence.*See UPGRADE.md."
+
+  - it: should refuse valkeyConfig
+    set:
+      valkeyConfig: "maxmemory 1gb"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "valkeyConfig was renamed to extraConfig.*See UPGRADE.md."
+
+  - it: should refuse extraValkeySecrets
+    set:
+      extraValkeySecrets:
+        - name: s
+          mountPath: /s
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "extraValkeySecrets was removed.*See UPGRADE.md."
+
+  - it: should refuse extraValkeyConfigs
+    set:
+      extraValkeyConfigs:
+        - name: c
+          mountPath: /c
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "extraValkeyConfigs was removed.*See UPGRADE.md."
+
+  - it: should refuse extraSecretValkeyConfigs
+    set:
+      extraSecretValkeyConfigs: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "extraSecretValkeyConfigs was removed.*See UPGRADE.md."
+
+  - it: should refuse env
+    set:
+      env:
+        TZ: UTC
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "env was replaced by extraEnv.*See UPGRADE.md."
+
+  - it: should refuse metrics.exporter.extraEnvs
+    set:
+      metrics.exporter.extraEnvs:
+        A: b
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.exporter.extraEnvs was replaced by metrics.exporter.extraEnv.*See UPGRADE.md."
+
+  - it: should refuse metrics.exporter.extraExporterSecrets
+    set:
+      metrics.exporter.extraExporterSecrets:
+        - name: s
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.exporter.extraExporterSecrets was removed.*See UPGRADE.md."
+
+  - it: should refuse metrics.service.extraLabels
+    set:
+      metrics.service.extraLabels:
+        a: b
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.service.extraLabels was renamed to metrics.service.labels.*See UPGRADE.md."
+
+  - it: should refuse metrics.serviceMonitor.extraLabels
+    set:
+      metrics.serviceMonitor.extraLabels:
+        a: b
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.serviceMonitor.extraLabels was renamed.*See UPGRADE.md."
+
+  - it: should refuse metrics.podMonitor.extraLabels
+    set:
+      metrics.podMonitor.extraLabels:
+        a: b
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.podMonitor.extraLabels was renamed.*See UPGRADE.md."
+
+  - it: should refuse metrics.prometheusRule.extraLabels
+    set:
+      metrics.prometheusRule.extraLabels:
+        a: b
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.prometheusRule.extraLabels was renamed.*See UPGRADE.md."
+
+  - it: should refuse metrics.prometheusRule.extraAnnotations
+    set:
+      metrics.prometheusRule.extraAnnotations:
+        a: b
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.prometheusRule.extraAnnotations was renamed.*See UPGRADE.md."
+
+  - it: should refuse removed values in replication mode too
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 5Gi
+      env:
+        TZ: UTC
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "env was replaced by extraEnv.*"
+
+  - it: should accept the 1.0 values that replace them
+    set:
+      extraConfig: "maxmemory 1gb"
+      extraEnv:
+        - name: TZ
+          value: UTC
+      metrics.enabled: true
+      metrics.exporter.extraEnv:
+        - name: A
+          value: b
+      metrics.service.labels:
+        a: b
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment

@@ -5,7 +5,8 @@ tests:
   - it: should not create PDB when disabled
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: false
     asserts:
       - hasDocuments:
@@ -22,7 +23,8 @@ tests:
   - it: should create PDB when enabled with replica
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
     asserts:
       - hasDocuments:
@@ -45,7 +47,8 @@ tests:
   - it: should use minAvailable when set
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
       podDisruptionBudget.minAvailable: 2
     asserts:
@@ -60,7 +63,8 @@ tests:
   - it: should use minAvailable over maxUnavailable when both set
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
       podDisruptionBudget.minAvailable: 3
       podDisruptionBudget.maxUnavailable: 2
@@ -76,7 +80,8 @@ tests:
   - it: should use maxUnavailable when minAvailable is null
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
       podDisruptionBudget.minAvailable: null
       podDisruptionBudget.maxUnavailable: 2
@@ -92,7 +97,8 @@ tests:
   - it: should support percentage values for minAvailable
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
       podDisruptionBudget.minAvailable: "50%"
     asserts:
@@ -107,7 +113,8 @@ tests:
   - it: should support percentage values for maxUnavailable
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
       podDisruptionBudget.minAvailable: null
       podDisruptionBudget.maxUnavailable: "25%"
@@ -123,7 +130,8 @@ tests:
   - it: should include unhealthyPodEvictionPolicy when set
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
       podDisruptionBudget.unhealthyPodEvictionPolicy: "IfHealthyBudget"
     asserts:
@@ -136,7 +144,8 @@ tests:
   - it: should not include unhealthyPodEvictionPolicy when null
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
       podDisruptionBudget.unhealthyPodEvictionPolicy: null
     asserts:
@@ -148,7 +157,8 @@ tests:
   - it: should include standard labels
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
     asserts:
       - isKind:
@@ -168,7 +178,8 @@ tests:
   - it: should work with custom fullname override
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
       fullnameOverride: "my-custom-valkey"
     asserts:
@@ -183,7 +194,8 @@ tests:
   - it: should keep minAvailable 0 instead of falling back to maxUnavailable
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
       podDisruptionBudget.minAvailable: 0
     asserts:
@@ -196,7 +208,8 @@ tests:
   - it: should keep maxUnavailable 0, which forbids voluntary evictions
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
       podDisruptionBudget.maxUnavailable: 0
     asserts:
@@ -209,7 +222,8 @@ tests:
   - it: should keep the default of maxUnavailable 1
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podDisruptionBudget.enabled: true
     asserts:
       - equal:
