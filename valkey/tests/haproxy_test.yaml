@@ -593,3 +593,38 @@ tests:
           value: "9.1.2"
       - notExists:
           path: spec.selector.matchLabels["app.kubernetes.io/version"]
+
+  - it: should not apply the Valkey pod labels or annotations to HAProxy
+    set:
+      podLabels:
+        valkey-only: "true"
+      podAnnotations:
+        valkey-only: "true"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels.valkey-only
+      - notExists:
+          path: spec.template.metadata.annotations.valkey-only
+
+  - it: should render the HAProxy pod labels and annotations
+    set:
+      haproxy.podLabels:
+        team: proxy
+      haproxy.podAnnotations:
+        note: proxy
+      commonLabels:
+        common: "true"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.team
+          value: proxy
+      - equal:
+          path: spec.template.metadata.labels.common
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations.note
+          value: proxy
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]

@@ -313,6 +313,11 @@ Validate sentinel configuration
   {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
     {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than replica.terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
   {{- end }}
+  {{- if .Values.replica.sentinel.podDisruptionBudget.enabled }}
+    {{- if and (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.maxUnavailable) }}
+      {{- fail "replica.sentinel.podDisruptionBudget needs either minAvailable or maxUnavailable. A budget with neither is accepted by the API server but protects nothing." }}
+    {{- end }}
+  {{- end }}
   {{- $bootstrapWait := int .Values.replica.sentinel.initialTopologyWaitSeconds }}
   {{- $sentinelStartup := int .Values.replica.sentinel.startupTimeoutSeconds }}
   {{- if lt $bootstrapWait (add $sentinelStartup 30) }}

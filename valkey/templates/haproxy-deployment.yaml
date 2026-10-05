@@ -23,11 +23,11 @@ spec:
         {{- with .Values.commonLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- with .Values.podLabels }}
+        {{- with .Values.haproxy.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
-      {{- with .Values.podAnnotations }}
+      {{- with .Values.haproxy.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
         checksum/config: {{ include (print $.Template.BasePath "/haproxy-configmap.yaml") . | sha256sum | trunc 32 | quote }}

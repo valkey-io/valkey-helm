@@ -34,7 +34,8 @@ serviceAccount:
   # Name of an existing service account to use (if create: false)
   name: ""
 
-# Annotations and labels for the pods
+# Annotations and labels for the Valkey pods. The Sentinel and HAProxy pods
+# take replica.sentinel.podAnnotations/podLabels and haproxy.podAnnotations/podLabels.
 podAnnotations: {}
 podLabels: {}
 
@@ -450,6 +451,46 @@ replica:
     # PersistentVolumeClaim retention policy for the Sentinel StatefulSet.
     persistentVolumeClaimRetentionPolicy: {}
 
+    # Labels and annotations for the Sentinel pods. The top level podLabels and
+    # podAnnotations are not applied to the Sentinel pods; commonLabels are.
+    podLabels: {}
+    podAnnotations: {}
+
+    # Scheduling for the Sentinel pods. nodeSelector and tolerations fall back
+    # to the top level values when left empty; affinity and
+    # topologySpreadConstraints do not, as those written for the Valkey pods
+    # select the Valkey pods' labels. priorityClassName and runtimeClassName
+    # come from the top level values.
+    # Spread the Sentinels across failure domains, so that one node or zone
+    # cannot take the quorum down with it, e.g.:
+    #   topologySpreadConstraints:
+    #     - maxSkew: 1
+    #       topologyKey: kubernetes.io/hostname
+    #       whenUnsatisfiable: ScheduleAnyway
+    #       labelSelector:
+    #         matchLabels:
+    #           app.kubernetes.io/instance: <release name>
+    #           app.kubernetes.io/component: sentinel
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []
+    topologySpreadConstraints: []
+
+    # PodDisruptionBudget for the Sentinel pods. Without one, a node drain can
+    # evict enough Sentinels at once to lose the quorum, and no failover can
+    # be authorized until they are back.
+    podDisruptionBudget:
+      # Enable the PodDisruptionBudget
+      enabled: false
+      # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
+      minAvailable: null
+      # Maximum number of pods that can be unavailable during disruptions.
+      # 0 is honoured and forbids every voluntary eviction, which blocks node drains.
+      maxUnavailable: 1
+      # Unhealthy pod eviction policy (optional)
+      # Valid values: IfHealthyBudget, AlwaysAllow
+      unhealthyPodEvictionPolicy: ""
+
 # HAProxy in front of a Sentinel setup, for clients that cannot talk to Sentinel.
 # It health checks every Valkey node and forwards writes to whichever one answers
 # "role:master", so a failover needs no client support and no extra watcher.
@@ -580,6 +621,11 @@ haproxy:
         - ALL
     readOnlyRootFilesystem: true
     runAsNonRoot: true
+
+  # Labels and annotations for the HAProxy pods. The top level podLabels and
+  # podAnnotations are not applied to the HAProxy pods; commonLabels are.
+  podLabels: {}
+  podAnnotations: {}
 
   # Scheduling for the HAProxy pods. nodeSelector and tolerations fall back
   # to the top level values when left empty; affinity and
