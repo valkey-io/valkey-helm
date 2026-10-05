@@ -1,6 +1,6 @@
 {{- if .Values.replica.enabled }}
 {{- include "valkey.validateAuthConfig" . }}
-{{- include "valkey.validateReplicaPersistence" . }}
+{{- include "valkey.validatePersistence" . }}
 {{- include "valkey.validateReplicaAuth" . }}
 {{- include "valkey.validateSentinelConfig" . }}
 apiVersion: apps/v1
@@ -24,19 +24,30 @@ spec:
   selector:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
+  {{- /* Kubernetes rejects any change to volumeClaimTemplates, and the claim
+         name is part of every PVC name (valkey-data-<statefulset>-<index>):
+         with default values this must render exactly as in 0.x. */}}
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim
     metadata:
       name: valkey-data
+      {{- with .Values.persistence.labels }}
+      labels:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.persistence.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
-      accessModes: {{ toYaml .Values.replica.persistence.accessModes | nindent 8 }}
-      {{- if .Values.replica.persistence.storageClass }}
-      storageClassName: {{ .Values.replica.persistence.storageClass | quote }}
+      accessModes: {{ toYaml .Values.persistence.accessModes | nindent 8 }}
+      {{- if .Values.persistence.storageClass }}
+      storageClassName: {{ .Values.persistence.storageClass | quote }}
       {{- end }}
       resources:
         requests:
-          storage: {{ .Values.replica.persistence.size | quote }}
+          storage: {{ .Values.persistence.size | quote }}
   template:
     {{- include "valkey.podTemplate" . | nindent 4 }}
 {{- end }}

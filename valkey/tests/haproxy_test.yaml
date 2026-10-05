@@ -7,7 +7,8 @@ templates:
   - templates/secret.yaml
 set:
   replica.enabled: true
-  replica.persistence.size: "5Gi"
+  persistence.enabled: true
+  persistence.size: "5Gi"
   replica.sentinel.enabled: true
   haproxy.enabled: true
 tests:

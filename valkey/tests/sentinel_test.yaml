@@ -12,7 +12,8 @@ templates:
   - templates/deploy_valkey.yaml
 set:
   replica.enabled: true
-  replica.persistence.size: "5Gi"
+  persistence.enabled: true
+  persistence.size: "5Gi"
   replica.sentinel.enabled: true
   replica.sentinel.password: "sentinelpw"
 tests:

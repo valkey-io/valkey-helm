@@ -156,41 +156,45 @@ extraInitContainers: []
 # Additional containers
 extraContainers: []
 
-# Persistent storage configuration (standalone deployment only)
-dataStorage:
-  # Enable persistent volume claim creation
+# Persistence for the Valkey data directory (/data), in both standalone and
+# replication mode. The volume and claim names do not depend on these values,
+# so existing data is kept when they change.
+persistence:
+  # Standalone: without persistence the data lives on an emptyDir and is lost
+  # when the pod is replaced. Replication: required, the chart refuses to
+  # render without it.
   enabled: false
 
-  # Use existing PVC by name (skip dynamic provisioning if set)
-  persistentVolumeClaimName: ""
+  # Size of the PVC (one per pod in replication), e.g. 5Gi. Required unless
+  # existingClaim or hostPath is set.
+  size: ""
 
-  # Subpath inside PVC to mount
-  subPath: ""
+  # Storage class of the PVC (empty = the cluster's default storage class)
+  storageClass: ""
 
-  # Name of the volume (referenced in deployment)
-  volumeName: "valkey-data"
-
-  # Request size (e.g. 5Gi) for dynamically provisioned volume
-  requestedSize: ""
-
-  # Name of the storage class to use
-  className: ""
-
-  # Access modes for the PVC (e.g., ReadWriteOnce, ReadWriteMany)
+  # Access modes of the PVC
   accessModes:
     - ReadWriteOnce
 
-  # If true, keep the PVC on Helm uninstall
-  keepPvc: false
+  # Subpath inside the volume to mount as /data
+  subPath: ""
 
-  # Optional annotations to add to the PVC
+  # Labels and annotations for the PVC. In replication mode they are part of
+  # the StatefulSet's volumeClaimTemplates, which Kubernetes does not allow to
+  # change: they only apply to new installs.
+  labels: {}
   annotations: {}
 
-  # Optional labels to add to the PVC
-  labels: {}
+  # Standalone only: use an existing PVC instead of creating one.
+  existingClaim: ""
 
-  # If hostPath is set then a hostPath DirectoryOrCreate volume is used
+  # Standalone only: use a hostPath (DirectoryOrCreate) volume instead of a PVC.
   hostPath: ""
+
+  # Standalone only: keep the chart created PVC on helm uninstall. The
+  # replication PVCs are never deleted by Helm, see
+  # replica.persistentVolumeClaimRetentionPolicy.
+  keepOnUninstall: false
 
 # Mount additional secrets into the Valkey container
 extraValkeySecrets: []
@@ -293,15 +297,6 @@ replica:
     loadBalancerSourceRanges: []
 
   # Persistence configuration (required for replicas)
-  persistence:
-    # Size of the PVC for each replica (required when replica.enabled is true)
-    size: ""
-    # Storage class name (empty = use default storage class)
-    storageClass: ""
-    # Access modes for the PVC
-    accessModes:
-      - ReadWriteOnce
-
   # PersistentVolumeClaim retention policy for StatefulSet
   # Controls when PVCs are deleted (requires Kubernetes 1.23+)
   # More info: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
@@ -671,8 +666,13 @@ tolerations: []
 # Affinity rules for pod scheduling
 affinity: {}
 
-# Set Deployment strategy. See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
-deploymentStrategy: RollingUpdate # @schema enum:[RollingUpdate,Recreate]
+# Strategy of the standalone Deployment (replica.enabled: false).
+# See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
+# Recreate stops the old pod before starting the new one. RollingUpdate starts
+# the new pod first, so with a ReadWriteOnce volume it either waits on a
+# Multi-Attach error (other node) or runs two Valkey processes on one data
+# directory (same node); only use it without persistence.
+deploymentStrategy: Recreate # @schema enum:[RollingUpdate,Recreate]
 
 # See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
 topologySpreadConstraints: []

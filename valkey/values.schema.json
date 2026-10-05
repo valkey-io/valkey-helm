@@ -28,47 +28,6 @@
         "commonLabels": {
             "type": "object"
         },
-        "dataStorage": {
-            "type": "object",
-            "properties": {
-                "accessModes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "annotations": {
-                    "type": "object"
-                },
-                "className": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "hostPath": {
-                    "type": "string"
-                },
-                "keepPvc": {
-                    "type": "boolean"
-                },
-                "labels": {
-                    "type": "object"
-                },
-                "persistentVolumeClaimName": {
-                    "type": "string"
-                },
-                "requestedSize": {
-                    "type": "string"
-                },
-                "subPath": {
-                    "type": "string"
-                },
-                "volumeName": {
-                    "type": "string"
-                }
-            }
-        },
         "deploymentStrategy": {
             "type": "string",
             "enum": [
@@ -535,6 +494,44 @@
         "nodeSelector": {
             "type": "object"
         },
+        "persistence": {
+            "type": "object",
+            "properties": {
+                "accessModes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "annotations": {
+                    "type": "object"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "existingClaim": {
+                    "type": "string"
+                },
+                "hostPath": {
+                    "type": "string"
+                },
+                "keepOnUninstall": {
+                    "type": "boolean"
+                },
+                "labels": {
+                    "type": "object"
+                },
+                "size": {
+                    "type": "string"
+                },
+                "storageClass": {
+                    "type": "string"
+                },
+                "subPath": {
+                    "type": "string"
+                }
+            }
+        },
         "podAnnotations": {
             "type": "object"
         },
@@ -583,23 +580,6 @@
                 },
                 "minReplicasToWrite": {
                     "type": "integer"
-                },
-                "persistence": {
-                    "type": "object",
-                    "properties": {
-                        "accessModes": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        },
-                        "size": {
-                            "type": "string"
-                        },
-                        "storageClass": {
-                            "type": "string"
-                        }
-                    }
                 },
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"

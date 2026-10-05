@@ -616,3 +616,28 @@ tests:
     template: templates/deploy_valkey.yaml
     asserts:
       - failedTemplate: {}
+
+  - it: should recreate the standalone pod by default
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.strategy
+          value:
+            type: Recreate
+
+  - it: should use a rolling update when asked to
+    set:
+      deploymentStrategy: RollingUpdate
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.strategy
+          value:
+            type: RollingUpdate
+
+  - it: should reject an unknown deployment strategy
+    set:
+      deploymentStrategy: Rolling
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate: {}

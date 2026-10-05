@@ -166,7 +166,8 @@ tests:
   - it: should not render the inline password test for a Sentinel-only inline password
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
       replica.sentinel.enabled: true
       replica.sentinel.password: sentinel-password
       auth.enabled: true

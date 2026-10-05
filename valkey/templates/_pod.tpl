@@ -9,10 +9,7 @@ Include it under the workload's spec.template with nindent 4.
 {{- $replicated := .Values.replica.enabled }}
 {{- $sentinel := and $replicated .Values.replica.sentinel.enabled }}
 {{- $preStopFailover := and $sentinel .Values.replica.sentinel.preStopFailover }}
-{{- $storage := .Values.dataStorage }}
-{{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
-{{- /* The StatefulSet's volumeClaimTemplate is always named valkey-data */}}
-{{- $dataVolume := ternary "valkey-data" $storage.volumeName $replicated -}}
+{{- $storage := .Values.persistence -}}
 metadata:
   labels:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
@@ -69,10 +66,10 @@ spec:
               fieldPath: metadata.name
       {{- end }}
       volumeMounts:
-        - name: {{ $dataVolume }}
+        - name: valkey-data
           mountPath: /data
-          {{- if and (not $replicated) $storage.subPath }}
-          subPath: {{ $storage.subPath }}
+          {{- with $storage.subPath }}
+          subPath: {{ . }}
           {{- end }}
         - name: valkey-conf
           mountPath: /valkey-conf
@@ -173,10 +170,10 @@ spec:
       resources:
         {{- toYaml .Values.resources | nindent 8 }}
       volumeMounts:
-        - name: {{ $dataVolume }}
+        - name: valkey-data
           mountPath: /data
-          {{- if and (not $replicated) $storage.subPath }}
-          subPath: {{ $storage.subPath }}
+          {{- with $storage.subPath }}
+          subPath: {{ . }}
           {{- end }}
         - name: valkey-conf
           mountPath: /valkey-conf
@@ -409,11 +406,13 @@ spec:
     {{- end }}
     {{- /* The StatefulSet provides the data volume through its volumeClaimTemplate */}}
     {{- if not $replicated }}
-    - name: {{ $dataVolume }}
-    {{- if $storage.persistentVolumeClaimName }}
+    - name: valkey-data
+    {{- if not $storage.enabled }}
+      emptyDir: {}
+    {{- else if $storage.existingClaim }}
       persistentVolumeClaim:
-        claimName: {{ $storage.persistentVolumeClaimName }}
-    {{- else if $createPVC }}
+        claimName: {{ $storage.existingClaim }}
+    {{- else if $storage.size }}
       persistentVolumeClaim:
         claimName: {{ include "valkey.fullname" . }}
     {{- else if $storage.hostPath }}

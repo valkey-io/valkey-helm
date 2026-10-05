@@ -228,13 +228,35 @@ app.kubernetes.io/component: sentinel
 {{- end -}}
 
 {{/*
-Validate replica persistence configuration
+Validate the persistence configuration.
+
+The 0.x dataStorage and replica.persistence values are refused rather than
+ignored: a standalone release that still sets dataStorage.enabled would
+otherwise render without its PVC, so Helm would delete the claim and the pod
+would start on an empty volume.
 */}}
-{{- define "valkey.validateReplicaPersistence" -}}
+{{- define "valkey.validatePersistence" -}}
+{{- if hasKey .Values "dataStorage" }}
+  {{- fail "dataStorage was replaced by persistence (dataStorage.requestedSize is now persistence.size, className is storageClass, persistentVolumeClaimName is existingClaim, keepPvc is keepOnUninstall). The PVC name does not change. See UPGRADE.md." }}
+{{- end }}
+{{- if hasKey .Values.replica "persistence" }}
+  {{- fail "replica.persistence was replaced by persistence: set persistence.enabled=true and move size, storageClass and accessModes there. The PVC names do not change. See UPGRADE.md." }}
+{{- end }}
+{{- $p := .Values.persistence }}
 {{- if .Values.replica.enabled }}
-  {{- if not .Values.replica.persistence.size }}
-    {{- fail "Replica mode requires persistent storage. Please set replica.persistence.size (e.g., '5Gi')" }}
+  {{- if not (and $p.enabled $p.size) }}
+    {{- fail "Replication requires persistent storage, otherwise a restarted primary comes back empty and its replicas copy the empty dataset. Please set persistence.enabled=true and persistence.size (e.g. '5Gi')." }}
   {{- end }}
+  {{- if or $p.existingClaim $p.hostPath $p.keepOnUninstall }}
+    {{- fail "persistence.existingClaim, persistence.hostPath and persistence.keepOnUninstall only apply to standalone mode. In replication mode the StatefulSet creates one PVC per pod, named valkey-data-<statefulset>-<index>; pre-create claims with those names to reuse existing volumes." }}
+  {{- end }}
+{{- else if and $p.enabled (not (or $p.size $p.existingClaim $p.hostPath)) }}
+  {{- fail "persistence.enabled needs persistence.size, persistence.existingClaim or persistence.hostPath." }}
+{{- else if and (not $p.enabled) (or $p.size $p.existingClaim $p.hostPath) }}
+  {{- /* 0.x mounted persistentVolumeClaimName and hostPath even with
+         dataStorage.enabled false; silently switching those to an emptyDir
+         would start Valkey on an empty data directory. */}}
+  {{- fail "persistence.size, persistence.existingClaim or persistence.hostPath is set but persistence.enabled is false. Set persistence.enabled=true to use the volume, or remove them to run without persistence." }}
 {{- end }}
 {{- end -}}
 

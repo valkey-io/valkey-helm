@@ -19,6 +19,10 @@ A Helm chart for Kubernetes
 * <https://github.com/valkey-io/valkey-helm.git>
 * <https://valkey.io>
 
+## Upgrading
+
+Breaking changes and the steps to migrate an existing release are listed in [UPGRADE.md](UPGRADE.md).
+
 ## Deployment Modes
 
 ### Standalone Mode (Default)
@@ -38,7 +42,7 @@ helm install valkey valkey/valkey
 Deploy Valkey with master-replica architecture for read scaling and data redundancy:
 
 ```bash
-helm install valkey valkey/valkey --set replica.enabled=true --set replica.persistence.size=5Gi
+helm install valkey valkey/valkey --set replica.enabled=true --set persistence.enabled=true --set persistence.size=5Gi
 ```
 
 **IMPORTANT**
@@ -276,26 +280,34 @@ To follow progress or get involved, see the [weekly meeting wiki](https://github
 
 ## Storage
 
+The `persistence` block configures the Valkey data directory (`/data`) in both modes.
+The volume and claim names do not depend on these values: the standalone PVC is named `<fullname>`, and the replication PVCs `valkey-data-<statefulset>-<index>`.
+
 ### Standalone Storage
 
 Persistence is optional. By default, data is stored in an ephemeral volume and lost on pod restart.
 
+The standalone Deployment uses the `Recreate` strategy (`deploymentStrategy`): on an upgrade the old pod stops before the new one starts, so the data volume is never attached to two pods, at the cost of a short downtime.
+
 **Enable persistent storage:**
 
 ```yaml
-dataStorage:
+persistence:
   enabled: true
-  requestedSize: 10Gi
-  className: "fast-ssd"  # Optional
+  size: 10Gi
+  storageClass: "fast-ssd"  # Optional
 ```
 
-**Use existing PVC:**
+**Use an existing PVC** (or `hostPath` for a hostPath volume):
 
 ```yaml
-dataStorage:
+persistence:
   enabled: true
-  persistentVolumeClaimName: "my-existing-pvc"
+  existingClaim: "my-existing-pvc"
 ```
+
+When more than one is set, `existingClaim` wins over `size`, which wins over `hostPath`.
+`keepOnUninstall: true` keeps the chart created PVC on `helm uninstall`.
 
 ### Replication Storage
 
@@ -304,10 +316,15 @@ Persistent storage is **mandatory** in replication mode. Without it, the primary
 ```yaml
 replica:
   enabled: true
-  persistence:
-    size: 10Gi  # Required
-    storageClass: "fast-ssd"  # Optional
+persistence:
+  enabled: true
+  size: 10Gi  # Required
+  storageClass: "fast-ssd"  # Optional
 ```
+
+Each pod gets its own PVC from the StatefulSet's `volumeClaimTemplates`.
+`existingClaim`, `hostPath` and `keepOnUninstall` do not apply; to reuse existing volumes, create the claims as `valkey-data-<statefulset>-<index>` before installing.
+Kubernetes does not allow changing `volumeClaimTemplates`, so `persistence.labels` and `persistence.annotations` only apply to new installs, and changing `accessModes` or `storageClass` later requires recreating the StatefulSet.
 
 ## Authentication
 
@@ -461,18 +478,7 @@ tls:
 | auth.aclUsers | object | `{}` | |
 | auth.enabled | bool | `false` |  |
 | auth.usersExistingSecret | string | `""` | |
-| dataStorage.accessModes[0] | string | `"ReadWriteOnce"` |  |
-| dataStorage.annotations | object | `{}` |  |
-| dataStorage.className | string | `""` |  |
-| dataStorage.enabled | bool | `false` |  |
-| dataStorage.keepPvc | bool | `false` |  |
-| dataStorage.labels | object | `{}` |  |
-| dataStorage.persistentVolumeClaimName | string | `""` |  |
-| dataStorage.requestedSize | string | `""` |  |
-| dataStorage.subPath | string | `""` |  |
-| dataStorage.volumeName | string | `"valkey-data"` |  |
-| dataStorage.hostPath | string | `""` |  |
-| deploymentStrategy | string | `"RollingUpdate"` |  |
+| deploymentStrategy | string | `"Recreate"` | Standalone Deployment strategy; RollingUpdate is only safe without persistence |
 | env | object | `{}` |  |
 | extraSecretValkeyConfigs | bool | `false` |  |
 | extraVolumes | list | `[]` |  |
@@ -541,6 +547,16 @@ tls:
 | nameOverride | string | `""` |  |
 | networkPolicy | object | `{}` |  |
 | nodeSelector | object | `{}` |  |
+| persistence.enabled | bool | `false` | Required in replication mode |
+| persistence.size | string | `""` | PVC size (one per pod in replication) |
+| persistence.storageClass | string | `""` |  |
+| persistence.accessModes | list | `["ReadWriteOnce"]` |  |
+| persistence.subPath | string | `""` | Subpath of the volume mounted as /data |
+| persistence.labels | object | `{}` | PVC labels; replication: new installs only |
+| persistence.annotations | object | `{}` | PVC annotations; replication: new installs only |
+| persistence.existingClaim | string | `""` | Standalone only |
+| persistence.hostPath | string | `""` | Standalone only |
+| persistence.keepOnUninstall | bool | `false` | Standalone only |
 | podAnnotations | object | `{}` | Valkey pods only, see replica.sentinel.podAnnotations and haproxy.podAnnotations |
 | podLabels | object | `{}` | Valkey pods only, see replica.sentinel.podLabels and haproxy.podLabels |
 | commonLabels | object | `{}` |  |
@@ -574,10 +590,6 @@ tls:
 | replica.service.clusterIP | string | `""` |  |
 | replica.service.appProtocol | string | `""` |  |
 | replica.service.loadBalancerClass | string | `""` |  |
-| replica.persistence. |  | `""` |  |
-| replica.persistence.size | string | `""` | Required if replica is enabled |
-| replica.persistence.storageClass | string | `""` |  |
-| replica.persistence.accessModes | list | `""` |  |
 | replica.sentinel.enabled | bool | `false` | Run Valkey Sentinel for automatic failover |
 | replica.sentinel.replicas | int | `3` | Number of independently deployed Sentinel pods |
 | replica.sentinel.port | int | `26379` |  |

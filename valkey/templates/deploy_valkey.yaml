@@ -1,5 +1,6 @@
 {{- if not .Values.replica.enabled }}
 {{- include "valkey.validateAuthConfig" . }}
+{{- include "valkey.validatePersistence" . }}
 {{- include "valkey.validateSentinelConfig" . }}
 apiVersion: apps/v1
 kind: Deployment

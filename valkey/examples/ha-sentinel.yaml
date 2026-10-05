@@ -19,8 +19,6 @@ replica:
   enabled: true
   # 2 replicas + 1 master
   replicas: 2
-  persistence:
-    size: 1Gi
 
   # Used both for replication and by Sentinel to monitor the nodes
   replicationUser: replicator
@@ -46,6 +44,10 @@ replica:
     podDisruptionBudget:
       enabled: true
       maxUnavailable: 1
+
+persistence:
+  enabled: true
+  size: 1Gi
 
 auth:
   enabled: true

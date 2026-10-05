@@ -28,7 +28,8 @@ tests:
   - it: should point the StatefulSet exporter at the local Valkey port
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
       service.port: 6380
     template: templates/statefulset.yaml
     asserts:
@@ -72,7 +73,8 @@ tests:
   - it: should connect the StatefulSet exporter over TLS
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
       tls.enabled: true
       tls.existingSecret: valkey-tls
     template: templates/statefulset.yaml
@@ -141,7 +143,8 @@ tests:
   - it: should leave TLS settings to metrics.exporter.extraEnvs instead of setting them twice
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
       tls.enabled: true
       tls.existingSecret: valkey-tls
       metrics.exporter.extraEnvs:
@@ -167,7 +170,8 @@ tests:
   - it: should not mount /tls twice when extraVolumeMounts already mounts it
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
       tls.enabled: true
       tls.existingSecret: valkey-tls
       metrics.exporter.extraVolumeMounts:
