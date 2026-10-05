@@ -12,7 +12,7 @@ tests:
           path: data["init.sh"]
           pattern: "aclfile"
 
-  - it: should configure ACL file at /etc/valkey/users.acl with inline passwords
+  - it: should write the ACL file next to valkey.conf with inline passwords
     set:
       auth.enabled: true
       auth.aclUsers:
@@ -24,13 +24,16 @@ tests:
           of: ConfigMap
       - matchRegex:
           path: data["init.sh"]
-          pattern: "aclfile /etc/valkey/users\\.acl"
+          pattern: 'ACL_FILE="\$\(dirname "\$VALKEY_CONFIG"\)/users\.acl"'
       - matchRegex:
           path: data["init.sh"]
-          pattern: "mkdir -p /etc/valkey"
+          pattern: 'echo "aclfile \$ACL_FILE"'
       - matchRegex:
           path: data["init.sh"]
-          pattern: "chmod 0400 /etc/valkey/users\\.acl"
+          pattern: '\(umask 077 && : >"\$ACL_FILE"\)'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "(^|[ \"=])/etc/valkey"
       - matchRegex:
           path: data["init.sh"]
           pattern: 'cat "/valkey-auth-secret/\$\{username\}-password"'
@@ -47,7 +50,7 @@ tests:
           of: ConfigMap
       - matchRegex:
           path: data["init.sh"]
-          pattern: "aclfile /etc/valkey/users\\.acl"
+          pattern: 'echo "aclfile \$ACL_FILE"'
       - matchRegex:
           path: data["init.sh"]
           pattern: 'cat "/valkey-users-secret/\$password_key"'
@@ -66,7 +69,7 @@ tests:
           of: ConfigMap
       - matchRegex:
           path: data["init.sh"]
-          pattern: "aclfile /etc/valkey/users\\.acl"
+          pattern: 'echo "aclfile \$ACL_FILE"'
       - matchRegex:
           path: data["init.sh"]
           pattern: "Appending custom ACL configuration"
@@ -116,7 +119,7 @@ tests:
           of: ConfigMap
       - matchRegex:
           path: data["init.sh"]
-          pattern: "aclfile /etc/valkey/users\\.acl"
+          pattern: 'echo "aclfile \$ACL_FILE"'
       - matchRegex:
           path: data["init.sh"]
           pattern: "/valkey-auth-secret/aclConfig"

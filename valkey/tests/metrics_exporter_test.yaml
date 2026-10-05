@@ -123,10 +123,11 @@ tests:
             name: REDIS_EXPORTER_TLS_SERVER_NAME
             value: valkey.example.svc.cluster.local
 
-  - it: should leave REDIS_ADDR to metrics.exporter.extraEnvs instead of setting it twice
+  - it: should leave REDIS_ADDR to metrics.exporter.extraEnv instead of setting it twice
     set:
-      metrics.exporter.extraEnvs:
-        REDIS_ADDR: redis://localhost:6390
+      metrics.exporter.extraEnv:
+        - name: REDIS_ADDR
+          value: redis://localhost:6390
     template: templates/deploy_valkey.yaml
     asserts:
       - contains:
@@ -140,15 +141,16 @@ tests:
             name: REDIS_ADDR
             value: redis://localhost:6379
 
-  - it: should leave TLS settings to metrics.exporter.extraEnvs instead of setting them twice
+  - it: should leave TLS settings to metrics.exporter.extraEnv instead of setting them twice
     set:
       replica.enabled: true
       persistence.enabled: true
       persistence.size: 1Gi
       tls.enabled: true
       tls.existingSecret: valkey-tls
-      metrics.exporter.extraEnvs:
-        REDIS_EXPORTER_TLS_CLIENT_CERT_FILE: /client/tls.crt
+      metrics.exporter.extraEnv:
+        - name: REDIS_EXPORTER_TLS_CLIENT_CERT_FILE
+          value: /client/tls.crt
     template: templates/statefulset.yaml
     asserts:
       - contains:

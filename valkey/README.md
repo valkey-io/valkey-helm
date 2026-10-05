@@ -147,7 +147,7 @@ Changing `replica.sentinel.persistence.enabled` later changes the Sentinel State
 
 Valkey needs the replication password in plain text in its configuration, and `CONFIG REWRITE` writes it back on every failover even if the chart does not.
 The configuration therefore lives on a memory backed `emptyDir` rather than on the data volume, so no credential is written to persistent storage.
-The ACL file is hashed and also memory backed, and the Sentinel state is memory backed for the same reason, since Sentinel rewrites `auth-pass` and `sentinel-pass` into `sentinel.conf`.
+The ACL file holds only password hashes and sits next to it on the same volume, and the Sentinel state is memory backed for the same reason, since Sentinel rewrites `auth-pass` and `sentinel-pass` into `sentinel.conf`.
 Only the RDB or AOF and the init log stay on the data volume.
 
 Enabling `replica.sentinel.persistence` opts out of this and puts `sentinel.conf`, credentials included, on a PersistentVolume.
@@ -326,6 +326,37 @@ Each pod gets its own PVC from the StatefulSet's `volumeClaimTemplates`.
 `existingClaim`, `hostPath` and `keepOnUninstall` do not apply; to reuse existing volumes, create the claims as `valkey-data-<statefulset>-<index>` before installing.
 Kubernetes does not allow changing `volumeClaimTemplates`, so `persistence.labels` and `persistence.annotations` only apply to new installs, and changing `accessModes` or `storageClass` later requires recreating the StatefulSet.
 
+## Customizing Valkey
+
+Each kind of customization has one value:
+
+* `extraConfig`: raw lines appended to the generated `valkey.conf` (templated).
+* `extraVolumes`: additional volumes for the Valkey pod, of any type (Secret, ConfigMap, ...). `extraVolumeMounts` mounts them into the Valkey container and `metrics.exporter.extraVolumeMounts` into the exporter; containers from `extraInitContainers` and `extraContainers` declare their own `volumeMounts`.
+* `extraEnv`: additional environment variables for the Valkey container, as Kubernetes EnvVar entries (`metrics.exporter.extraEnv` for the exporter).
+
+To load configuration from a Secret or ConfigMap, mount it and `include` it:
+
+```yaml
+extraVolumes:
+  - name: extra-conf
+    secret:
+      secretName: my-valkey-conf
+extraVolumeMounts:
+  - name: extra-conf
+    mountPath: /extra-conf
+    readOnly: true
+extraConfig: |
+  include /extra-conf/valkey.conf
+extraEnv:
+  - name: MY_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: my-secret
+        key: token
+```
+
+Sentinel takes its own `replica.sentinel.extraConfig`, appended to `sentinel.conf`.
+
 ## Authentication
 
 This chart supports ACL-based authentication for Valkey.
@@ -380,6 +411,9 @@ auth:
     user default on >defaultpassword ~* &* +@all
     user guest on nopass ~public:* +@read
 ```
+
+The chart regenerates the ACL file from these values whenever a pod starts, so users added at runtime with `ACL SETUSER` last only until the next restart.
+A user allowed to run `ACL SAVE` or `CONFIG REWRITE` can still rewrite the generated files while the pod runs (`+@all` includes both): give application users narrower permissions, e.g. `+@all -@admin`.
 
 ### Replication with Authentication
 
@@ -479,12 +513,12 @@ tls:
 | auth.enabled | bool | `false` |  |
 | auth.usersExistingSecret | string | `""` | |
 | deploymentStrategy | string | `"Recreate"` | Standalone Deployment strategy; RollingUpdate is only safe without persistence |
-| env | object | `{}` |  |
-| extraSecretValkeyConfigs | bool | `false` |  |
-| extraVolumes | list | `[]` |  |
-| extraVolumeMounts | list | `[]` |  |
-| extraValkeyConfigs | list | `[]` |  |
-| extraValkeySecrets | list | `[]` |  |
+| extraConfig | string | `""` | Raw lines appended to valkey.conf; supports templating and `include` |
+| extraContainers | list | `[]` | Additional containers in the Valkey pod |
+| extraEnv | list | `[]` | Additional EnvVar entries for the Valkey container (value or valueFrom) |
+| extraInitContainers | list | `[]` | Additional init containers in the Valkey pod |
+| extraVolumes | list | `[]` | Additional volumes for the Valkey pod |
+| extraVolumeMounts | list | `[]` | Mounts of extraVolumes into the Valkey container |
 | fullnameOverride | string | `""` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.registry | string | `""` |  |
@@ -501,8 +535,8 @@ tls:
 | metrics.enabled | bool | `false` |  |
 | metrics.exporter.args | list | `[]` |  |
 | metrics.exporter.command | list | `[]` |  |
-| metrics.exporter.extraEnvs | object | `{}` | Also overrides the REDIS_ADDR and REDIS_EXPORTER_TLS_* values the chart sets |
-| metrics.exporter.extraVolumeMounts | list | `[]` |  |
+| metrics.exporter.extraEnv | list | `[]` | EnvVar entries; also overrides the REDIS_ADDR and REDIS_EXPORTER_TLS_* values the chart sets |
+| metrics.exporter.extraVolumeMounts | list | `[]` | Mounts of extraVolumes into the exporter container |
 | metrics.exporter.image.pullPolicy | string | `"IfNotPresent"` |  |
 | metrics.exporter.image.repository | string | `"ghcr.io/oliver006/redis_exporter"` |  |
 | metrics.exporter.image.tag | string | `"v1.88.0"` |  |
@@ -512,7 +546,7 @@ tls:
 | metrics.exporter.securityContext | object | `{}` |  |
 | metrics.podMonitor.annotations | object | `{}` |  |
 | metrics.podMonitor.enabled | bool | `false` |  |
-| metrics.podMonitor.extraLabels | object | `{}` | Labels on the PodMonitor, e.g. for a Prometheus `podMonitorSelector` |
+| metrics.podMonitor.labels | object | `{}` | Labels on the PodMonitor, e.g. for a Prometheus `podMonitorSelector` |
 | metrics.podMonitor.honorLabels | bool | `false` |  |
 | metrics.podMonitor.interval | string | `"30s"` |  |
 | metrics.podMonitor.metricRelabelings | list | `[]` |  |
@@ -523,18 +557,18 @@ tls:
 | metrics.podMonitor.scrapeTimeout | string | `""` |  |
 | metrics.podMonitor.targetLimit | bool | `false` |  |
 | metrics.prometheusRule.enabled | bool | `false` |  |
-| metrics.prometheusRule.extraAnnotations | object | `{}` |  |
-| metrics.prometheusRule.extraLabels | object | `{}` |  |
+| metrics.prometheusRule.annotations | object | `{}` |  |
+| metrics.prometheusRule.labels | object | `{}` |  |
 | metrics.prometheusRule.rules | list | `[]` |  |
 | metrics.service.annotations | object | `{}` |  |
 | metrics.service.enabled | bool | `true` |  |
-| metrics.service.extraLabels | object | `{}` |  |
+| metrics.service.labels | object | `{}` |  |
 | metrics.service.ports.http | int | `9121` |  |
 | metrics.service.type | string | `"ClusterIP"` |  |
 | metrics.service.appProtocol | string | `""` |  |
 | metrics.serviceMonitor.annotations | object | `{}` |  |
 | metrics.serviceMonitor.enabled | bool | `false` |  |
-| metrics.serviceMonitor.extraLabels | object | `{}` | Labels on the ServiceMonitor, e.g. for a Prometheus `serviceMonitorSelector` |
+| metrics.serviceMonitor.labels | object | `{}` | Labels on the ServiceMonitor, e.g. for a Prometheus `serviceMonitorSelector` |
 | metrics.serviceMonitor.honorLabels | bool | `false` |  |
 | metrics.serviceMonitor.interval | string | `"30s"` |  |
 | metrics.serviceMonitor.metricRelabelings | list | `[]` |  |
@@ -607,7 +641,7 @@ tls:
 | replica.sentinel.preStopFailover | bool | `true` | Fail over before a master pod is terminated |
 | replica.sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
 | replica.sentinel.startupTimeoutSeconds | int | `60` |  |
-| replica.sentinel.extraConfig | string | `""` | Raw lines appended to sentinel.conf |
+| replica.sentinel.extraConfig | string | `""` | Raw lines appended to sentinel.conf; supports templating |
 | replica.sentinel.resources | object | `{}` |  |
 | replica.sentinel.securityContext | object | `{}` | Defaults to securityContext |
 | replica.sentinel.service.enabled | bool | `true` |  |
@@ -693,6 +727,5 @@ tls:
 | tls.serverPublicKey | string | `"server.crt"` |  |
 | tolerations | list | `[]` |  |
 | topologySpreadConstraints | list | `[]` | Valkey pods only, see replica.sentinel.topologySpreadConstraints |
-| valkeyConfig | string | `""` |  |
 | valkeyLogLevel | string | `"notice"` |  |
 | workloadAnnotations | object | `{}` |  |

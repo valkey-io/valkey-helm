@@ -3,6 +3,7 @@ templates:
   - templates/deploy_valkey.yaml
   - templates/init_config.yaml
   - templates/secret.yaml
+  - templates/configmap.yaml
 tests:
   - it: should not have auth volumes when auth disabled
     set:
@@ -525,30 +526,60 @@ tests:
 
   # The pod template is shared with the StatefulSet; this is the one mount
   # that is deliberately left to the Deployment.
-  - it: should render extraVolumeMounts for the init container
+  - it: should mount extraVolumeMounts in the Valkey container only
     set:
+      extraVolumes:
+        - name: extra-data
+          emptyDir: {}
       extraVolumeMounts:
         - name: extra-data
           mountPath: /extra/data
     template: templates/deploy_valkey.yaml
     asserts:
       - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-data
+            mountPath: /extra/data
+      - notContains:
           path: spec.template.spec.initContainers[0].volumeMounts
           content:
             name: extra-data
             mountPath: /extra/data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-data
+            emptyDir: {}
 
-  - it: should escape env values that contain quotes or backslashes
+  - it: should render extraEnv entries as given, including valueFrom
     set:
-      env:
-        QUOTED: 'say "hi"'
-        WINDOWS_PATH: 'C:\path\n'
-        NUMBER: 5
+      extraEnv:
+        - name: QUOTED
+          value: 'say "hi"'
+        - name: WINDOWS_PATH
+          value: 'C:\path\n'
+        - name: NUMBER
+          value: "5"
+        - name: FROM_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: my-secret
+              key: token
       metrics.enabled: true
-      metrics.exporter.extraEnvs:
-        EXPORTER_QUOTED: 'say "hi"'
+      metrics.exporter.extraEnv:
+        - name: EXPORTER_QUOTED
+          value: 'say "hi"'
     template: templates/deploy_valkey.yaml
     asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: FROM_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: token
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -641,3 +672,58 @@ tests:
     template: templates/deploy_valkey.yaml
     asserts:
       - failedTemplate: {}
+
+  - it: should render extraConfig with templating into the config map
+    set:
+      extraConfig: |
+        maxmemory 1gb
+        include /extra/{{ .Release.Name }}.conf
+    template: templates/configmap.yaml
+    asserts:
+      - equal:
+          path: data["valkey.conf"]
+          value: |
+            maxmemory 1gb
+            include /extra/RELEASE-NAME.conf
+
+  - it: should mount extraConfig for the init container and roll the pod on changes
+    set:
+      extraConfig: "maxmemory 1gb"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: valkey-config
+            mountPath: /usr/local/etc/valkey/valkey.conf
+            subPath: valkey.conf
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: should not render the extraConfig config map by default
+    template: templates/configmap.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should keep the ACL file on the valkey-conf volume, without a volume of its own
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: pw
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-acl
+            emptyDir:
+              medium: Memory
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-conf
+            emptyDir:
+              medium: Memory

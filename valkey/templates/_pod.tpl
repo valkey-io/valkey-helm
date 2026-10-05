@@ -24,7 +24,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
     checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 | quote }}
-    {{- if .Values.valkeyConfig }}
+    {{- if .Values.extraConfig }}
     checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 | quote }}
     {{- end }}
     {{- with (include "valkey.authSecretChecksum" .) }}
@@ -88,18 +88,12 @@ spec:
           mountPath: /tls
           readOnly: true
         {{- end }}
-        {{- if .Values.valkeyConfig }}
+        {{- if .Values.extraConfig }}
         - name: valkey-config
           mountPath: /usr/local/etc/valkey/valkey.conf
           subPath: valkey.conf
         {{- end }}
-        {{- if .Values.extraSecretValkeyConfigs }}
-        - name: extravalkeyconfigs-volume
-          mountPath: /extravalkeyconfigs
-        {{- end }}
         {{- if .Values.auth.enabled }}
-        - name: valkey-acl
-          mountPath: /etc/valkey
         {{- if .Values.auth.usersExistingSecret }}
         - name: valkey-users-secret
           mountPath: /valkey-users-secret
@@ -109,12 +103,6 @@ spec:
         - name: valkey-auth-secret
           mountPath: /valkey-auth-secret
           readOnly: true
-        {{- end }}
-        {{- end }}
-        {{- /* Only the Deployment adds extraVolumeMounts to the init container, on purpose */}}
-        {{- if not $replicated }}
-        {{- with .Values.extraVolumeMounts }}
-        {{- toYaml . | nindent 8 }}
         {{- end }}
         {{- end }}
       {{- with .Values.initResources }}
@@ -150,9 +138,8 @@ spec:
             fieldRef:
               fieldPath: metadata.name
         {{- end }}
-        {{- range $key, $val := .Values.env }}
-        - name: {{ $key }}
-          value: {{ $val | quote }}
+        {{- with .Values.extraEnv }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       ports:
         - name: tcp
@@ -193,8 +180,6 @@ spec:
           mountPath: /tls
         {{- end }}
         {{- if .Values.auth.enabled }}
-        - name: valkey-acl
-          mountPath: /etc/valkey
         {{- if $preStopFailover }}
         {{- if .Values.auth.usersExistingSecret }}
         - name: valkey-users-secret
@@ -207,14 +192,6 @@ spec:
           readOnly: true
         {{- end }}
         {{- end }}
-        {{- end }}
-        {{- range $secret := .Values.extraValkeySecrets }}
-        - name: {{ $secret.name }}-valkey
-          mountPath: {{ $secret.mountPath }}
-        {{- end }}
-        {{- range $config := .Values.extraValkeyConfigs }}
-        - name: {{ $config.name }}-valkey
-          mountPath: {{ $config.mountPath }}
         {{- end }}
         {{- with .Values.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
@@ -252,7 +229,12 @@ spec:
       resources:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- $exporterEnvs := .Values.metrics.exporter.extraEnvs | default dict }}
+      {{- /* Names set through metrics.exporter.extraEnv, which replace the
+             chart's own entry of the same name */}}
+      {{- $exporterEnvs := dict }}
+      {{- range .Values.metrics.exporter.extraEnv }}
+      {{- $_ := set $exporterEnvs .name true }}
+      {{- end }}
       {{- /* A /tls mount the user already added through extraVolumeMounts
              (the workaround before the chart mounted it) takes the place of
              the chart's own, as Kubernetes rejects a repeated mountPath */}}
@@ -275,7 +257,7 @@ spec:
       env:
         - name: REDIS_ALIAS
           value: {{ include "valkey.fullname" . }}
-        {{- /* A variable also set in metrics.exporter.extraEnvs is left to that
+        {{- /* A variable also set in metrics.exporter.extraEnv is left to that
                entry, so the container never carries the same name twice */}}
         {{- if not (hasKey $exporterEnvs "REDIS_ADDR") }}
         - name: REDIS_ADDR
@@ -308,17 +290,16 @@ spec:
               key: default-password
               {{- end }}
         {{- end }}
-        {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
-        - name: {{ $key }}
-          value: {{ $val | quote }}
+        {{- with .Values.metrics.exporter.extraEnv }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
     {{- end }}
   {{- with .Values.extraContainers }}
   {{- toYaml . | nindent 4 }}
   {{- end }}
   volumes:
-    # Holds valkey.conf, which init.sh generates there. Memory backed
-    # because the file carries credentials in plain text, and with
+    # Holds valkey.conf and users.acl, which init.sh generates there. Memory
+    # backed because valkey.conf carries credentials in plain text, and with
     # replication CONFIG REWRITE rewrites them into it whenever Sentinel
     # changes the topology.
     - name: valkey-conf
@@ -354,41 +335,16 @@ spec:
                   path: inline-password
           {{- end }}
     {{- end }}
-    {{- if .Values.auth.enabled }}
-    - name: valkey-acl
-      emptyDir:
-        medium: Memory
-    {{- end }}
-    {{- if .Values.valkeyConfig }}
+    {{- if .Values.extraConfig }}
     - name: valkey-config
       configMap:
         name: {{ include "valkey.fullname" . }}-config
-    {{- end }}
-    {{- range .Values.extraValkeySecrets }}
-    - name: {{ .name }}-valkey
-      secret:
-        secretName: {{ .name }}
-        defaultMode: {{ .defaultMode | default 0440 }}
     {{- end }}
     {{- if .Values.tls.enabled }}
     - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
       secret:
         secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
         defaultMode: 0400
-    {{- end }}
-    {{- range .Values.extraValkeyConfigs }}
-    - name: {{ .name }}-valkey
-      configMap:
-        name: {{ .name }}
-        defaultMode: {{ .defaultMode | default 0440 }}
-    {{- end }}
-    {{- if .Values.metrics.enabled }}
-    {{- range .Values.metrics.exporter.extraExporterSecrets }}
-    - name: {{ .name }}-exporter
-      secret:
-        secretName: {{ .name }}
-        defaultMode: {{ .defaultMode | default 0440 }}
-    {{- end }}
     {{- end }}
     {{- if .Values.auth.enabled }}
     {{- if .Values.auth.usersExistingSecret }}

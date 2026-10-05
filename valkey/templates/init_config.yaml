@@ -256,24 +256,18 @@ data:
     } >>"$VALKEY_CONFIG_TMP"
 
     {{- if .Values.auth.enabled }}
-    # Create secure directory for ACL file
-    log "Creating /etc/valkey directory for ACL file"
-    mkdir -p /etc/valkey
+    # The ACL file sits next to valkey.conf, on the same memory backed volume.
+    # It only holds password hashes, but it is still kept to its owner.
+    # File modes cannot keep Valkey from rewriting it (ACL SAVE replaces the
+    # file through a rename in this writable directory): restricting that is
+    # left to the ACL permissions of the users.
+    ACL_FILE="$(dirname "$VALKEY_CONFIG")/users.acl"
+    echo "aclfile $ACL_FILE" >>"$VALKEY_CONFIG_TMP"
 
-    # Set aclfile path in valkey.conf
-    echo "aclfile /etc/valkey/users.acl" >>"$VALKEY_CONFIG_TMP"
-
-    # Remove or reset existing ACL file if present (it may be read-only from previous run)
-    log "Preparing ACL file at /etc/valkey/users.acl"
-    if [ -f /etc/valkey/users.acl ]; then
-      log "Removing existing read-only users.acl file"
-      chmod 0600 /etc/valkey/users.acl
-      rm -f /etc/valkey/users.acl
-    fi
-
-    # Create ACL file with secure permissions
-    touch /etc/valkey/users.acl
-    chmod 0600 /etc/valkey/users.acl
+    # A rerun of this init container in the same pod finds the previous file
+    log "Preparing ACL file at $ACL_FILE"
+    rm -f "$ACL_FILE"
+    (umask 077 && : >"$ACL_FILE")
 
     {{- if .Values.auth.aclUsers }}
     # Generate ACL entries for each user
@@ -286,7 +280,7 @@ data:
 
     # Hash the password and write ACL entry
     PASSHASH=$(printf '%s' "$PASSWORD" | sha256sum | cut -f 1 -d " ")
-    printf '%s\n' "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> /etc/valkey/users.acl
+    printf '%s\n' "user {{ $username }} on #$PASSHASH {{ $user.permissions }}" >> "$ACL_FILE"
 
     {{- end }}
     {{- end }}
@@ -295,13 +289,11 @@ data:
     # Append inline ACL configuration
     log "Appending custom ACL configuration"
     if [ -f /valkey-auth-secret/aclConfig ]; then
-      cat /valkey-auth-secret/aclConfig >> /etc/valkey/users.acl
+      cat /valkey-auth-secret/aclConfig >> "$ACL_FILE"
     fi
     {{- end }}
 
-    # Set final permissions
-    chmod 0400 /etc/valkey/users.acl
-    log "ACL file created with 0400 permissions"
+    log "ACL file created"
     {{- end }}
 
     {{- if .Values.replica.enabled }}
@@ -591,10 +583,6 @@ data:
     if [ -f /usr/local/etc/valkey/valkey.conf ]; then
       log "Appending /usr/local/etc/valkey/valkey.conf"
       cat /usr/local/etc/valkey/valkey.conf >>"$VALKEY_CONFIG_TMP"
-    fi
-    if [ -d /extravalkeyconfigs ]; then
-      log "Appending files in /extravalkeyconfigs/"
-      cat /extravalkeyconfigs/* >>"$VALKEY_CONFIG_TMP"
     fi
 
     # Publish the finished config atomically.

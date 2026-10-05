@@ -304,15 +304,32 @@ tests:
           path: data["sentinel-start.sh"]
           pattern: 'valkey-cli --tls --cacert /tls/ca.crt'
 
-  - it: should append extra sentinel configuration
+  - it: should append extra sentinel configuration from its own file
     set:
       replica.sentinel.extraConfig: |
+        sentinel primary-reboot-down-after-period {{ .Values.replica.sentinel.masterSet }} 10000
+        EOF
         sentinel deny-scripts-reconfig yes
     template: templates/sentinel-configmap.yaml
     asserts:
+      - equal:
+          path: data["extra.conf"]
+          value: |-
+            sentinel primary-reboot-down-after-period mymaster 10000
+            EOF
+            sentinel deny-scripts-reconfig yes
       - matchRegex:
           path: data["sentinel-start.sh"]
-          pattern: 'sentinel deny-scripts-reconfig yes'
+          pattern: 'cat /sentinel-scripts/extra.conf >> "\$SENTINEL_CONF"'
+
+  - it: should not render the extra sentinel configuration file by default
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - notExists:
+          path: data["extra.conf"]
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'extra.conf'
 
   - it: should roll the sentinel pods when the scripts change
     template: templates/sentinel-statefulset.yaml

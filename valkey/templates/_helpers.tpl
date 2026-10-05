@@ -228,6 +228,46 @@ app.kubernetes.io/component: sentinel
 {{- end -}}
 
 {{/*
+Refuse values that were removed or renamed in 1.0. Ignoring them would drop
+settings silently, and for persistence it would cost the data: a standalone
+release that still sets dataStorage.enabled would render without its PVC, so
+Helm would delete the claim and the pod would start on an empty volume.
+*/}}
+{{- define "valkey.validateRemovedValues" -}}
+{{- $removed := list
+  (list "dataStorage" "dataStorage was replaced by persistence (dataStorage.requestedSize is now persistence.size, className is storageClass, persistentVolumeClaimName is existingClaim, keepPvc is keepOnUninstall). The PVC name does not change.")
+  (list "replica.persistence" "replica.persistence was replaced by persistence: set persistence.enabled=true and move size, storageClass and accessModes there. The PVC names do not change.")
+  (list "valkeyConfig" "valkeyConfig was renamed to extraConfig.")
+  (list "extraValkeySecrets" "extraValkeySecrets was removed: add a secret volume to extraVolumes and mount it with extraVolumeMounts.")
+  (list "extraValkeyConfigs" "extraValkeyConfigs was removed: add a configMap volume to extraVolumes and mount it with extraVolumeMounts.")
+  (list "extraSecretValkeyConfigs" "extraSecretValkeyConfigs was removed: mount the files with extraVolumes and extraVolumeMounts, and load them with include <path> in extraConfig.")
+  (list "env" "env was replaced by extraEnv, a list of Kubernetes EnvVar entries (name, value or valueFrom).")
+  (list "metrics.exporter.extraEnvs" "metrics.exporter.extraEnvs was replaced by metrics.exporter.extraEnv, a list of Kubernetes EnvVar entries (name, value or valueFrom).")
+  (list "metrics.exporter.extraExporterSecrets" "metrics.exporter.extraExporterSecrets was removed: add a secret volume to extraVolumes and mount it with metrics.exporter.extraVolumeMounts.")
+  (list "metrics.service.extraLabels" "metrics.service.extraLabels was renamed to metrics.service.labels.")
+  (list "metrics.serviceMonitor.extraLabels" "metrics.serviceMonitor.extraLabels was renamed to metrics.serviceMonitor.labels.")
+  (list "metrics.podMonitor.extraLabels" "metrics.podMonitor.extraLabels was renamed to metrics.podMonitor.labels.")
+  (list "metrics.prometheusRule.extraLabels" "metrics.prometheusRule.extraLabels was renamed to metrics.prometheusRule.labels.")
+  (list "metrics.prometheusRule.extraAnnotations" "metrics.prometheusRule.extraAnnotations was renamed to metrics.prometheusRule.annotations.")
+}}
+{{- range $removed }}
+  {{- $path := splitList "." (index . 0) }}
+  {{- $node := $.Values }}
+  {{- $found := true }}
+  {{- range $path }}
+    {{- if and $found (kindIs "map" $node) (hasKey $node .) }}
+      {{- $node = index $node . }}
+    {{- else }}
+      {{- $found = false }}
+    {{- end }}
+  {{- end }}
+  {{- if $found }}
+    {{- fail (printf "%s See UPGRADE.md." (index . 1)) }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Validate the persistence configuration.
 
 The 0.x dataStorage and replica.persistence values are refused rather than
@@ -236,12 +276,7 @@ otherwise render without its PVC, so Helm would delete the claim and the pod
 would start on an empty volume.
 */}}
 {{- define "valkey.validatePersistence" -}}
-{{- if hasKey .Values "dataStorage" }}
-  {{- fail "dataStorage was replaced by persistence (dataStorage.requestedSize is now persistence.size, className is storageClass, persistentVolumeClaimName is existingClaim, keepPvc is keepOnUninstall). The PVC name does not change. See UPGRADE.md." }}
-{{- end }}
-{{- if hasKey .Values.replica "persistence" }}
-  {{- fail "replica.persistence was replaced by persistence: set persistence.enabled=true and move size, storageClass and accessModes there. The PVC names do not change. See UPGRADE.md." }}
-{{- end }}
+{{- include "valkey.validateRemovedValues" . }}
 {{- $p := .Values.persistence }}
 {{- if .Values.replica.enabled }}
   {{- if not (and $p.enabled $p.size) }}

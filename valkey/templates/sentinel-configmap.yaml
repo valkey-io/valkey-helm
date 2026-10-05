@@ -221,12 +221,12 @@ data:
     {{- end }}
     log "Configured the Sentinel ACL and the monitor credentials"
     {{- end }}
-    {{- with .Values.replica.sentinel.extraConfig }}
+    {{- if .Values.replica.sentinel.extraConfig }}
 
-    cat >> "$SENTINEL_CONF" << 'EOF'
-
-    {{- tpl . $ | nindent 4 }}
-    EOF
+    # replica.sentinel.extraConfig, kept in its own file so that no content
+    # can end a heredoc early
+    echo >> "$SENTINEL_CONF"
+    cat /sentinel-scripts/extra.conf >> "$SENTINEL_CONF"
     {{- end }}
 
     # Sentinel learns which nodes are replicas from the master's INFO, so a node
@@ -424,5 +424,9 @@ data:
     done
 
     log "WARN: still the master after ${WAITED}s, continuing with the shutdown"
+  {{- end }}
+  {{- with .Values.replica.sentinel.extraConfig }}
+  extra.conf: |-
+    {{- tpl . $ | nindent 4 }}
   {{- end }}
 {{- end }}

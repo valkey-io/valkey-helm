@@ -35,19 +35,16 @@
                 "Recreate"
             ]
         },
-        "env": {
-            "type": "object"
+        "extraConfig": {
+            "type": "string"
+        },
+        "extraContainers": {
+            "type": "array"
+        },
+        "extraEnv": {
+            "type": "array"
         },
         "extraInitContainers": {
-            "type": "array"
-        },
-        "extraSecretValkeyConfigs": {
-            "type": "boolean"
-        },
-        "extraValkeyConfigs": {
-            "type": "array"
-        },
-        "extraValkeySecrets": {
             "type": "array"
         },
         "extraVolumeMounts": {
@@ -300,14 +297,11 @@
                         "command": {
                             "type": "array"
                         },
-                        "extraEnvs": {
-                            "type": "object"
+                        "extraEnv": {
+                            "type": "array"
                         },
                         "tlsServerName": {
                             "type": "string"
-                        },
-                        "extraExporterSecrets": {
-                            "type": "array"
                         },
                         "extraVolumeMounts": {
                             "type": "array"
@@ -349,7 +343,7 @@
                         "enabled": {
                             "type": "boolean"
                         },
-                        "extraLabels": {
+                        "labels": {
                             "type": "object"
                         },
                         "honorLabels": {
@@ -395,10 +389,10 @@
                         "enabled": {
                             "type": "boolean"
                         },
-                        "extraAnnotations": {
+                        "annotations": {
                             "type": "object"
                         },
-                        "extraLabels": {
+                        "labels": {
                             "type": "object"
                         },
                         "rules": {
@@ -418,7 +412,7 @@
                         "enabled": {
                             "type": "boolean"
                         },
-                        "extraLabels": {
+                        "labels": {
                             "type": "object"
                         },
                         "ports": {
@@ -443,7 +437,7 @@
                         "enabled": {
                             "type": "boolean"
                         },
-                        "extraLabels": {
+                        "labels": {
                             "type": "object"
                         },
                         "honorLabels": {
@@ -974,9 +968,6 @@
                     ]
                 }
             }
-        },
-        "valkeyConfig": {
-            "type": "string"
         },
         "valkeyLogLevel": {
             "type": "string",

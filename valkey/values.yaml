@@ -196,27 +196,23 @@ persistence:
   # replica.persistentVolumeClaimRetentionPolicy.
   keepOnUninstall: false
 
-# Mount additional secrets into the Valkey container
-extraValkeySecrets: []
-
-# Mount additional configMaps into the Valkey container
-extraValkeyConfigs: []
-
-# Mount extra secrets as volume to init container (deprecated, use extraValkeySecrets)
-extraSecretValkeyConfigs: false
-
-# Mount additional emptyDir or hostPath volumes (advanced use)
+# Additional volumes for the Valkey pod (Secrets, ConfigMaps or any other
+# volume type). extraVolumeMounts mounts them into the Valkey container,
+# metrics.exporter.extraVolumeMounts into the exporter, and containers from
+# extraInitContainers/extraContainers declare their own volumeMounts.
 extraVolumes: []
-#  - name: hostpath-volume
-#    hostPath:
-#      path: /opt/valkey/hostpath-volume/
-#      type: DirectoryOrCreate
+#  - name: valkey-extra-conf
+#    secret:
+#      secretName: my-valkey-conf
 extraVolumeMounts: []
-#  - mountPath: /some/path/
-#    name: hostpath-volume
+#  - name: valkey-extra-conf
+#    mountPath: /extra-conf
+#    readOnly: true
 
-# Content for valkey.conf (will be mounted via ConfigMap)
-valkeyConfig: ""
+# Raw configuration appended to the generated valkey.conf. Supports
+# templating. To load files mounted through extraVolumes, use include, e.g.
+#   include /extra-conf/valkey.conf
+extraConfig: ""
 
 auth:
   # Enable ACL-based authentication
@@ -391,8 +387,9 @@ replica:
     # reconfigured.
     orphanCheckSeconds: 30
 
-    # Raw configuration appended to the generated sentinel.conf.
-    # Supports templating, e.g. "sentinel notification-script {{ .Release.Name }} /script.sh"
+    # Raw configuration appended to the generated sentinel.conf. Supports
+    # templating, e.g.
+    # "sentinel primary-reboot-down-after-period {{ .Values.replica.sentinel.masterSet }} 10000"
     extraConfig: ""
 
     # Resource limits/requests for the Sentinel container
@@ -692,11 +689,11 @@ podDisruptionBudget:
 
 # Valkey logging level: debug, verbose, notice, warning
 valkeyLogLevel: "notice"
-# Environment variables to inject into Valkey container
-
-env: {}
-  # Example:
-  # LOG_LEVEL: info
+# Additional environment variables for the Valkey container, as a list of
+# Kubernetes EnvVar entries (value or valueFrom)
+extraEnv: []
+#  - name: TZ
+#    value: UTC
 
 metrics:
   # Enable Prometheus exporter sidecar
@@ -733,14 +730,14 @@ metrics:
       # requests:
       #   cpu: 100m
       #   memory: 128Mi
-    # Extra volume mounts for metrics exporter container
+    # Volume mounts for the exporter container, from extraVolumes
     extraVolumeMounts: []
-    # Additional secrets to mount for metrics exporter
-    extraExporterSecrets: []
-    # Environment variables to inject into the metrics exporter container
-    extraEnvs: {}
-    # Example:
-    # LOG_LEVEL: info
+    # Additional environment variables for the exporter container, as a list
+    # of Kubernetes EnvVar entries. An entry named like a variable the chart
+    # sets (REDIS_ADDR, REDIS_EXPORTER_TLS_*) replaces it.
+    extraEnv: []
+    #  - name: REDIS_EXPORTER_INCL_SYSTEM_METRICS
+    #    value: "true"
     securityContext: {}
       # Example:
       # runAsNonRoot: true
@@ -763,7 +760,7 @@ metrics:
     # Optional annotations for the metrics exporter service
     annotations: {}
     # Optional labels for the metrics exporter service
-    extraLabels: {}
+    labels: {}
     # ServiceMonitor configuration for Prometheus Operator
     # Application protocol
     appProtocol: ""
@@ -772,10 +769,10 @@ metrics:
     enabled: false
     # Port name or number to scrape metrics from
     port: metrics
-    # Extra labels for the ServiceMonitor resource, e.g. the labels a
+    # Labels for the ServiceMonitor resource, e.g. the labels a
     # Prometheus serviceMonitorSelector matches on (release: kube-prometheus-stack)
-    extraLabels: {}
-    # Extra annotations for the ServiceMonitor resource
+    labels: {}
+    # Annotations for the ServiceMonitor resource
     annotations: {}
     # How often Prometheus should scrape metrics
     interval: 30s
@@ -798,10 +795,10 @@ metrics:
     enabled: false
     # Port name or number to scrape metrics from
     port: metrics
-    # Extra labels for the PodMonitor resource, e.g. the labels a
+    # Labels for the PodMonitor resource, e.g. the labels a
     # Prometheus podMonitorSelector matches on (release: kube-prometheus-stack)
-    extraLabels: {}
-    # Extra annotations for the PodMonitor resource
+    labels: {}
+    # Annotations for the PodMonitor resource
     annotations: {}
     # Frequency for Prometheus to scrape pod metrics
     interval: 30s
@@ -824,10 +821,10 @@ metrics:
   prometheusRule:
     # Enable creation of PrometheusRule resource
     enabled: false
-    # Extra labels to add to the PrometheusRule resource
-    extraLabels: {}
-    # Extra annotations to add to the PrometheusRule resource
-    extraAnnotations: {}
+    # Labels for the PrometheusRule resource
+    labels: {}
+    # Annotations for the PrometheusRule resource
+    annotations: {}
     # List of Prometheus alerting rules
     rules: []
     # Example alerting rules:
