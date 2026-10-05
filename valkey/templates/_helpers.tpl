@@ -242,6 +242,19 @@ starting, with the reason in its events, rather than leaving it without one.
 {{- include "valkey.fullnameWithSuffix" (list . "sentinel-hl") -}}
 {{- end -}}
 
+{{/*
+Labels for the Sentinel resources, matching the Sentinel pods' name.
+*/}}
+{{- define "valkey.sentinel.labels" -}}
+helm.sh/chart: {{ include "valkey.chart" . }}
+{{ include "valkey.sentinel.selectorLabels" . }}
+{{- include "valkey.versionLabel" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.commonLabels }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end -}}
+
 {{- define "valkey.sentinel.selectorLabels" -}}
 app.kubernetes.io/name: {{ printf "%s-sentinel" (include "valkey.name" . | trunc 54 | trimSuffix "-") }}
 app.kubernetes.io/instance: {{ .Release.Name }}

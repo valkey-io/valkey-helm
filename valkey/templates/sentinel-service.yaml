@@ -4,8 +4,7 @@ kind: Service
 metadata:
   name: {{ include "valkey.sentinel.fullname" . }}
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
-    app.kubernetes.io/component: sentinel
+    {{- include "valkey.sentinel.labels" . | nindent 4 }}
   {{- with .Values.sentinel.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

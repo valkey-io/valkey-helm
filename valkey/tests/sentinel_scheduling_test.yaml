@@ -339,3 +339,19 @@ tests:
       - equal:
           path: spec.minAvailable
           value: "60%"
+
+  - it: should label the Sentinel StatefulSet like its pods
+    set:
+      commonLabels:
+        team: data
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey-sentinel
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: sentinel
+      - equal:
+          path: metadata.labels.team
+          value: data

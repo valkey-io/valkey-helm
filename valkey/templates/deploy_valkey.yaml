@@ -8,6 +8,7 @@ metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
   {{- with .Values.workloadAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

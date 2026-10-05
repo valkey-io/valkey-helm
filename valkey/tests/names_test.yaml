@@ -56,15 +56,12 @@ tests:
           path: spec.selector["app.kubernetes.io/name"]
           pattern: '^a{55}-haproxy$'
 
-  - it: should keep the init container and TLS volume names within 63 characters
+  - it: should keep the headless service and TLS volume names within 63 characters
     template: templates/statefulset.yaml
     asserts:
       - matchRegex:
           path: spec.serviceName
           pattern: '^a{54}-headless$'
-      - matchRegex:
-          path: spec.template.spec.initContainers[0].name
-          pattern: '^a{58}-init$'
       - contains:
           path: spec.template.spec.volumes
           content:

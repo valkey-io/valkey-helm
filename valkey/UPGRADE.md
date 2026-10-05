@@ -91,3 +91,11 @@ Replication, from `replica.persistence`: move the block to the top level as `per
 **Who is affected:** replication releases that set `replica.replicas`. Left unchanged, the StatefulSet loses one pod on upgrade: the replica with the highest index is removed (its PVC is kept), and a `replica.minReplicasToWrite` that counted on it can make the master refuse writes.
 
 **How to configure:** add 1 to `replica.replicas`, e.g. `2` becomes `3`.
+
+### Fixed container names in the Valkey pods
+
+**What changed:** the Valkey pods' containers are named `valkey`, `init` and `metrics` instead of `<fullname>` and `<fullname>-init`. The pods and their workload are also labelled `app.kubernetes.io/component: valkey` (not part of the selectors). The pods restart once on upgrade.
+
+**Who is affected:** scripts and tools that address the containers by name, e.g. `kubectl exec -c` or `kubectl logs -c`.
+
+**How to configure:** use `-c valkey`, `-c init` or `-c metrics`.

@@ -8,8 +8,7 @@ kind: ConfigMap
 metadata:
   name: {{ include "valkey.fullname" . }}-sentinel-scripts
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
-    app.kubernetes.io/component: sentinel
+    {{- include "valkey.sentinel.labels" . | nindent 4 }}
 data:
   sentinel-start.sh: |-
     #!/bin/sh

@@ -13,6 +13,8 @@ Include it under the workload's spec.template with nindent 4.
 metadata:
   labels:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
+    {{- /* Not part of the selectors, which are immutable: only a label */}}
+    app.kubernetes.io/component: valkey
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -44,7 +46,7 @@ spec:
   securityContext:
     {{- toYaml .Values.podSecurityContext | nindent 4 }}
   initContainers:
-    - name: {{ include "valkey.fullnameWithSuffix" (list . "init") }}
+    - name: init
       image: {{ include "valkey.image" . }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
       {{- with .Values.securityContext }}
@@ -113,7 +115,7 @@ spec:
   {{- toYaml . | nindent 4 }}
   {{- end }}
   containers:
-    - name: {{ include "valkey.fullname" . }}
+    - name: valkey
       image: {{ include "valkey.image" . }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
       {{- if $sentinel }}

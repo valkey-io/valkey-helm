@@ -5,8 +5,7 @@ kind: PodDisruptionBudget
 metadata:
   name: {{ include "valkey.sentinel.fullname" . }}
   labels:
-    {{- include "valkey.labels" . | nindent 4 }}
-    app.kubernetes.io/component: sentinel
+    {{- include "valkey.sentinel.labels" . | nindent 4 }}
 spec:
   {{- /* Tested for null rather than truthiness: 0 is a meaningful value here,
          maxUnavailable: 0 forbids every voluntary eviction, and a truthiness
