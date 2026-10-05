@@ -15,6 +15,31 @@ tests:
       - failedTemplate:
           errorPattern: "dataStorage was replaced by persistence.*See UPGRADE.md."
 
+  # Enabled defaults to false, so these rules would otherwise vanish on upgrade
+  # and open the traffic they restricted.
+  - it: should refuse networkPolicy.ingress
+    set:
+      networkPolicy.ingress:
+        - from:
+            - podSelector:
+                matchLabels:
+                  app: client
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "networkPolicy.ingress was replaced by networkPolicy.extraIngress.*allowExternal=false.*See UPGRADE.md."
+
+  - it: should refuse networkPolicy.egress
+    set:
+      networkPolicy.egress:
+        - to:
+            - ipBlock:
+                cidr: 10.0.0.0/8
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "networkPolicy.egress was replaced by networkPolicy.extraEgress.*allowExternalEgress=false.*See UPGRADE.md."
+
   - it: should refuse replica.persistence
     set:
       replica.persistence.size: 5Gi

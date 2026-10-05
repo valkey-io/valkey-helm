@@ -68,6 +68,8 @@ Replication, from `replica.persistence`: move the block to the top level as `per
 - `extraSecretValkeyConfigs`: drop it and the `extravalkeyconfigs-volume` entries; mount the files as above and load them with `include <path>` in `extraConfig`.
 - `metrics.exporter.extraExporterSecrets`: add the `secret` volume to `extraVolumes` and mount it with `metrics.exporter.extraVolumeMounts`.
 
+---
+
 ### `env` and `metrics.exporter.extraEnvs` replaced by `extraEnv` lists
 
 **What changed:** environment variables are Kubernetes EnvVar lists, which also accept `valueFrom`.
@@ -105,6 +107,22 @@ Replication, from `replica.persistence`: move the block to the top level as `per
 **Who is affected:** replication releases that set `replica.replicas`. Left unchanged, the StatefulSet loses one pod on upgrade: the replica with the highest index is removed (its PVC is kept), and a `replica.minReplicasToWrite` that counted on it can make the master refuse writes.
 
 **How to configure:** add 1 to `replica.replicas`, e.g. `2` becomes `3`.
+
+---
+
+### `networkPolicy` is a structured block
+
+**What changed:** the NetworkPolicy is created only with `networkPolicy.enabled: true` and is built from options; `networkPolicy.ingress` and `networkPolicy.egress` are replaced by `extraIngress` and `extraEgress`, which add rules on top of the chart's own. The chart refuses to render while the old keys are set.
+
+**Who is affected:** releases that set `networkPolicy`.
+
+**How to configure:**
+
+- `ingress` → `networkPolicy.extraIngress`, with `enabled: true` and `allowExternal: false`. With `allowExternal: true` the chart's rule admits every client on the Valkey port, whatever your rules say.
+- `egress` → `networkPolicy.extraEgress`, with `enabled: true` and `allowExternalEgress: false`. DNS and the other Valkey pods are then allowed by the chart.
+- `labels` and `annotations` keep their names; set `enabled: true` to keep the policy.
+
+---
 
 ### Fixed container names in the Valkey pods
 

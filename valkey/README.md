@@ -505,6 +505,32 @@ podDisruptionBudget:
   minAvailable: 2  # Always keep at least 2 replicas running
 ```
 
+## NetworkPolicy
+
+Set `networkPolicy.enabled` to create a NetworkPolicy for the Valkey pods.
+By default it admits clients on the Valkey port from anywhere, opens the metrics port when `metrics.enabled` is set, and allows all egress.
+
+To admit only known clients, set `networkPolicy.allowExternal: false`.
+The Valkey port then accepts only:
+
+* pods labelled `<fullname>-client: "true"`, e.g. `valkey-client: "true"` for a release named `valkey`,
+* the other Valkey pods, for replication,
+* this release's Sentinel and HAProxy pods,
+* pods in the namespaces matched by `networkPolicy.ingressNSMatchLabels`, narrowed to `networkPolicy.ingressNSPodMatchLabels` when set.
+
+`networkPolicy.allowExternalEgress: false` limits egress to DNS, the other Valkey pods and this release's Sentinel pods.
+`networkPolicy.extraIngress` and `networkPolicy.extraEgress` add rules on top; Kubernetes admits a connection if any rule matches, so they can only widen what the options above allow.
+
+The policy applies to the Valkey pods only, not to the Sentinel or HAProxy pods.
+
+```yaml
+networkPolicy:
+  enabled: true
+  allowExternal: false
+  ingressNSMatchLabels:
+    kubernetes.io/metadata.name: my-app
+```
+
 ## TLS
 
 This chart supports TLS encryption for Valkey connections.
@@ -601,7 +627,15 @@ tls:
 | metrics.serviceMonitor.scrapeTimeout | string | `""` |  |
 | metrics.serviceMonitor.targetLimit | bool | `false` |  |
 | nameOverride | string | `""` |  |
-| networkPolicy | object | `{}` |  |
+| networkPolicy.enabled | bool | `false` | Create a NetworkPolicy for the Valkey pods |
+| networkPolicy.allowExternal | bool | `true` | Admit clients from any source; when false, only labelled clients, this release's pods and ingressNSMatchLabels |
+| networkPolicy.allowExternalEgress | bool | `true` | Allow all egress; when false, only DNS and this release's Valkey and Sentinel pods |
+| networkPolicy.ingressNSMatchLabels | object | `{}` | Namespaces admitted when allowExternal is false |
+| networkPolicy.ingressNSPodMatchLabels | object | `{}` | Pods admitted within those namespaces |
+| networkPolicy.extraIngress | list | `[]` | Ingress rules added as they are |
+| networkPolicy.extraEgress | list | `[]` | Egress rules added as they are |
+| networkPolicy.labels | object | `{}` |  |
+| networkPolicy.annotations | object | `{}` |  |
 | nodeSelector | object | `{}` |  |
 | persistence.enabled | bool | `false` | Required in replication mode |
 | persistence.size | string | `""` | PVC size (one per pod in replication) |

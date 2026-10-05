@@ -483,7 +483,36 @@
             "type": "string"
         },
         "networkPolicy": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+                "allowExternal": {
+                    "type": "boolean"
+                },
+                "allowExternalEgress": {
+                    "type": "boolean"
+                },
+                "annotations": {
+                    "type": "object"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "extraEgress": {
+                    "type": "array"
+                },
+                "extraIngress": {
+                    "type": "array"
+                },
+                "ingressNSMatchLabels": {
+                    "type": "object"
+                },
+                "ingressNSPodMatchLabels": {
+                    "type": "object"
+                },
+                "labels": {
+                    "type": "object"
+                }
+            }
         },
         "nodeSelector": {
             "type": "object"

@@ -250,6 +250,15 @@ starting, with the reason in its events, rather than leaving it without one.
         path: password
 {{- end -}}
 
+{{/*
+Label that admits a pod to the Valkey port when networkPolicy.allowExternal is
+false. A label name is limited to 63 characters, so the fullname is shortened
+to leave room for the suffix.
+*/}}
+{{- define "valkey.networkPolicy.clientLabel" -}}
+{{- printf "%s-client" (include "valkey.fullname" . | trunc 56 | trimSuffix "-") -}}
+{{- end -}}
+
 {{- define "valkey.sentinel.headlessServiceName" -}}
 {{- /* Shortening "<fullname>-sentinel" first could cut "-sentinel" off
        entirely and collide with the Valkey headless service */}}
@@ -297,6 +306,8 @@ Helm would delete the claim and the pod would start on an empty volume.
   (list "metrics.podMonitor.extraLabels" "metrics.podMonitor.extraLabels was renamed to metrics.podMonitor.labels.")
   (list "metrics.prometheusRule.extraLabels" "metrics.prometheusRule.extraLabels was renamed to metrics.prometheusRule.labels.")
   (list "metrics.prometheusRule.extraAnnotations" "metrics.prometheusRule.extraAnnotations was renamed to metrics.prometheusRule.annotations.")
+  (list "networkPolicy.ingress" "networkPolicy.ingress was replaced by networkPolicy.extraIngress: set networkPolicy.enabled=true and networkPolicy.allowExternal=false, otherwise the policy also admits every client on the Valkey port.")
+  (list "networkPolicy.egress" "networkPolicy.egress was replaced by networkPolicy.extraEgress: set networkPolicy.enabled=true and networkPolicy.allowExternalEgress=false, otherwise the policy also allows all egress.")
 }}
 {{- range $removed }}
   {{- $path := splitList "." (index . 0) }}

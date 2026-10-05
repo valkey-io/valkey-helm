@@ -99,7 +99,30 @@ service:
 
 # Network policy to control traffic to the pods
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
-networkPolicy: {}
+networkPolicy:
+  # Create a NetworkPolicy for the Valkey pods
+  enabled: false
+  # Admit clients on the Valkey port from any source. When false, only pods
+  # labelled "<fullname>-client": "true", the other Valkey pods, this
+  # release's Sentinel and HAProxy pods and the namespaces matched below are
+  # admitted.
+  allowExternal: true
+  # Allow all egress. When false, egress is limited to DNS, the other Valkey
+  # pods and this release's Sentinel pods, plus extraEgress.
+  allowExternalEgress: true
+  # Labels of the namespaces admitted when allowExternal is false, e.g.
+  #   kubernetes.io/metadata.name: my-app
+  ingressNSMatchLabels: {}
+  # Labels of the pods admitted within those namespaces
+  ingressNSPodMatchLabels: {}
+  # Ingress rules added to the policy as they are
+  extraIngress: []
+  # Egress rules added to the policy as they are
+  extraEgress: []
+  # Labels added to the NetworkPolicy
+  labels: {}
+  # Annotations added to the NetworkPolicy
+  annotations: {}
 
 # Resource limits/requests for the main Valkey container
 resources: {}
