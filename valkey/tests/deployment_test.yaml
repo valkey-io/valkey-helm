@@ -600,3 +600,19 @@ tests:
     asserts:
       - notExists:
           path: spec.template.metadata.annotations["checksum/secret"]
+
+  - it: should set the termination grace period on the standalone pod
+    set:
+      terminationGracePeriodSeconds: 120
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 120
+
+  - it: should reject a negative termination grace period
+    set:
+      terminationGracePeriodSeconds: -1
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate: {}

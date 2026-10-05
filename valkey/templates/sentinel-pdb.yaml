@@ -1,0 +1,25 @@
+{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.podDisruptionBudget.enabled }}
+{{- include "valkey.validateSentinelConfig" . }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "valkey.sentinel.fullname" . }}
+  labels:
+    {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sentinel
+spec:
+  {{- /* Tested for null rather than truthiness: 0 is a meaningful value here,
+         maxUnavailable: 0 forbids every voluntary eviction, and a truthiness
+         check would silently drop it. */}}
+  {{- if not (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.minAvailable) }}
+  minAvailable: {{ .Values.replica.sentinel.podDisruptionBudget.minAvailable }}
+  {{- else if not (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.maxUnavailable) }}
+  maxUnavailable: {{ .Values.replica.sentinel.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "valkey.sentinel.selectorLabels" . | nindent 6 }}
+  {{- with .Values.replica.sentinel.podDisruptionBudget.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ . }}
+  {{- end }}
+{{- end }}

@@ -310,8 +310,31 @@ Validate sentinel configuration
   {{- if gt (int .Values.replica.sentinel.quorum) $sentinels }}
     {{- fail (printf "replica.sentinel.quorum (%d) cannot be greater than replica.sentinel.replicas (%d)." (int .Values.replica.sentinel.quorum) $sentinels) }}
   {{- end }}
-  {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
-    {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than replica.terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
+  {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
+    {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
+  {{- end }}
+  {{- if .Values.replica.sentinel.podDisruptionBudget.enabled }}
+    {{- if and (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.maxUnavailable) }}
+      {{- fail "replica.sentinel.podDisruptionBudget needs either minAvailable or maxUnavailable. A budget with neither is accepted by the API server but protects nothing." }}
+    {{- end }}
+    {{- /* A failover needs quorum Sentinels to agree the master is down and a
+           majority of all Sentinels to elect the leader that performs it, so
+           the budget must keep max(quorum, majority) Sentinels running.
+           Kubernetes rounds percentages up for both fields. */}}
+    {{- $pdb := .Values.replica.sentinel.podDisruptionBudget }}
+    {{- $needed := max (int .Values.replica.sentinel.quorum) (add (div $sentinels 2) 1) }}
+    {{- $field := ternary "maxUnavailable" "minAvailable" (kindIs "invalid" $pdb.minAvailable) }}
+    {{- $value := ternary $pdb.maxUnavailable $pdb.minAvailable (kindIs "invalid" $pdb.minAvailable) }}
+    {{- $count := 0 }}
+    {{- if hasSuffix "%" (toString $value) }}
+      {{- $count = div (add (mul $sentinels (int (trimSuffix "%" (toString $value)))) 99) 100 }}
+    {{- else }}
+      {{- $count = int $value }}
+    {{- end }}
+    {{- $kept := ternary (sub $sentinels $count) $count (eq $field "maxUnavailable") }}
+    {{- if lt (int $kept) (int $needed) }}
+      {{- fail (printf "replica.sentinel.podDisruptionBudget.%s (%v) lets voluntary evictions leave %d of %d Sentinels running, but a failover needs %d: replica.sentinel.quorum (%d) to agree and a majority of all Sentinels to elect a leader. Add Sentinels, lower the quorum, or tighten the budget." $field $value (int $kept) $sentinels (int $needed) (int .Values.replica.sentinel.quorum)) }}
+    {{- end }}
   {{- end }}
   {{- $bootstrapWait := int .Values.replica.sentinel.initialTopologyWaitSeconds }}
   {{- $sentinelStartup := int .Values.replica.sentinel.startupTimeoutSeconds }}

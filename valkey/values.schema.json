@@ -184,6 +184,9 @@
                     }
                 },
                 "nodeSelector": {
+                    "type": ["object", "null"]
+                },
+                "podAnnotations": {
                     "type": "object"
                 },
                 "podDisruptionBudget": {
@@ -235,6 +238,9 @@
                             ]
                         }
                     }
+                },
+                "podLabels": {
+                    "type": "object"
                 },
                 "podSecurityContext": {
                     "type": "object"
@@ -290,7 +296,7 @@
                     }
                 },
                 "tolerations": {
-                    "type": "array"
+                    "type": ["array", "null"]
                 },
                 "topologySpreadConstraints": {
                     "type": "array"
@@ -598,9 +604,6 @@
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"
                 },
-                "terminationGracePeriodSeconds": {
-                    "type": "integer"
-                },
                 "replicas": {
                     "type": "integer"
                 },
@@ -610,6 +613,9 @@
                 "sentinel": {
                     "type": "object",
                     "properties": {
+                        "affinity": {
+                            "type": "object"
+                        },
                         "downAfterMilliseconds": {
                             "type": "integer"
                         },
@@ -633,6 +639,9 @@
                         },
                         "monitorUser": {
                             "type": "string"
+                        },
+                        "nodeSelector": {
+                            "type": ["object", "null"]
                         },
                         "orphanCheckSeconds": {
                             "type": "integer"
@@ -667,6 +676,62 @@
                             }
                         },
                         "persistentVolumeClaimRetentionPolicy": {
+                            "type": "object"
+                        },
+                        "podAnnotations": {
+                            "type": "object"
+                        },
+                        "podDisruptionBudget": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {
+                                    "type": "boolean"
+                                },
+                                "minAvailable": {
+                                    "oneOf": [
+                                        {
+                                            "type": "integer",
+                                            "minimum": 0
+                                        },
+                                        {
+                                            "type": "string",
+                                            "pattern": "^[0-9]+%$"
+                                        },
+                                        {
+                                            "type": "null"
+                                        }
+                                    ]
+                                },
+                                "maxUnavailable": {
+                                    "oneOf": [
+                                        {
+                                            "type": "integer",
+                                            "minimum": 0
+                                        },
+                                        {
+                                            "type": "string",
+                                            "pattern": "^[0-9]+%$"
+                                        },
+                                        {
+                                            "type": "null"
+                                        }
+                                    ]
+                                },
+                                "unhealthyPodEvictionPolicy": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "enum": [
+                                        "IfHealthyBudget",
+                                        "AlwaysAllow",
+                                        "",
+                                        null
+                                    ]
+                                }
+                            }
+                        },
+                        "podLabels": {
                             "type": "object"
                         },
                         "port": {
@@ -724,6 +789,12 @@
                         },
                         "startupTimeoutSeconds": {
                             "type": "integer"
+                        },
+                        "tolerations": {
+                            "type": ["array", "null"]
+                        },
+                        "topologySpreadConstraints": {
+                            "type": "array"
                         }
                     }
                 },
@@ -837,6 +908,10 @@
                     "type": "string"
                 }
             }
+        },
+        "terminationGracePeriodSeconds": {
+            "type": "integer",
+            "minimum": 0
         },
         "tls": {
             "type": "object",

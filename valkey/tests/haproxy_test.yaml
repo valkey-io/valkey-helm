@@ -593,3 +593,73 @@ tests:
           value: "9.1.2"
       - notExists:
           path: spec.selector.matchLabels["app.kubernetes.io/version"]
+
+  - it: should not apply the Valkey pod labels or annotations to HAProxy
+    set:
+      podLabels:
+        valkey-only: "true"
+      podAnnotations:
+        valkey-only: "true"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels.valkey-only
+      - notExists:
+          path: spec.template.metadata.annotations.valkey-only
+
+  - it: should render the HAProxy pod labels and annotations
+    set:
+      haproxy.podLabels:
+        team: proxy
+      haproxy.podAnnotations:
+        note: proxy
+      commonLabels:
+        common: "true"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.team
+          value: proxy
+      - equal:
+          path: spec.template.metadata.labels.common
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations.note
+          value: proxy
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: should inherit the top level nodeSelector and tolerations by default
+    set:
+      nodeSelector:
+        pool: valkey
+      tolerations:
+        - key: valkey
+          operator: Exists
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            pool: valkey
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: valkey
+              operator: Exists
+
+  - it: should place HAProxy without a nodeSelector or tolerations when set to empty
+    set:
+      nodeSelector:
+        pool: valkey
+      tolerations:
+        - key: valkey
+          operator: Exists
+      haproxy.nodeSelector: {}
+      haproxy.tolerations: []
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.nodeSelector
+      - notExists:
+          path: spec.template.spec.tolerations

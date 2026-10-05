@@ -13,6 +13,7 @@ A Helm chart for Kubernetes
 | raven | [https://github.com/mk-raven] |
 | sgissi | [https://github.com/sgissi] |
 | Bloodraven21 | [https://github.com/Bloodraven21] |
+
 ## Source Code
 
 * <https://github.com/valkey-io/valkey-helm.git>
@@ -75,17 +76,28 @@ Valkey still needs at least one replica to provide a failover target.
 See [examples/ha-sentinel.yaml](examples/ha-sentinel.yaml) for a complete values file.
 
 Spread Sentinel pods across failure domains so one node or zone cannot remove the quorum.
-The existing global `topologySpreadConstraints` value applies to both StatefulSets, and a selector for the Sentinel component limits the rule to Sentinel pods:
+The Sentinel pods are scheduled with their own `replica.sentinel.affinity`, `topologySpreadConstraints`, `nodeSelector` and `tolerations`, and labelled with their own `replica.sentinel.podLabels` and `podAnnotations`.
+The top level `affinity`, `topologySpreadConstraints`, `podLabels` and `podAnnotations` apply to the Valkey pods only, because rules written for the Valkey pods select the Valkey pods' labels; the HAProxy pods likewise take `haproxy.podLabels` and `haproxy.podAnnotations`.
+`nodeSelector` and `tolerations` fall back to the top level values when the Sentinel ones are unset (`null`, the default); set them to `{}` / `[]` to schedule the Sentinels without any. The HAProxy values work the same way.
 
 ```yaml
-topologySpreadConstraints:
-  - maxSkew: 1
-    topologyKey: kubernetes.io/hostname
-    whenUnsatisfiable: ScheduleAnyway
-    labelSelector:
-      matchLabels:
-        app.kubernetes.io/component: sentinel
+replica:
+  sentinel:
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/instance: valkey
+            app.kubernetes.io/component: sentinel
+    # Keep a Sentinel majority through node drains
+    podDisruptionBudget:
+      enabled: true
+      maxUnavailable: 1
 ```
+
+The Valkey PodDisruptionBudget (`podDisruptionBudget`) does not cover the Sentinel pods; `replica.sentinel.podDisruptionBudget` creates a separate one for them.
 
 **Services:**
 
@@ -444,7 +456,7 @@ tls:
 |-----|------|---------|-------------|
 | global.imageRegistry | string | '' |  |
 | global.imagePullSecrets | list | `[]` |  |
-| affinity | object | `{}` |  |
+| affinity | object | `{}` | Valkey pods only, see replica.sentinel.affinity |
 | auth.aclConfig | string | `""` |  |
 | auth.aclUsers | object | `{}` | |
 | auth.enabled | bool | `false` |  |
@@ -529,8 +541,8 @@ tls:
 | nameOverride | string | `""` |  |
 | networkPolicy | object | `{}` |  |
 | nodeSelector | object | `{}` |  |
-| podAnnotations | object | `{}` |  |
-| podLabels | object | `{}` |  |
+| podAnnotations | object | `{}` | Valkey pods only, see replica.sentinel.podAnnotations and haproxy.podAnnotations |
+| podLabels | object | `{}` | Valkey pods only, see replica.sentinel.podLabels and haproxy.podLabels |
 | commonLabels | object | `{}` |  |
 | podDisruptionBudget.enabled | bool | `false` |  |
 | podDisruptionBudget.minAvailable | int or string | `null` | Minimum pods available during disruptions |
@@ -594,6 +606,16 @@ tls:
 | replica.sentinel.persistence.size | string | `"100Mi"` |  |
 | replica.sentinel.persistence.storageClass | string | `""` |  |
 | replica.sentinel.persistentVolumeClaimRetentionPolicy | object | `{}` | PVC retention policy for the Sentinel StatefulSet |
+| replica.sentinel.podLabels | object | `{}` | Sentinel pod labels; top level podLabels do not apply |
+| replica.sentinel.podAnnotations | object | `{}` | Sentinel pod annotations; top level podAnnotations do not apply |
+| replica.sentinel.nodeSelector | object | `null` | null inherits nodeSelector; {} for none |
+| replica.sentinel.tolerations | list | `null` | null inherits tolerations; [] for none |
+| replica.sentinel.affinity | object | `{}` | Top level affinity does not apply |
+| replica.sentinel.topologySpreadConstraints | list | `[]` | Top level topologySpreadConstraints do not apply |
+| replica.sentinel.podDisruptionBudget.enabled | bool | `false` | Keep a Sentinel quorum available across node drains |
+| replica.sentinel.podDisruptionBudget.minAvailable | int | `null` | Takes precedence over maxUnavailable |
+| replica.sentinel.podDisruptionBudget.maxUnavailable | int | `1` | Must keep max(quorum, majority) Sentinels running |
+| replica.sentinel.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
 | haproxy.enabled | bool | `false` | Route non Sentinel-aware clients to the current master |
 | haproxy.replicas | int | `3` |  |
 | haproxy.image.registry | string | `"docker.io"` |  |
@@ -618,6 +640,10 @@ tls:
 | haproxy.podDisruptionBudget.minAvailable | int | `null` | Takes precedence over maxUnavailable |
 | haproxy.podDisruptionBudget.maxUnavailable | int | `1` |  |
 | haproxy.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
+| haproxy.nodeSelector | object | `null` | null inherits nodeSelector; {} for none |
+| haproxy.tolerations | list | `null` | null inherits tolerations; [] for none |
+| haproxy.podLabels | object | `{}` | HAProxy pod labels; top level podLabels do not apply |
+| haproxy.podAnnotations | object | `{}` | HAProxy pod annotations; top level podAnnotations do not apply |
 | haproxy.resources | object | `{}` |  |
 | haproxy.podSecurityContext | object | see values.yaml |  |
 | haproxy.securityContext | object | see values.yaml |  |
@@ -645,6 +671,7 @@ tls:
 | startupProbe.initialDelaySeconds | int | `0` |  |
 | startupProbe.periodSeconds | int | `10` |  |
 | startupProbe.timeoutSeconds | int | `1` |  |
+| terminationGracePeriodSeconds | int | `30` | Valkey pods, standalone and replication; must exceed replica.sentinel.preStopFailoverTimeoutSeconds |
 | tls.caPublicKey | string | `"ca.crt"` |  |
 | tls.dhParamKey | string | `""` |  |
 | tls.enabled | bool | `false` |  |
@@ -653,7 +680,7 @@ tls:
 | tls.serverKey | string | `"server.key"` |  |
 | tls.serverPublicKey | string | `"server.crt"` |  |
 | tolerations | list | `[]` |  |
-| topologySpreadConstraints | list | `[]` |  |
+| topologySpreadConstraints | list | `[]` | Valkey pods only, see replica.sentinel.topologySpreadConstraints |
 | valkeyConfig | string | `""` |  |
 | valkeyLogLevel | string | `"notice"` |  |
 | workloadAnnotations | object | `{}` |  |

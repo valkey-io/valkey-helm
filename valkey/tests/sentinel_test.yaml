@@ -469,7 +469,17 @@ tests:
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "preStopFailoverTimeoutSeconds \\(30\\) must be lower than replica.terminationGracePeriodSeconds \\(30\\).*"
+          errorPattern: "preStopFailoverTimeoutSeconds \\(30\\) must be lower than terminationGracePeriodSeconds \\(30\\).*"
+
+  - it: should accept a longer preStop failover with a longer grace period
+    set:
+      replica.sentinel.preStopFailoverTimeoutSeconds: 50
+      terminationGracePeriodSeconds: 60
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 60
 
   - it: should render loadBalancerSourceRanges as a yaml list
     set:

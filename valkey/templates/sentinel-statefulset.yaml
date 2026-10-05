@@ -46,11 +46,11 @@ spec:
         {{- with .Values.commonLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- with .Values.podLabels }}
+        {{- with .Values.replica.sentinel.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
-        {{- with .Values.podAnnotations }}
+        {{- with .Values.replica.sentinel.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
         checksum/sentinelconfig: {{ include (print $.Template.BasePath "/sentinel-configmap.yaml") . | sha256sum | trunc 32 | quote }}
@@ -178,19 +178,31 @@ spec:
             defaultMode: 0400
         {{- end }}
         {{- end }}
-      {{- with .Values.nodeSelector }}
+      {{- /* Unset (null) inherits the top level value; an explicit empty value
+             means no nodeSelector for these pods. */}}
+      {{- $nodeSelector := .Values.replica.sentinel.nodeSelector }}
+      {{- if kindIs "invalid" $nodeSelector }}
+      {{- $nodeSelector = .Values.nodeSelector }}
+      {{- end }}
+      {{- with $nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- with .Values.replica.sentinel.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.topologySpreadConstraints }}
+      {{- with .Values.replica.sentinel.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.tolerations }}
+      {{- /* Unset (null) inherits the top level value; an explicit empty value
+             means no tolerations for these pods. */}}
+      {{- $tolerations := .Values.replica.sentinel.tolerations }}
+      {{- if kindIs "invalid" $tolerations }}
+      {{- $tolerations = .Values.tolerations }}
+      {{- end }}
+      {{- with $tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

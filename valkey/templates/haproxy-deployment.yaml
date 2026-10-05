@@ -23,11 +23,11 @@ spec:
         {{- with .Values.commonLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- with .Values.podLabels }}
+        {{- with .Values.haproxy.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
-      {{- with .Values.podAnnotations }}
+      {{- with .Values.haproxy.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
         checksum/config: {{ include (print $.Template.BasePath "/haproxy-configmap.yaml") . | sha256sum | trunc 32 | quote }}
@@ -135,7 +135,13 @@ spec:
         {{- with .Values.haproxy.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.haproxy.nodeSelector | default .Values.nodeSelector }}
+      {{- /* Unset (null) inherits the top level value; an explicit empty value
+             means no nodeSelector for these pods. */}}
+      {{- $nodeSelector := .Values.haproxy.nodeSelector }}
+      {{- if kindIs "invalid" $nodeSelector }}
+      {{- $nodeSelector = .Values.nodeSelector }}
+      {{- end }}
+      {{- with $nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -147,7 +153,13 @@ spec:
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.haproxy.tolerations | default .Values.tolerations }}
+      {{- /* Unset (null) inherits the top level value; an explicit empty value
+             means no tolerations for these pods. */}}
+      {{- $tolerations := .Values.haproxy.tolerations }}
+      {{- if kindIs "invalid" $tolerations }}
+      {{- $tolerations = .Values.tolerations }}
+      {{- end }}
+      {{- with $tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

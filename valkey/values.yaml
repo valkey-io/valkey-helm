@@ -34,7 +34,8 @@ serviceAccount:
   # Name of an existing service account to use (if create: false)
   name: ""
 
-# Annotations and labels for the pods
+# Annotations and labels for the Valkey pods. The Sentinel and HAProxy pods
+# take replica.sentinel.podAnnotations/podLabels and haproxy.podAnnotations/podLabels.
 podAnnotations: {}
 podLabels: {}
 
@@ -51,6 +52,12 @@ podSecurityContext:
   runAsGroup: 1000
   seccompProfile:
     type: RuntimeDefault
+
+# Grace period for a terminating Valkey pod, standalone and replication. Valkey
+# saves its dataset on shutdown, so raise it for large datasets. With Sentinel
+# it must also be longer than replica.sentinel.preStopFailoverTimeoutSeconds,
+# otherwise Kubernetes sends SIGKILL while the graceful failover is still running.
+terminationGracePeriodSeconds: 30
 
 # Priority class name for pod scheduling (leave empty to use cluster's default)
 priorityClassName: ""
@@ -243,11 +250,6 @@ replica:
 
   # Number of replica instances (total pods = replicas + 1 master)
   replicas: 2
-
-  # Grace period for a terminating pod. It must be longer than
-  # sentinel.preStopFailoverTimeoutSeconds, otherwise Kubernetes sends SIGKILL
-  # while the graceful failover is still running.
-  terminationGracePeriodSeconds: 30
 
   # Username for replicas to authenticate to master, ignored if auth.enabled is false.
   # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
@@ -450,6 +452,48 @@ replica:
     # PersistentVolumeClaim retention policy for the Sentinel StatefulSet.
     persistentVolumeClaimRetentionPolicy: {}
 
+    # Labels and annotations for the Sentinel pods. The top level podLabels and
+    # podAnnotations are not applied to the Sentinel pods; commonLabels are.
+    podLabels: {}
+    podAnnotations: {}
+
+    # Scheduling for the Sentinel pods. nodeSelector and tolerations fall back
+    # to the top level values when unset (null); set them to {} / [] to place
+    # the Sentinels without any. affinity and
+    # topologySpreadConstraints do not, as those written for the Valkey pods
+    # select the Valkey pods' labels. priorityClassName and runtimeClassName
+    # come from the top level values.
+    # Spread the Sentinels across failure domains, so that one node or zone
+    # cannot take the quorum down with it, e.g.:
+    #   topologySpreadConstraints:
+    #     - maxSkew: 1
+    #       topologyKey: kubernetes.io/hostname
+    #       whenUnsatisfiable: ScheduleAnyway
+    #       labelSelector:
+    #         matchLabels:
+    #           app.kubernetes.io/instance: <release name>
+    #           app.kubernetes.io/component: sentinel
+    nodeSelector: null
+    affinity: {}
+    tolerations: null
+    topologySpreadConstraints: []
+
+    # PodDisruptionBudget for the Sentinel pods. Without one, a node drain can
+    # evict enough Sentinels at once to lose the quorum, and no failover can
+    # be authorized until they are back. The chart refuses a budget that lets
+    # fewer than max(quorum, majority of replicas) Sentinels keep running.
+    podDisruptionBudget:
+      # Enable the PodDisruptionBudget
+      enabled: false
+      # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
+      minAvailable: null
+      # Maximum number of pods that can be unavailable during disruptions.
+      # 0 is honoured and forbids every voluntary eviction, which blocks node drains.
+      maxUnavailable: 1
+      # Unhealthy pod eviction policy (optional)
+      # Valid values: IfHealthyBudget, AlwaysAllow
+      unhealthyPodEvictionPolicy: ""
+
 # HAProxy in front of a Sentinel setup, for clients that cannot talk to Sentinel.
 # It health checks every Valkey node and forwards writes to whichever one answers
 # "role:master", so a failover needs no client support and no extra watcher.
@@ -581,14 +625,20 @@ haproxy:
     readOnlyRootFilesystem: true
     runAsNonRoot: true
 
+  # Labels and annotations for the HAProxy pods. The top level podLabels and
+  # podAnnotations are not applied to the HAProxy pods; commonLabels are.
+  podLabels: {}
+  podAnnotations: {}
+
   # Scheduling for the HAProxy pods. nodeSelector and tolerations fall back
-  # to the top level values when left empty; affinity and
+  # to the top level values when unset (null); set them to {} / [] to place
+  # the HAProxy pods without any. affinity and
   # topologySpreadConstraints do not, as those written for the Valkey pods
   # select the Valkey pods' labels. priorityClassName and runtimeClassName
   # come from the top level values.
-  nodeSelector: {}
+  nodeSelector: null
   affinity: {}
-  tolerations: []
+  tolerations: null
   topologySpreadConstraints: []
 
   # Additional init containers, volumes and volume mounts
