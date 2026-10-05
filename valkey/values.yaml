@@ -863,3 +863,15 @@ metrics:
     #   for: 1s
     #   labels:
     #     severity: error
+
+# -- Extra Resources. Define some extra resources to be created, such as ExternalResource or Secrets, etc.
+extraResources: []
+  # - apiVersion: v1
+  #   kind: Secret
+  #   metadata:
+  #     name: example-secret
+  #     labels: {}
+  #   type: Opaque
+  #   stringData:
+  #     username: admin
+  #     password: mypassword
