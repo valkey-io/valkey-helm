@@ -2,13 +2,13 @@
 Pod template shared by the standalone Deployment and the replicated
 StatefulSet, so that an option added to one cannot silently miss the other.
 The parts that only apply to one mode are gated on replica.enabled (and on
-replica.sentinel.enabled, which the validation only allows with replication).
+sentinel.enabled, which the validation only allows with replication).
 Include it under the workload's spec.template with nindent 4.
 */}}
 {{- define "valkey.podTemplate" -}}
 {{- $replicated := .Values.replica.enabled }}
-{{- $sentinel := and $replicated .Values.replica.sentinel.enabled }}
-{{- $preStopFailover := and $sentinel .Values.replica.sentinel.preStopFailover }}
+{{- $sentinel := and $replicated .Values.sentinel.enabled }}
+{{- $preStopFailover := and $sentinel .Values.sentinel.preStopFailover }}
 {{- $storage := .Values.persistence -}}
 metadata:
   labels:
@@ -314,26 +314,7 @@ spec:
       configMap:
         name: {{ include "valkey.fullname" . }}-sentinel-scripts
         defaultMode: 0555
-    - name: sentinel-auth
-      projected:
-        defaultMode: 0400
-        sources:
-          {{- if .Values.auth.usersExistingSecret }}
-          - secret:
-              name: {{ tpl .Values.auth.usersExistingSecret . }}
-              optional: true
-              items:
-                - key: {{ .Values.replica.sentinel.passwordKey }}
-                  path: existing-password
-          {{- end }}
-          {{- if .Values.replica.sentinel.password }}
-          - secret:
-              name: {{ include "valkey.fullname" . }}-auth
-              optional: true
-              items:
-                - key: sentinel-password
-                  path: inline-password
-          {{- end }}
+    {{- include "valkey.sentinel.authVolume" . | nindent 4 }}
     {{- end }}
     {{- if .Values.extraConfig }}
     - name: valkey-config

@@ -93,8 +93,8 @@ tests:
       replica.enabled: true
       persistence.enabled: true
       persistence.size: "5Gi"
-      replica.sentinel.enabled: true
-      replica.sentinel.password: "sentinelpw"
+      sentinel.enabled: true
+      sentinel.password: "sentinelpw"
     template: templates/service.yaml
     asserts:
       # The master can be any pod and a Service cannot select on a role that

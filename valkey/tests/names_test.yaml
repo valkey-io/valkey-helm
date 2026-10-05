@@ -16,8 +16,8 @@ set:
   replica.enabled: true
   persistence.enabled: true
   persistence.size: 1Gi
-  replica.sentinel.enabled: true
-  replica.sentinel.password: sentinel-password
+  sentinel.enabled: true
+  sentinel.password: sentinel-password
   haproxy.enabled: true
   metrics.enabled: true
   tls.enabled: true

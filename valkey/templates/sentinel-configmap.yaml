@@ -1,8 +1,8 @@
-{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
-{{- $sentinelPort := .Values.replica.sentinel.port }}
-{{- $masterSet := .Values.replica.sentinel.masterSet }}
+{{- if and .Values.replica.enabled .Values.sentinel.enabled }}
+{{- $sentinelPort := .Values.sentinel.port }}
+{{- $masterSet := .Values.sentinel.masterSet }}
 {{- $valkeyPods := int .Values.replica.replicas }}
-{{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
+{{- $monitorUser := .Values.sentinel.monitorUser | default .Values.replica.replicationUser }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -32,7 +32,7 @@ data:
       echo "$(date) $1" >&2
     }
 
-    SENTINEL_PASSWORD=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null) || exit 1
+    SENTINEL_PASSWORD=$(cat /sentinel-auth/password 2>/dev/null) || exit 1
     # This password is hashed into an ACL user that can run every Sentinel
     # command. An empty one hashes to a value that is the same in every
     # installation, so it would hand that user to anyone who can reach the port.
@@ -139,7 +139,7 @@ data:
     # Give the Valkey StatefulSet time to start during a fresh installation.
     WAITED=0
     DISCOVERED=""
-    while [ "$WAITED" -lt "{{ .Values.replica.sentinel.startupTimeoutSeconds }}" ]; do
+    while [ "$WAITED" -lt "{{ .Values.sentinel.startupTimeoutSeconds }}" ]; do
       DISCOVERED=$(master_from_peers || master_from_valkey_nodes || true)
       if [ -n "$DISCOVERED" ]; then
         break
@@ -185,10 +185,10 @@ data:
     sentinel announce-ip ${SELF_HOST}
     sentinel announce-port {{ $sentinelPort }}
 
-    sentinel monitor ${MASTER_SET} ${MASTER_HOST} ${MASTER_PORT} {{ .Values.replica.sentinel.quorum }}
-    sentinel down-after-milliseconds ${MASTER_SET} {{ .Values.replica.sentinel.downAfterMilliseconds }}
-    sentinel failover-timeout ${MASTER_SET} {{ .Values.replica.sentinel.failoverTimeout }}
-    sentinel parallel-syncs ${MASTER_SET} {{ .Values.replica.sentinel.parallelSyncs }}
+    sentinel monitor ${MASTER_SET} ${MASTER_HOST} ${MASTER_PORT} {{ .Values.sentinel.quorum }}
+    sentinel down-after-milliseconds ${MASTER_SET} {{ .Values.sentinel.downAfterMilliseconds }}
+    sentinel failover-timeout ${MASTER_SET} {{ .Values.sentinel.failoverTimeout }}
+    sentinel parallel-syncs ${MASTER_SET} {{ .Values.sentinel.parallelSyncs }}
     EOF
 
     # Sentinel has a dedicated identity. Valkey application credentials must
@@ -221,9 +221,9 @@ data:
     {{- end }}
     log "Configured the Sentinel ACL and the monitor credentials"
     {{- end }}
-    {{- if .Values.replica.sentinel.extraConfig }}
+    {{- if .Values.sentinel.extraConfig }}
 
-    # replica.sentinel.extraConfig, kept in its own file so that no content
+    # sentinel.extraConfig, kept in its own file so that no content
     # can end a heredoc early
     echo >> "$SENTINEL_CONF"
     cat /sentinel-scripts/extra.conf >> "$SENTINEL_CONF"
@@ -241,7 +241,7 @@ data:
     # not one it is in the middle of reconfiguring, so this cannot race it.
     adopt_orphans() {
       while :; do
-        sleep {{ .Values.replica.sentinel.orphanCheckSeconds }}
+        sleep {{ .Values.sentinel.orphanCheckSeconds }}
         addr=$(sentinel_cli -h "$SELF_HOST" sentinel get-master-addr-by-name "$MASTER_SET" 2>/dev/null | tr -d '\r' || true)
         current_host=$(echo "$addr" | sed -n 1p)
         current_port=$(echo "$addr" | sed -n 2p)
@@ -295,13 +295,13 @@ data:
     # in the pod spec so that the credentials stay in the mounted secret.
     set -eu
 
-    PASSWORD=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null)
+    PASSWORD=$(cat /sentinel-auth/password 2>/dev/null)
 
     REPLY=$(REDISCLI_AUTH="$PASSWORD" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
       -t 2 -p {{ $sentinelPort }} ping)
 
     [ "$REPLY" = "PONG" ]
-  {{- if .Values.replica.sentinel.preStopFailover }}
+  {{- if .Values.sentinel.preStopFailover }}
 
   sentinel-prestop.sh: |-
     #!/bin/sh
@@ -314,7 +314,7 @@ data:
       echo "$(date) $1" >&2
     }
 
-    SENTINEL_PASSWORD=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null) || exit 0
+    SENTINEL_PASSWORD=$(cat /sentinel-auth/password 2>/dev/null) || exit 0
     # Nothing to authenticate with. Leave without asking for a failover rather
     # than sending Sentinel commands with an empty credential, and without
     # holding up the shutdown.
@@ -408,13 +408,13 @@ data:
 
     log "This pod is the master, asking Sentinel to fail over before shutting down"
     REDISCLI_AUTH="$SENTINEL_PASSWORD" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
-      -t 2 -h {{ include "valkey.sentinel.headlessServiceName" . }} -p {{ .Values.replica.sentinel.port }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
+      -t 2 -h {{ include "valkey.sentinel.headlessServiceName" . }} -p {{ .Values.sentinel.port }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
         log "WARN: the failover request failed, continuing with the shutdown"
         exit 0
       }
 
     WAITED=0
-    while [ "$WAITED" -lt "{{ .Values.replica.sentinel.preStopFailoverTimeoutSeconds }}" ]; do
+    while [ "$WAITED" -lt "{{ .Values.sentinel.preStopFailoverTimeoutSeconds }}" ]; do
       if [ "$(local_role)" != "master" ]; then
         log "Failover complete after ${WAITED}s"
         exit 0
@@ -425,7 +425,7 @@ data:
 
     log "WARN: still the master after ${WAITED}s, continuing with the shutdown"
   {{- end }}
-  {{- with .Values.replica.sentinel.extraConfig }}
+  {{- with .Values.sentinel.extraConfig }}
   extra.conf: |-
     {{- tpl . $ | nindent 4 }}
   {{- end }}

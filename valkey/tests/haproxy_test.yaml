@@ -9,12 +9,12 @@ set:
   replica.enabled: true
   persistence.enabled: true
   persistence.size: "5Gi"
-  replica.sentinel.enabled: true
+  sentinel.enabled: true
   haproxy.enabled: true
 tests:
   - it: should fail when sentinel is not enabled
     set:
-      replica.sentinel.enabled: false
+      sentinel.enabled: false
     template: templates/haproxy-deployment.yaml
     asserts:
       - failedTemplate:
@@ -543,7 +543,7 @@ tests:
 
   - it: should not restart HAProxy for a Sentinel password change when auth is disabled
     set:
-      replica.sentinel.password: "sentinel-password"
+      sentinel.password: "sentinel-password"
     template: templates/haproxy-deployment.yaml
     asserts:
       - notExists:

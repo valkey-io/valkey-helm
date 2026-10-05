@@ -1,5 +1,5 @@
 {{- $pods := int .Values.replica.replicas }}
-{{- $initMonitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
+{{- $initMonitorUser := .Values.sentinel.monitorUser | default .Values.replica.replicationUser }}
 {{- $initMonitorKey := $initMonitorUser }}
 {{- if and .Values.auth.enabled (hasKey .Values.auth.aclUsers $initMonitorUser) }}
 {{- $initMonitorKey = (index .Values.auth.aclUsers $initMonitorUser).passwordKey | default $initMonitorUser }}
@@ -11,7 +11,7 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
 data:
-{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
+{{- if and .Values.replica.enabled .Values.sentinel.enabled }}
   valkey-start.sh: |-
     #!/bin/sh
     # Starts the server, and keeps the credential free record of the current
@@ -69,7 +69,7 @@ data:
       cfg_line=""
       write_failed=""
       while :; do
-        sleep {{ .Values.replica.sentinel.masterRecordRefreshSeconds }}
+        sleep {{ .Values.sentinel.masterRecordRefreshSeconds }}
         [ -f "$CONF" ] || continue
         # No replicaof line means this pod is the master.
         host="$SELF"
@@ -155,7 +155,7 @@ data:
     VALKEY_CONFIG_TMP="${VALKEY_CONFIG}.tmp"
 
     LOGFILE="/data/init.log"
-    {{- if and .Values.replica.enabled .Values.replica.sentinel.enabled }}
+    {{- if and .Values.replica.enabled .Values.sentinel.enabled }}
     # Credential free record of the master this pod last followed. It is the
     # only durable topology left once the config moved to a memory backed
     # volume, and it is what breaks the cold start deadlock below.
@@ -334,18 +334,18 @@ data:
       echo "replica-announce-port {{ .Values.service.port }}"
     } >>"$VALKEY_CONFIG_TMP"
 
-    {{- if .Values.replica.sentinel.enabled }}
+    {{- if .Values.sentinel.enabled }}
     SELF_HOST="{{ include "valkey.fullname" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
 
     # Ask the Sentinels that are already running which node is the master.
     # Without this, a pod that lost its volume would fall back to the pod index
     # and pod-0 would come back as a second writable master after a failover.
     master_from_sentinels() {
-      sentinel_password=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null) || return 1
+      sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
       peer="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
       addr=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
-        -t 2 -h "$peer" -p {{ .Values.replica.sentinel.port }} \
-        sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null || true)
+        -t 2 -h "$peer" -p {{ .Values.sentinel.port }} \
+        sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }} 2>/dev/null || true)
       host=$(echo "$addr" | sed -n 1p)
       port=$(echo "$addr" | sed -n 2p)
       # Reject anything that is not a complete host/port pair, an error reply
@@ -400,7 +400,7 @@ data:
 
     # Determine the replication target for this pod.
     REPLICATION_TARGET=""
-    {{- if .Values.replica.sentinel.enabled }}
+    {{- if .Values.sentinel.enabled }}
     # Persisted topology may be stale if this pod was offline during failover,
     # so prefer the current master reported by Sentinel.
     DISCOVERED=$(master_from_sentinels || true)
@@ -452,12 +452,12 @@ data:
       else
         # Nothing anywhere: a fresh install, or a pod that lost its volume. The
         # Sentinels are still running their own discovery and bootstrap a master
-        # once replica.sentinel.startupTimeoutSeconds expires, and this pod only
+        # once sentinel.startupTimeoutSeconds expires, and this pod only
         # has to be around to be told. Exiting here instead leaves the init
         # container crash looping until a retry happens to land after that, so
         # wait for the answer rather than for the next backoff.
         WAITED=0
-        while [ "$WAITED" -lt "{{ .Values.replica.sentinel.initialTopologyWaitSeconds }}" ]; do
+        while [ "$WAITED" -lt "{{ .Values.sentinel.initialTopologyWaitSeconds }}" ]; do
           sleep 5
           WAITED=$((WAITED + 5))
           DISCOVERED=$(master_from_sentinels || true)
@@ -467,7 +467,7 @@ data:
           if [ -n "$DISCOVERED" ]; then
             break
           fi
-          log "Waiting for a Sentinel or a running node to report the topology, ${WAITED}s of {{ .Values.replica.sentinel.initialTopologyWaitSeconds }}s"
+          log "Waiting for a Sentinel or a running node to report the topology, ${WAITED}s of {{ .Values.sentinel.initialTopologyWaitSeconds }}s"
         done
         if [ -z "$DISCOVERED" ]; then
           log "No Sentinel answered and no recorded topology; refusing to start without a confirmed replication role"
@@ -516,7 +516,7 @@ data:
       } >>"$VALKEY_CONFIG_TMP"
     fi
 
-    {{- if .Values.replica.sentinel.enabled }}
+    {{- if .Values.sentinel.enabled }}
     # In Sentinel mode the replica-side settings are written on every pod,
     # because any pod can be demoted to a replica by a failover.
     CONFIGURE_REPLICA_SETTINGS=true

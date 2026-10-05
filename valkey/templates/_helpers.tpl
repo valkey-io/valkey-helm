@@ -137,7 +137,7 @@ Check if there are any users with inline passwords
     {{- $hasInlinePasswords = true -}}
   {{- end -}}
 {{- end -}}
-{{- if and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.password -}}
+{{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.password -}}
   {{- $hasInlinePasswords = true -}}
 {{- end -}}
 {{- $hasInlinePasswords -}}
@@ -151,7 +151,7 @@ Returns "true" or "false".
 */}}
 {{- define "valkey.renderAuthSecret" -}}
 {{- $userSecret := and .Values.auth.enabled (or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig) -}}
-{{- $sentinelSecret := and .Values.replica.enabled .Values.replica.sentinel.enabled .Values.replica.sentinel.password -}}
+{{- $sentinelSecret := and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.password -}}
 {{- if or $userSecret $sentinelSecret -}}
 true
 {{- else -}}
@@ -213,6 +213,27 @@ Stable names and selectors for the independent Sentinel StatefulSet.
 */}}
 {{- define "valkey.sentinel.fullname" -}}
 {{- printf "%s-sentinel" (include "valkey.fullname" . | trunc 54 | trimSuffix "-") -}}
+{{- end -}}
+
+{{/*
+The Sentinel password, as the single file /sentinel-auth/password. Mounted by
+the Sentinel pods and by the Valkey pods, which ask Sentinel for the master
+on startup and for a failover before shutting down. The Valkey server itself
+never uses it. Not optional: a missing Secret or key keeps the pod from
+starting, with the reason in its events, rather than leaving it without one.
+*/}}
+{{- define "valkey.sentinel.authVolume" -}}
+- name: sentinel-auth
+  secret:
+    {{- if .Values.sentinel.existingSecret }}
+    secretName: {{ tpl .Values.sentinel.existingSecret . }}
+    {{- else }}
+    secretName: {{ include "valkey.fullname" . }}-auth
+    {{- end }}
+    defaultMode: 0400
+    items:
+      - key: {{ ternary .Values.sentinel.passwordKey "sentinel-password" (not (empty .Values.sentinel.existingSecret)) }}
+        path: password
 {{- end -}}
 
 {{- define "valkey.sentinel.headlessServiceName" -}}
@@ -353,36 +374,36 @@ have to be given twice: once inside sentinel_kwargs and once beside it.
 Validate sentinel configuration
 */}}
 {{- define "valkey.validateSentinelConfig" -}}
-{{- if .Values.replica.sentinel.enabled }}
+{{- if .Values.sentinel.enabled }}
   {{- if not .Values.replica.enabled }}
-    {{- fail "Sentinel requires replication. Please set replica.enabled=true along with replica.sentinel.enabled=true" }}
+    {{- fail "Sentinel requires replication. Please set replica.enabled=true along with sentinel.enabled=true" }}
   {{- end }}
-  {{- $sentinels := int .Values.replica.sentinel.replicas }}
+  {{- $sentinels := int .Values.sentinel.replicas }}
   {{- if lt (int .Values.replica.replicas) 2 }}
     {{- fail "Sentinel requires at least one Valkey replica to promote. Please set replica.replicas, which counts the master too, to 2 or more." }}
   {{- end }}
   {{- if lt $sentinels 3 }}
-    {{- fail (printf "Sentinel requires at least 3 instances to form a quorum. Please set replica.sentinel.replicas to 3 or more (currently %d)." $sentinels) }}
+    {{- fail (printf "Sentinel requires at least 3 instances to form a quorum. Please set sentinel.replicas to 3 or more (currently %d)." $sentinels) }}
   {{- end }}
-  {{- if lt (int .Values.replica.sentinel.quorum) 2 }}
-    {{- fail "replica.sentinel.quorum must be at least 2, a quorum of 1 allows a single Sentinel to trigger a failover on its own." }}
+  {{- if lt (int .Values.sentinel.quorum) 2 }}
+    {{- fail "sentinel.quorum must be at least 2, a quorum of 1 allows a single Sentinel to trigger a failover on its own." }}
   {{- end }}
-  {{- if gt (int .Values.replica.sentinel.quorum) $sentinels }}
-    {{- fail (printf "replica.sentinel.quorum (%d) cannot be greater than replica.sentinel.replicas (%d)." (int .Values.replica.sentinel.quorum) $sentinels) }}
+  {{- if gt (int .Values.sentinel.quorum) $sentinels }}
+    {{- fail (printf "sentinel.quorum (%d) cannot be greater than sentinel.replicas (%d)." (int .Values.sentinel.quorum) $sentinels) }}
   {{- end }}
-  {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
-    {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
+  {{- if and .Values.sentinel.preStopFailover (ge (int .Values.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
+    {{- fail (printf "sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
   {{- end }}
-  {{- if .Values.replica.sentinel.podDisruptionBudget.enabled }}
-    {{- if and (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.maxUnavailable) }}
-      {{- fail "replica.sentinel.podDisruptionBudget needs either minAvailable or maxUnavailable. A budget with neither is accepted by the API server but protects nothing." }}
+  {{- if .Values.sentinel.podDisruptionBudget.enabled }}
+    {{- if and (kindIs "invalid" .Values.sentinel.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.sentinel.podDisruptionBudget.maxUnavailable) }}
+      {{- fail "sentinel.podDisruptionBudget needs either minAvailable or maxUnavailable. A budget with neither is accepted by the API server but protects nothing." }}
     {{- end }}
     {{- /* A failover needs quorum Sentinels to agree the master is down and a
            majority of all Sentinels to elect the leader that performs it, so
            the budget must keep max(quorum, majority) Sentinels running.
            Kubernetes rounds percentages up for both fields. */}}
-    {{- $pdb := .Values.replica.sentinel.podDisruptionBudget }}
-    {{- $needed := max (int .Values.replica.sentinel.quorum) (add (div $sentinels 2) 1) }}
+    {{- $pdb := .Values.sentinel.podDisruptionBudget }}
+    {{- $needed := max (int .Values.sentinel.quorum) (add (div $sentinels 2) 1) }}
     {{- $field := ternary "maxUnavailable" "minAvailable" (kindIs "invalid" $pdb.minAvailable) }}
     {{- $value := ternary $pdb.maxUnavailable $pdb.minAvailable (kindIs "invalid" $pdb.minAvailable) }}
     {{- $count := 0 }}
@@ -393,19 +414,22 @@ Validate sentinel configuration
     {{- end }}
     {{- $kept := ternary (sub $sentinels $count) $count (eq $field "maxUnavailable") }}
     {{- if lt (int $kept) (int $needed) }}
-      {{- fail (printf "replica.sentinel.podDisruptionBudget.%s (%v) lets voluntary evictions leave %d of %d Sentinels running, but a failover needs %d: replica.sentinel.quorum (%d) to agree and a majority of all Sentinels to elect a leader. Add Sentinels, lower the quorum, or tighten the budget." $field $value (int $kept) $sentinels (int $needed) (int .Values.replica.sentinel.quorum)) }}
+      {{- fail (printf "sentinel.podDisruptionBudget.%s (%v) lets voluntary evictions leave %d of %d Sentinels running, but a failover needs %d: sentinel.quorum (%d) to agree and a majority of all Sentinels to elect a leader. Add Sentinels, lower the quorum, or tighten the budget." $field $value (int $kept) $sentinels (int $needed) (int .Values.sentinel.quorum)) }}
     {{- end }}
   {{- end }}
-  {{- $bootstrapWait := int .Values.replica.sentinel.initialTopologyWaitSeconds }}
-  {{- $sentinelStartup := int .Values.replica.sentinel.startupTimeoutSeconds }}
+  {{- $bootstrapWait := int .Values.sentinel.initialTopologyWaitSeconds }}
+  {{- $sentinelStartup := int .Values.sentinel.startupTimeoutSeconds }}
   {{- if lt $bootstrapWait (add $sentinelStartup 30) }}
-    {{- fail (printf "replica.sentinel.initialTopologyWaitSeconds (%d) must be at least 30s above replica.sentinel.startupTimeoutSeconds (%d), which is %d. A pod with no recorded topology has nothing to be told until the Sentinels finish that discovery and bootstrap a master, so a shorter wait leaves the init container exiting just before the answer arrives." $bootstrapWait $sentinelStartup (add $sentinelStartup 30)) }}
+    {{- fail (printf "sentinel.initialTopologyWaitSeconds (%d) must be at least 30s above sentinel.startupTimeoutSeconds (%d), which is %d. A pod with no recorded topology has nothing to be told until the Sentinels finish that discovery and bootstrap a master, so a shorter wait leaves the init container exiting just before the answer arrives." $bootstrapWait $sentinelStartup (add $sentinelStartup 30)) }}
   {{- end }}
-  {{- if and (not .Values.replica.sentinel.password) (not .Values.auth.usersExistingSecret) }}
-    {{- fail "replica.sentinel.password is required when Sentinel is enabled, unless auth.usersExistingSecret supplies replica.sentinel.passwordKey." }}
+  {{- if and .Values.sentinel.password .Values.sentinel.existingSecret }}
+    {{- fail "Set either sentinel.password or sentinel.existingSecret, not both." }}
+  {{- end }}
+  {{- if not (or .Values.sentinel.password .Values.sentinel.existingSecret) }}
+    {{- fail "Sentinel requires its own password: set sentinel.password, or sentinel.existingSecret with the password under sentinel.passwordKey." }}
   {{- end }}
   {{- if .Values.auth.enabled }}
-    {{- $monitorUser := .Values.replica.sentinel.monitorUser | default .Values.replica.replicationUser }}
+    {{- $monitorUser := .Values.sentinel.monitorUser | default .Values.replica.replicationUser }}
     {{- if not (hasKey .Values.auth.aclUsers $monitorUser) }}
       {{- fail (printf "Sentinel monitor user '%s' must be defined in auth.aclUsers. Sentinel needs it to reach the monitored Valkey nodes." $monitorUser) }}
     {{- end }}
@@ -497,8 +521,8 @@ Validate haproxy configuration
 */}}
 {{- define "valkey.validateHaproxyConfig" -}}
 {{- if .Values.haproxy.enabled }}
-  {{- if not (and .Values.replica.enabled .Values.replica.sentinel.enabled) }}
-    {{- fail "HAProxy routes clients to whichever node Sentinel promoted. Please set replica.enabled=true and replica.sentinel.enabled=true, or disable haproxy." }}
+  {{- if not (and .Values.replica.enabled .Values.sentinel.enabled) }}
+    {{- fail "HAProxy routes clients to whichever node Sentinel promoted. Please set replica.enabled=true and sentinel.enabled=true, or disable haproxy." }}
   {{- end }}
   {{- if .Values.haproxy.podDisruptionBudget.enabled }}
     {{- if and (kindIs "invalid" .Values.haproxy.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.haproxy.podDisruptionBudget.maxUnavailable) }}

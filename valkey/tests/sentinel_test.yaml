@@ -14,8 +14,8 @@ set:
   replica.enabled: true
   persistence.enabled: true
   persistence.size: "5Gi"
-  replica.sentinel.enabled: true
-  replica.sentinel.password: "sentinelpw"
+  sentinel.enabled: true
+  sentinel.password: "sentinelpw"
 tests:
   - it: should fail when sentinel is enabled without replication
     set:
@@ -27,7 +27,7 @@ tests:
 
   - it: should fail when there are fewer than three sentinels
     set:
-      replica.sentinel.replicas: 2
+      sentinel.replicas: 2
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
@@ -43,15 +43,15 @@ tests:
 
   - it: should fail when the quorum exceeds the number of sentinels
     set:
-      replica.sentinel.quorum: 4
+      sentinel.quorum: 4
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "quorum \\(4\\) cannot be greater than replica.sentinel.replicas \\(3\\).*"
+          errorPattern: "quorum \\(4\\) cannot be greater than sentinel.replicas \\(3\\).*"
 
   - it: should fail when the quorum allows a single sentinel to fail over
     set:
-      replica.sentinel.quorum: 1
+      sentinel.quorum: 1
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
@@ -60,12 +60,12 @@ tests:
   - it: should fail when the monitor user is missing from aclUsers
     set:
       auth.enabled: true
-      replica.sentinel.password: "sentinelpw"
+      sentinel.password: "sentinelpw"
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
           password: "pw"
-      replica.sentinel.monitorUser: "missing-user"
+      sentinel.monitorUser: "missing-user"
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
@@ -73,11 +73,11 @@ tests:
 
   - it: should require a dedicated sentinel password
     set:
-      replica.sentinel.password: ""
+      sentinel.password: ""
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "replica.sentinel.password is required.*"
+          errorPattern: "Sentinel requires its own password: set sentinel.password, or sentinel.existingSecret.*"
 
   - it: should deploy sentinel in an independent statefulset
     template: templates/sentinel-statefulset.yaml
@@ -119,7 +119,7 @@ tests:
 
   - it: should keep ordered startup when sentinel is disabled
     set:
-      replica.sentinel.enabled: false
+      sentinel.enabled: false
     template: templates/statefulset.yaml
     asserts:
       - equal:
@@ -140,8 +140,8 @@ tests:
 
   - it: should claim a volume for the sentinel state when persistence is enabled
     set:
-      replica.sentinel.persistence.enabled: true
-      replica.sentinel.persistence.size: "200Mi"
+      sentinel.persistence.enabled: true
+      sentinel.persistence.size: "200Mi"
     template: templates/sentinel-statefulset.yaml
     asserts:
       - equal:
@@ -166,7 +166,7 @@ tests:
 
   - it: should not install a preStop hook when the graceful failover is disabled
     set:
-      replica.sentinel.preStopFailover: false
+      sentinel.preStopFailover: false
     template: templates/statefulset.yaml
     asserts:
       - notExists:
@@ -180,7 +180,7 @@ tests:
 
   - it: should keep pinning the valkey service to pod-0 without sentinel
     set:
-      replica.sentinel.enabled: false
+      sentinel.enabled: false
     template: templates/service.yaml
     asserts:
       - equal:
@@ -214,8 +214,8 @@ tests:
 
   - it: should monitor pod-0 by default with the configured quorum
     set:
-      replica.sentinel.quorum: 3
-      replica.sentinel.masterSet: "valkey-ha"
+      sentinel.quorum: 3
+      sentinel.masterSet: "valkey-ha"
     template: templates/sentinel-configmap.yaml
     asserts:
       - matchRegex:
@@ -247,7 +247,7 @@ tests:
   - it: should authenticate to the nodes and secure the sentinel port
     set:
       auth.enabled: true
-      replica.sentinel.password: "sentinelpw"
+      sentinel.password: "sentinelpw"
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
@@ -280,7 +280,7 @@ tests:
   - it: should not emit an auth-user for the default user
     set:
       auth.enabled: true
-      replica.sentinel.password: "sentinelpw"
+      sentinel.password: "sentinelpw"
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
@@ -306,8 +306,8 @@ tests:
 
   - it: should append extra sentinel configuration from its own file
     set:
-      replica.sentinel.extraConfig: |
-        sentinel primary-reboot-down-after-period {{ .Values.replica.sentinel.masterSet }} 10000
+      sentinel.extraConfig: |
+        sentinel primary-reboot-down-after-period {{ .Values.sentinel.masterSet }} 10000
         EOF
         sentinel deny-scripts-reconfig yes
     template: templates/sentinel-configmap.yaml
@@ -339,7 +339,7 @@ tests:
 
   - it: should roll the Valkey and Sentinel pods when the Sentinel password changes
     set:
-      replica.sentinel.password: "sentinel-secret"
+      sentinel.password: "sentinel-secret"
     asserts:
       - matchRegex:
           path: spec.template.metadata.annotations["checksum/secret"]
@@ -362,7 +362,7 @@ tests:
 
   - it: should pin non-zero pods to pod-0 without sentinel
     set:
-      replica.sentinel.enabled: false
+      sentinel.enabled: false
     template: templates/init_config.yaml
     asserts:
       - notMatchRegex:
@@ -397,16 +397,76 @@ tests:
           path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "sentinel-auth")]
       - exists:
           path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
-      - exists:
-          path: spec.template.spec.volumes[?(@.name == "sentinel-auth")].projected.sources[0].secret.items[0].path
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: sentinel-auth
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 0400
+              items:
+                - key: sentinel-password
+                  path: password
 
   - it: should mount the dedicated sentinel credential in the sentinel statefulset
     template: templates/sentinel-statefulset.yaml
     asserts:
       - exists:
           path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
-      - exists:
-          path: spec.template.spec.volumes[?(@.name == "sentinel-auth")].projected.sources[0].secret.items[0].path
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: sentinel-auth
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 0400
+              items:
+                - key: sentinel-password
+                  path: password
+
+  - it: should read the sentinel password from sentinel.existingSecret
+    set:
+      sentinel.password: ""
+      sentinel.existingSecret: "{{ .Release.Name }}-sentinel"
+      sentinel.passwordKey: pass
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: sentinel-auth
+            secret:
+              secretName: RELEASE-NAME-sentinel
+              defaultMode: 0400
+              items:
+                - key: pass
+                  path: password
+
+  - it: should not read the sentinel password from auth.usersExistingSecret
+    set:
+      sentinel.password: ""
+      auth.usersExistingSecret: my-users
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Sentinel requires its own password.*"
+
+  - it: should refuse both an inline sentinel password and sentinel.existingSecret
+    set:
+      sentinel.existingSecret: my-sentinel
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Set either sentinel.password or sentinel.existingSecret, not both.*"
+
+  - it: should not put the sentinel password in the chart Secret with sentinel.existingSecret
+    set:
+      sentinel.password: ""
+      sentinel.existingSecret: my-sentinel
+    template: templates/secret.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
 
   - it: should reject an incomplete answer from a peer sentinel
     template: templates/sentinel-configmap.yaml
@@ -425,7 +485,7 @@ tests:
   - it: should keep the credentials out of the process list
     set:
       auth.enabled: true
-      replica.sentinel.password: "sentinelpw"
+      sentinel.password: "sentinelpw"
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
@@ -483,7 +543,7 @@ tests:
 
   - it: should fail when the preStop failover outlasts the grace period
     set:
-      replica.sentinel.preStopFailoverTimeoutSeconds: 30
+      sentinel.preStopFailoverTimeoutSeconds: 30
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
@@ -491,7 +551,7 @@ tests:
 
   - it: should accept a longer preStop failover with a longer grace period
     set:
-      replica.sentinel.preStopFailoverTimeoutSeconds: 50
+      sentinel.preStopFailoverTimeoutSeconds: 50
       terminationGracePeriodSeconds: 60
     template: templates/statefulset.yaml
     asserts:
@@ -501,8 +561,8 @@ tests:
 
   - it: should render loadBalancerSourceRanges as a yaml list
     set:
-      replica.sentinel.service.type: LoadBalancer
-      replica.sentinel.service.loadBalancerSourceRanges:
+      sentinel.service.type: LoadBalancer
+      sentinel.service.loadBalancerSourceRanges:
         - 10.0.0.0/8
         - 10.1.0.0/16
     template: templates/sentinel-service.yaml
@@ -518,7 +578,7 @@ tests:
         default:
           permissions: "~* &* +@all"
           password: "pw"
-      replica.sentinel.password: "sentinelpw"
+      sentinel.password: "sentinelpw"
     template: templates/sentinel-configmap.yaml
     asserts:
       - notMatchRegex:
@@ -535,7 +595,7 @@ tests:
         default:
           permissions: "~* &* +@all"
           password: "pw"
-      replica.sentinel.password: "sentinelpw"
+      sentinel.password: "sentinelpw"
     template: templates/init_config.yaml
     asserts:
       - notMatchRegex:
@@ -552,7 +612,7 @@ tests:
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
-      replica.sentinel.password: "sentinelpw"
+      sentinel.password: "sentinelpw"
     template: templates/statefulset.yaml
     asserts:
       - contains:
@@ -777,7 +837,7 @@ tests:
     set:
       tls.enabled: true
       tls.existingSecret: "valkey-tls"
-      replica.sentinel.enabled: false
+      sentinel.enabled: false
     template: templates/statefulset.yaml
     asserts:
       # Nothing in the init container talks to Sentinel then, so it has no
@@ -791,19 +851,19 @@ tests:
 
   - it: should reject a topology wait that expires before sentinel bootstraps
     set:
-      replica.sentinel.startupTimeoutSeconds: 300
+      sentinel.startupTimeoutSeconds: 300
     template: templates/statefulset.yaml
     asserts:
       # The two timeouts are ordered: a fresh pod has nothing to be told until
       # the Sentinels finish their own discovery, so a shorter wait puts the
       # init container back to exiting just before the answer arrives.
       - failedTemplate:
-          errorPattern: "initialTopologyWaitSeconds \\(180\\) must be at least 30s above replica.sentinel.startupTimeoutSeconds \\(300\\), which is 330"
+          errorPattern: "initialTopologyWaitSeconds \\(180\\) must be at least 30s above sentinel.startupTimeoutSeconds \\(300\\), which is 330"
 
   - it: should require headroom, not merely a larger number
     set:
-      replica.sentinel.startupTimeoutSeconds: 300
-      replica.sentinel.initialTopologyWaitSeconds: 310
+      sentinel.startupTimeoutSeconds: 300
+      sentinel.initialTopologyWaitSeconds: 310
     template: templates/statefulset.yaml
     asserts:
       # The Sentinels need a moment after their timeout to write their config,
@@ -813,8 +873,8 @@ tests:
 
   - it: should accept a topology wait with headroom over the bootstrap
     set:
-      replica.sentinel.startupTimeoutSeconds: 300
-      replica.sentinel.initialTopologyWaitSeconds: 330
+      sentinel.startupTimeoutSeconds: 300
+      sentinel.initialTopologyWaitSeconds: 330
     template: templates/init_config.yaml
     asserts:
       - matchRegex:
@@ -841,8 +901,8 @@ tests:
 
   - it: should take the first install wait from the values
     set:
-      replica.sentinel.startupTimeoutSeconds: 10
-      replica.sentinel.initialTopologyWaitSeconds: 42
+      sentinel.startupTimeoutSeconds: 10
+      sentinel.initialTopologyWaitSeconds: 42
     template: templates/init_config.yaml
     asserts:
       - matchRegex:
@@ -886,7 +946,7 @@ tests:
   - it: should ask as the user allowed to run info
     set:
       auth.enabled: true
-      replica.sentinel.monitorUser: watcher
+      sentinel.monitorUser: watcher
       auth.aclUsers:
         default:
           permissions: "~* &* +@all"
@@ -979,7 +1039,7 @@ tests:
 
   - it: should take the adoption interval from the values
     set:
-      replica.sentinel.orphanCheckSeconds: 45
+      sentinel.orphanCheckSeconds: 45
     template: templates/sentinel-configmap.yaml
     asserts:
       - matchRegex:
@@ -988,7 +1048,7 @@ tests:
 
   - it: should run the tracker only when sentinel is enabled
     set:
-      replica.sentinel.enabled: false
+      sentinel.enabled: false
     template: templates/init_config.yaml
     asserts:
       - notExists:
@@ -1008,7 +1068,7 @@ tests:
 
   - it: should start the server directly without sentinel
     set:
-      replica.sentinel.enabled: false
+      sentinel.enabled: false
     template: templates/statefulset.yaml
     asserts:
       - equal:
@@ -1017,7 +1077,7 @@ tests:
 
   - it: should not render any sentinel resource when sentinel is disabled
     set:
-      replica.sentinel.enabled: false
+      sentinel.enabled: false
     templates:
       - templates/sentinel-configmap.yaml
       - templates/sentinel-service.yaml

@@ -199,8 +199,8 @@ tests:
       replica.enabled: true
       persistence.enabled: true
       persistence.size: 1Gi
-      replica.sentinel.enabled: true
-      replica.sentinel.password: "sentinel-password"
+      sentinel.enabled: true
+      sentinel.password: "sentinel-password"
     asserts:
       - matchRegex:
           path: data["valkey-start.sh"]
