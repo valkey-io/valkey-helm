@@ -38,10 +38,10 @@ spec:
   podTargetLabels:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .Values.metrics.podMonitor.sampleLimit -}}
+  {{- with .Values.metrics.podMonitor.sampleLimit }}
   sampleLimit: {{ . }}
   {{- end }}
-  {{- with .Values.metrics.podMonitor.targetLimit -}}
+  {{- with .Values.metrics.podMonitor.targetLimit }}
   targetLimit: {{ . }}
   {{- end }}
   namespaceSelector:

@@ -34,7 +34,8 @@ serviceAccount:
   # Name of an existing service account to use (if create: false)
   name: ""
 
-# Annotations and labels for the pods
+# Annotations and labels for the Valkey pods. The Sentinel and HAProxy pods
+# take replica.sentinel.podAnnotations/podLabels and haproxy.podAnnotations/podLabels.
 podAnnotations: {}
 podLabels: {}
 
@@ -57,6 +58,12 @@ podSecurityContext:
   runAsGroup: 1000
   seccompProfile:
     type: RuntimeDefault
+
+# Grace period for a terminating Valkey pod, standalone and replication. Valkey
+# saves its dataset on shutdown, so raise it for large datasets. With Sentinel
+# it must also be longer than replica.sentinel.preStopFailoverTimeoutSeconds,
+# otherwise Kubernetes sends SIGKILL while the graceful failover is still running.
+terminationGracePeriodSeconds: 30
 
 # Priority class name for pod scheduling (leave empty to use cluster's default)
 priorityClassName: ""
@@ -249,11 +256,6 @@ replica:
 
   # Number of replica instances (total pods = replicas + 1 master)
   replicas: 2
-
-  # Grace period for a terminating pod. It must be longer than
-  # sentinel.preStopFailoverTimeoutSeconds, otherwise Kubernetes sends SIGKILL
-  # while the graceful failover is still running.
-  terminationGracePeriodSeconds: 30
 
   # Username for replicas to authenticate to master, ignored if auth.enabled is false.
   # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
@@ -456,6 +458,200 @@ replica:
     # PersistentVolumeClaim retention policy for the Sentinel StatefulSet.
     persistentVolumeClaimRetentionPolicy: {}
 
+    # Labels and annotations for the Sentinel pods. The top level podLabels and
+    # podAnnotations are not applied to the Sentinel pods; commonLabels are.
+    podLabels: {}
+    podAnnotations: {}
+
+    # Scheduling for the Sentinel pods. nodeSelector and tolerations fall back
+    # to the top level values when unset (null); set them to {} / [] to place
+    # the Sentinels without any. affinity and
+    # topologySpreadConstraints do not, as those written for the Valkey pods
+    # select the Valkey pods' labels. priorityClassName and runtimeClassName
+    # come from the top level values.
+    # Spread the Sentinels across failure domains, so that one node or zone
+    # cannot take the quorum down with it, e.g.:
+    #   topologySpreadConstraints:
+    #     - maxSkew: 1
+    #       topologyKey: kubernetes.io/hostname
+    #       whenUnsatisfiable: ScheduleAnyway
+    #       labelSelector:
+    #         matchLabels:
+    #           app.kubernetes.io/instance: <release name>
+    #           app.kubernetes.io/component: sentinel
+    nodeSelector: null
+    affinity: {}
+    tolerations: null
+    topologySpreadConstraints: []
+
+    # PodDisruptionBudget for the Sentinel pods. Without one, a node drain can
+    # evict enough Sentinels at once to lose the quorum, and no failover can
+    # be authorized until they are back. The chart refuses a budget that lets
+    # fewer than max(quorum, majority of replicas) Sentinels keep running.
+    podDisruptionBudget:
+      # Enable the PodDisruptionBudget
+      enabled: false
+      # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
+      minAvailable: null
+      # Maximum number of pods that can be unavailable during disruptions.
+      # 0 is honoured and forbids every voluntary eviction, which blocks node drains.
+      maxUnavailable: 1
+      # Unhealthy pod eviction policy (optional)
+      # Valid values: IfHealthyBudget, AlwaysAllow
+      unhealthyPodEvictionPolicy: ""
+
+# HAProxy in front of a Sentinel setup, for clients that cannot talk to Sentinel.
+# It health checks every Valkey node and forwards writes to whichever one answers
+# "role:master", so a failover needs no client support and no extra watcher.
+haproxy:
+  # Enable HAProxy (requires replica.enabled and replica.sentinel.enabled)
+  enabled: false
+
+  # Number of HAProxy pods
+  replicas: 3
+
+  image:
+    # Image registry
+    registry: docker.io
+    # HAProxy container image repository
+    repository: haproxy
+    # Image pull policy (Always, IfNotPresent, Never)
+    pullPolicy: IfNotPresent
+    # Image tag. HAProxy 3.1 or newer is required for the init-state server
+    # option, which keeps replicas out of the write backend on startup.
+    tag: "3.2-alpine"
+
+  # User HAProxy authenticates with to run its health check, ignored if
+  # auth.enabled is false. Must be defined in auth.aclUsers and needs +info
+  # and +ping. Defaults to the 'default' user.
+  checkUser: ""
+
+  service:
+    # Service type (ClusterIP, NodePort, LoadBalancer)
+    type: ClusterIP
+    # Port forwarding to the current master, for reads and writes
+    port: 6379
+    # Optional annotations for the HAProxy service
+    annotations: {}
+    # NodePort value (if service.type is NodePort)
+    nodePort: 0
+    # ClusterIP value
+    clusterIP: ""
+    # Class of a load balancer implementation
+    loadBalancerClass: ""
+    # Restricts traffic through the cloud-provider load balancer to these client IPs
+    loadBalancerSourceRanges: []
+
+  config:
+    # Maximum number of concurrent connections
+    maxconn: 4096
+    # Port serving /healthz for the Kubernetes probes. HAProxy answers it
+    # itself, so probing does not open connections towards the Valkey nodes.
+    # Not published through the service.
+    healthPort: 8404
+    # How often each Valkey node is health checked. This is also how long a
+    # failover takes to be reflected in the routing.
+    checkInterval: 2s
+    # Maximum duration of a single health check
+    checkTimeout: 5s
+    timeout:
+      connect: 5s
+      client: 1m
+      server: 1m
+      # Timeout for long lived bidirectional connections such as pub/sub.
+      # Replaces the client and server timeouts once a connection is
+      # established, so an idle SUBSCRIBE is only dropped after this long.
+      # 0 does not mean unlimited: it unsets the tunnel timeout and an idle
+      # SUBSCRIBE is dropped after the client timeout instead. 24d is close to
+      # the largest value HAProxy accepts.
+      tunnel: 24d
+
+  tls:
+    # With tls.enabled, HAProxy forwards the encrypted stream untouched and the
+    # client completes the handshake with the Valkey node itself, so clients
+    # must speak TLS and the server certificate has to be valid for the HAProxy
+    # service name as well, that being the name clients connect to.
+    #
+    # Certificate validation for the health check connections to the nodes,
+    # only used when tls.enabled is true. Either "required" or "none".
+    #
+    # "required" validates against tls.caPublicKey and, because HAProxy checks
+    # each node separately, also that the certificate it gets back covers that
+    # pod's own DNS name. A certificate issued for the service name alone,
+    # which is the common case, fails that check and takes every backend down
+    # with "Server presented an SSL certificate different from the configured
+    # one". Use "none" for such a certificate, or add the pod names to it:
+    #   <release>-valkey-<index>.<release>-valkey-headless.<ns>.svc.<domain>
+    verify: required
+    # Key in tls.existingSecret holding the client certificate HAProxy presents
+    # to the nodes, required when tls.requireClientCertificate is true. HAProxy
+    # reads the certificate and its private key from one file, so this key must
+    # hold both of them concatenated.
+    clientCertFile: ""
+
+  # PodDisruptionBudget for the HAProxy pods. Without one, a node drain can
+  # evict every replica at once and take the endpoint down entirely.
+  podDisruptionBudget:
+    # Enable the PodDisruptionBudget
+    enabled: false
+    # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
+    minAvailable: null
+    # Maximum number of pods that can be unavailable during disruptions.
+    # 0 is honoured and forbids every voluntary eviction, which blocks node drains.
+    maxUnavailable: 1
+    # Unhealthy pod eviction policy (optional)
+    # Valid values: IfHealthyBudget, AlwaysAllow
+    unhealthyPodEvictionPolicy: ""
+
+  # Resource limits/requests for the HAProxy container
+  resources: {}
+    # Example:
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  # Security context for the HAProxy pod. fsGroup gives the non-root user access
+  # to the mounted TLS secret, whose files are owned by root.
+  podSecurityContext:
+    fsGroup: 99
+    runAsUser: 99
+    runAsGroup: 99
+    seccompProfile:
+      type: RuntimeDefault
+
+  # Security context for the HAProxy container
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+
+  # Labels and annotations for the HAProxy pods. The top level podLabels and
+  # podAnnotations are not applied to the HAProxy pods; commonLabels are.
+  podLabels: {}
+  podAnnotations: {}
+
+  # Scheduling for the HAProxy pods. nodeSelector and tolerations fall back
+  # to the top level values when unset (null); set them to {} / [] to place
+  # the HAProxy pods without any. affinity and
+  # topologySpreadConstraints do not, as those written for the Valkey pods
+  # select the Valkey pods' labels. priorityClassName and runtimeClassName
+  # come from the top level values.
+  nodeSelector: null
+  affinity: {}
+  tolerations: null
+  topologySpreadConstraints: []
+
+  # Additional init containers, volumes and volume mounts
+  extraInitContainers: []
+  extraVolumes: []
+  extraVolumeMounts: []
+
 tls:
   # Enable TLS
   enabled: false
@@ -521,6 +717,10 @@ metrics:
       # - --redis.addr=redis:6379
     # Port on which the metrics exporter will listen
     port: 9121
+    # Name the exporter expects in the Valkey server certificate when
+    # tls.enabled is true (it connects to localhost). Defaults to the Valkey
+    # service name; set it to a name the certificate covers, e.g. the FQDN.
+    tlsServerName: ""
     # Image configuration
     image:
       # Image registry
@@ -529,8 +729,8 @@ metrics:
       repository: oliver006/redis_exporter
       # Image pull policy (Always, IfNotPresent, Never)
       pullPolicy: IfNotPresent
-      # Image tag (leave empty to use latest)
-      tag: "v1.79.0"
+      # Image tag (required when metrics.enabled is true)
+      tag: "v1.88.0"
     resources: {}
       # Example:
       # limits:
@@ -578,7 +778,8 @@ metrics:
     enabled: false
     # Port name or number to scrape metrics from
     port: metrics
-    # Extra labels for the ServiceMonitor resource
+    # Extra labels for the ServiceMonitor resource, e.g. the labels a
+    # Prometheus serviceMonitorSelector matches on (release: kube-prometheus-stack)
     extraLabels: {}
     # Extra annotations for the ServiceMonitor resource
     annotations: {}
@@ -592,22 +793,21 @@ metrics:
     metricRelabelings: []
     # Set honorLabels to true to preserve original metric labels
     honorLabels: false
-    # Extra labels to help Prometheus discover ServiceMonitor resources
-    additionalLabels: {}
     # Pod labels to copy onto the generated metrics
     podTargetLabels: []
-    # Maximum number of samples to collect per Pod scrape
+    # Maximum number of samples to collect per scrape (an integer; false for no limit)
     sampleLimit: false
-    # Maximum number of scrape targets allowed
+    # Maximum number of scrape targets allowed (an integer; false for no limit)
     targetLimit: false
   podMonitor:
     # Enable PodMonitor resource for scraping pod metrics
     enabled: false
     # Port name or number to scrape metrics from
     port: metrics
-    # Extra labels for the ServiceMonitor resource
+    # Extra labels for the PodMonitor resource, e.g. the labels a
+    # Prometheus podMonitorSelector matches on (release: kube-prometheus-stack)
     extraLabels: {}
-    # Extra annotations for the ServiceMonitor resource
+    # Extra annotations for the PodMonitor resource
     annotations: {}
     # Frequency for Prometheus to scrape pod metrics
     interval: 30s
@@ -619,13 +819,11 @@ metrics:
     metricRelabelings: []
     # If true, keeps original labels from the pod metrics
     honorLabels: false
-    # Additional labels for Prometheus to find PodMonitor resources
-    additionalLabels: {}
     # Pod labels to attach to the metrics
     podTargetLabels: []
-    # Maximum samples to scrape from each Pod
+    # Maximum samples to scrape from each Pod (an integer; false for no limit)
     sampleLimit: false
-    # Maximum number of pods to scrape
+    # Maximum number of pods to scrape (an integer; false for no limit)
     targetLimit: false
 
   # PrometheusRule configuration for alerting rules (used by kube-prometheus-stack)

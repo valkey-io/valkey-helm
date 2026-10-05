@@ -39,9 +39,31 @@ data:
     # is the sleep itself.
     set -eu
 
+    # Prints this pod's StatefulSet ordinal. It comes from the
+    # apps.kubernetes.io/pod-index label (POD_INDEX), which Kubernetes only
+    # sets from 1.28; before that the variable is empty. Assuming 0 would make
+    # every pod take itself for pod-0, the master, so fall back to the pod
+    # name (POD_NAME, from metadata.name), which for a StatefulSet pod ends in
+    # the ordinal, and fail when neither gives a number.
+    pod_index() {
+      index="${POD_INDEX:-}"
+      if [ -z "$index" ]; then
+        pod_name="${POD_NAME:-}"
+        index="${pod_name##*-}"
+      fi
+      case "$index" in
+        ""|*[!0-9]*)
+          echo "$(date) ERROR: cannot tell this pod's StatefulSet ordinal from the pod-index label ('${POD_INDEX:-}') or the pod name ('${POD_NAME:-}')" >&2
+          return 1
+          ;;
+      esac
+      printf '%s\n' "$index"
+    }
+
     CONF="${VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf}"
     MARKER="/data/conf/last-master"
-    SELF="{{ include "valkey.fullname" . }}-${POD_INDEX:-0}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    POD_INDEX=$(pod_index) || exit 1
+    SELF="{{ include "valkey.fullname" . }}-${POD_INDEX}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
 
     track_master() {
       # Word splitting is what parses each config line, so keep globbing off:
@@ -234,6 +256,7 @@ data:
       echo "protected-mode no"
       echo "bind * -::*"
       echo "dir /data"
+      echo "loglevel {{ .Values.valkeyLogLevel }}"
     } >>"$VALKEY_CONFIG_TMP"
 
     {{- if .Values.auth.enabled }}
@@ -289,8 +312,28 @@ data:
     # Replica mode configuration
     log "Configuring replication mode"
 
-    # Use POD_INDEX from Kubernetes metadata
-    POD_INDEX=${POD_INDEX:-0}
+    # Prints this pod's StatefulSet ordinal. It comes from the
+    # apps.kubernetes.io/pod-index label (POD_INDEX), which Kubernetes only
+    # sets from 1.28; before that the variable is empty. Assuming 0 would make
+    # every pod take itself for pod-0, the master, so fall back to the pod
+    # name (POD_NAME, from metadata.name), which for a StatefulSet pod ends in
+    # the ordinal, and fail when neither gives a number.
+    pod_index() {
+      index="${POD_INDEX:-}"
+      if [ -z "$index" ]; then
+        pod_name="${POD_NAME:-}"
+        index="${pod_name##*-}"
+      fi
+      case "$index" in
+        ""|*[!0-9]*)
+          echo "$(date) ERROR: cannot tell this pod's StatefulSet ordinal from the pod-index label ('${POD_INDEX:-}') or the pod name ('${POD_NAME:-}')" >&2
+          return 1
+          ;;
+      esac
+      printf '%s\n' "$index"
+    }
+
+    POD_INDEX=$(pod_index) || exit 1
     MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
     MASTER_PORT="{{ .Values.service.port }}"
 

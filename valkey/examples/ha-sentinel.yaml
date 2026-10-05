@@ -32,6 +32,20 @@ replica:
     # prefer auth.usersExistingSecret and set passwordKey instead.
     password: "replace-with-a-sentinel-password"
     quorum: 2
+    # Spread the Sentinel quorum across nodes when the cluster has capacity.
+    # The top level affinity and topologySpreadConstraints apply to the Valkey
+    # pods only.
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: sentinel
+    # Keep a Sentinel majority through node drains
+    podDisruptionBudget:
+      enabled: true
+      maxUnavailable: 1
 
 auth:
   enabled: true
@@ -47,12 +61,3 @@ auth:
         +replicaof +config|rewrite +client|setname +client|kill +script|kill
         +psync +replconf
       password: "REPLACE-ME-TOO"
-
-# Spread the Sentinel quorum across nodes when the cluster has capacity.
-topologySpreadConstraints:
-  - maxSkew: 1
-    topologyKey: kubernetes.io/hostname
-    whenUnsatisfiable: ScheduleAnyway
-    labelSelector:
-      matchLabels:
-        app.kubernetes.io/component: sentinel

@@ -2,6 +2,7 @@ suite: deployment configuration
 templates:
   - templates/deploy_valkey.yaml
   - templates/init_config.yaml
+  - templates/secret.yaml
 tests:
   - it: should not have auth volumes when auth disabled
     set:
@@ -489,3 +490,129 @@ tests:
       - equal:
           path: spec.template.spec.runtimeClassName
           value: "gvisor"
+  # Regression test for #264: init.sh writes the config under /valkey-conf, so
+  # the Deployment has to mount that volume in both containers and start the
+  # server from the same path.
+  - it: should start valkey-server from the config init.sh generates
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [ "/valkey-conf/valkey.conf" ]
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: valkey-conf
+            mountPath: /valkey-conf
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-conf
+            mountPath: /valkey-conf
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-conf
+            emptyDir:
+              medium: Memory
+
+  - it: should generate the config at the path the Deployment starts from
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'VALKEY_CONFIG=\$\{VALKEY_CONFIG_PATH:-/valkey-conf/valkey.conf\}'
+
+  # The pod template is shared with the StatefulSet; this is the one mount
+  # that is deliberately left to the Deployment.
+  - it: should render extraVolumeMounts for the init container
+    set:
+      extraVolumeMounts:
+        - name: extra-data
+          mountPath: /extra/data
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: extra-data
+            mountPath: /extra/data
+
+  - it: should escape env values that contain quotes or backslashes
+    set:
+      env:
+        QUOTED: 'say "hi"'
+        WINDOWS_PATH: 'C:\path\n'
+        NUMBER: 5
+      metrics.enabled: true
+      metrics.exporter.extraEnvs:
+        EXPORTER_QUOTED: 'say "hi"'
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUOTED
+            value: 'say "hi"'
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WINDOWS_PATH
+            value: 'C:\path\n'
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NUMBER
+            value: "5"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: EXPORTER_QUOTED
+            value: 'say "hi"'
+
+  - it: should not add a secret checksum when the chart renders no Secret
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/secret"]
+
+  - it: should roll the pod when an inline password changes
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          pattern: '^[0-9a-f]{32}$'
+
+  - it: should not add a secret checksum when passwords come from usersExistingSecret only
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "my-secret"
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/secret"]
+
+  - it: should set the termination grace period on the standalone pod
+    set:
+      terminationGracePeriodSeconds: 120
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 120
+
+  - it: should reject a negative termination grace period
+    set:
+      terminationGracePeriodSeconds: -1
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate: {}

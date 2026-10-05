@@ -177,3 +177,43 @@ tests:
       - equal:
           path: metadata.name
           value: "my-custom-valkey"
+
+  # 0 is a meaningful value for both fields, so it must not be dropped as if
+  # it were unset.
+  - it: should keep minAvailable 0 instead of falling back to maxUnavailable
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: 0
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 0
+      - notExists:
+          path: spec.maxUnavailable
+
+  - it: should keep maxUnavailable 0, which forbids voluntary evictions
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.maxUnavailable: 0
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 0
+      - notExists:
+          path: spec.minAvailable
+
+  - it: should keep the default of maxUnavailable 1
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      podDisruptionBudget.enabled: true
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - notExists:
+          path: spec.minAvailable

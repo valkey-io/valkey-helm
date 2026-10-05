@@ -46,14 +46,17 @@ spec:
         {{- with .Values.commonLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- with .Values.podLabels }}
+        {{- with .Values.replica.sentinel.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
-        {{- with .Values.podAnnotations }}
+        {{- with .Values.replica.sentinel.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
         checksum/sentinelconfig: {{ include (print $.Template.BasePath "/sentinel-configmap.yaml") . | sha256sum | trunc 32 | quote }}
+        {{- with (include "valkey.authSecretChecksum" .) }}
+        checksum/secret: {{ . | quote }}
+        {{- end }}
     spec:
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
@@ -108,7 +111,7 @@ spec:
               mountPath: /sentinel-auth
               readOnly: true
             {{- if .Values.tls.enabled }}
-            - name: {{ include "valkey.fullname" . }}-tls
+            - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
               mountPath: /tls
             {{- end }}
             {{- if .Values.auth.enabled }}
@@ -117,7 +120,7 @@ spec:
               mountPath: /valkey-users-secret
               readOnly: true
             {{- end }}
-            {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+            {{- if (include "valkey.renderAuthSecret" .) | eq "true" }}
             - name: valkey-auth-secret
               mountPath: /valkey-auth-secret
               readOnly: true
@@ -156,7 +159,7 @@ spec:
                       path: inline-password
               {{- end }}
         {{- if .Values.tls.enabled }}
-        - name: {{ include "valkey.fullname" . }}-tls
+        - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
           secret:
             secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
             defaultMode: 0400
@@ -168,26 +171,38 @@ spec:
             secretName: {{ tpl .Values.auth.usersExistingSecret . }}
             defaultMode: 0400
         {{- end }}
-        {{- if or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig }}
+        {{- if (include "valkey.renderAuthSecret" .) | eq "true" }}
         - name: valkey-auth-secret
           secret:
             secretName: {{ include "valkey.fullname" . }}-auth
             defaultMode: 0400
         {{- end }}
         {{- end }}
-      {{- with .Values.nodeSelector }}
+      {{- /* Unset (null) inherits the top level value; an explicit empty value
+             means no nodeSelector for these pods. */}}
+      {{- $nodeSelector := .Values.replica.sentinel.nodeSelector }}
+      {{- if kindIs "invalid" $nodeSelector }}
+      {{- $nodeSelector = .Values.nodeSelector }}
+      {{- end }}
+      {{- with $nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- with .Values.replica.sentinel.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.topologySpreadConstraints }}
+      {{- with .Values.replica.sentinel.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.tolerations }}
+      {{- /* Unset (null) inherits the top level value; an explicit empty value
+             means no tolerations for these pods. */}}
+      {{- $tolerations := .Values.replica.sentinel.tolerations }}
+      {{- if kindIs "invalid" $tolerations }}
+      {{- $tolerations = .Values.tolerations }}
+      {{- end }}
+      {{- with $tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

@@ -2,6 +2,7 @@ suite: statefulset configuration
 templates:
   - templates/statefulset.yaml
   - templates/init_config.yaml
+  - templates/secret.yaml
 tests:
   - it: should fail when replica enabled but no size provided
     set:
@@ -439,3 +440,59 @@ tests:
       - equal:
           path: spec.template.spec.runtimeClassName
           value: "kata-containers"
+
+  # The pod template is shared with the Deployment, which is the only one of
+  # the two that adds extraVolumeMounts to the init container.
+  - it: should not render extraVolumeMounts for the init container
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      extraVolumeMounts:
+        - name: extra-data
+          mountPath: /extra/data
+    template: templates/statefulset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: extra-data
+            mountPath: /extra/data
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-data
+            mountPath: /extra/data
+
+  # The pod_index fallback for clusters without the pod-index label reads
+  # POD_NAME; HOSTNAME is not guaranteed and can be an FQDN.
+  - it: should give the init and main containers the pod name
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+
+  - it: should set the termination grace period on the replication pods
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      terminationGracePeriodSeconds: 90
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 90

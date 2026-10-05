@@ -117,3 +117,66 @@ tests:
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
           value: before-hook-creation,hook-succeeded
+
+  # The test pods run alongside the workload, so they have to pass the same
+  # admission rules (e.g. the restricted Pod Security Standard).
+  - it: should run the test pods with the chart's security contexts
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+      global.imagePullSecrets: ["regcred"]
+    asserts:
+      - equal:
+          path: spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.automountServiceAccountToken
+          value: false
+      - contains:
+          path: spec.imagePullSecrets
+          content:
+            name: regcred
+
+  - it: should present a client certificate when the nodes require one
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+      tls.enabled: true
+      tls.existingSecret: valkey-tls
+      tls.requireClientCertificate: true
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: 'TLS_FLAGS="--tls --cacert /tls/ca.crt --cert /tls/server.crt --key /tls/server.key"'
+
+  # valkey.hasInlinePasswords also counts the Sentinel password, which is no
+  # user to authenticate as.
+  - it: should not render the inline password test for a Sentinel-only inline password
+    set:
+      replica.enabled: true
+      replica.persistence.size: 1Gi
+      replica.sentinel.enabled: true
+      replica.sentinel.password: sentinel-password
+      auth.enabled: true
+      auth.usersExistingSecret: users
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey-test-auth-existing

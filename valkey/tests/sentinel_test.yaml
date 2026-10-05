@@ -3,6 +3,7 @@ templates:
   - templates/statefulset.yaml
   - templates/sentinel-statefulset.yaml
   - templates/init_config.yaml
+  - templates/secret.yaml
   - templates/sentinel-configmap.yaml
   - templates/sentinel-service.yaml
   - templates/sentinel-headless-service.yaml
@@ -190,7 +191,7 @@ tests:
     asserts:
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-valkey-sentinel-headless
+          value: RELEASE-NAME-valkey-sentinel-hl
       - equal:
           path: spec.clusterIP
           value: None
@@ -318,6 +319,19 @@ tests:
       - exists:
           path: spec.template.metadata.annotations["checksum/sentinelconfig"]
 
+  - it: should roll the Valkey and Sentinel pods when the Sentinel password changes
+    set:
+      replica.sentinel.password: "sentinel-secret"
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          pattern: '^[0-9a-f]{32}$'
+        template: templates/statefulset.yaml
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          pattern: '^[0-9a-f]{32}$'
+        template: templates/sentinel-statefulset.yaml
+
   - it: should fail closed when sentinel cannot confirm the topology
     template: templates/init_config.yaml
     asserts:
@@ -354,7 +368,7 @@ tests:
           pattern: 'sentinel get-master-addr-by-name mymaster'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'peer="RELEASE-NAME-valkey-sentinel-headless\.NAMESPACE\.svc\.cluster\.local"'
+          pattern: 'peer="RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
       - notMatchRegex:
           path: data["init.sh"]
           pattern: 'replica\.sentinel\.replicas'
@@ -418,7 +432,7 @@ tests:
     asserts:
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: '-h RELEASE-NAME-valkey-sentinel-headless -p 26379 sentinel failover mymaster'
+          pattern: '-h RELEASE-NAME-valkey-sentinel-hl -p 26379 sentinel failover mymaster'
 
   - it: should escape sentinel configuration credentials
     template: templates/sentinel-configmap.yaml
@@ -455,7 +469,17 @@ tests:
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "preStopFailoverTimeoutSeconds \\(30\\) must be lower than replica.terminationGracePeriodSeconds \\(30\\).*"
+          errorPattern: "preStopFailoverTimeoutSeconds \\(30\\) must be lower than terminationGracePeriodSeconds \\(30\\).*"
+
+  - it: should accept a longer preStop failover with a longer grace period
+    set:
+      replica.sentinel.preStopFailoverTimeoutSeconds: 50
+      terminationGracePeriodSeconds: 60
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 60
 
   - it: should render loadBalancerSourceRanges as a yaml list
     set:
