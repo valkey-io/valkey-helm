@@ -2,6 +2,18 @@
 
 ## 0.x to 1.0
 
+Upgrade with your complete, migrated values file, without `--reuse-values` or `--reset-then-reuse-values`. Both carry over the previous release's values, removed keys included, which the chart refuses; `--reuse-values` also replaces the new chart's defaults with the 0.x ones, so the upgrade fails on missing values.
+
+### Valkey 9.0 or later required
+
+**What changed:** the chart requires Valkey 9.0 or later. It uses Sentinel's coordinated failover, which Valkey added in 9.0.
+
+**Who is affected:** releases that pin `image.tag` to an 8.x or older version.
+
+**How to configure:** set `image.tag` to a 9.x version, or remove it to use the chart's default.
+
+---
+
 ### Standalone `deploymentStrategy` defaults to `Recreate`
 
 **What changed:** the standalone Deployment now stops the old pod before starting the new one, because a rolling update cannot hand a ReadWriteOnce volume over to the new pod. Upgrades have a short downtime.
@@ -22,10 +34,12 @@
 
 Standalone, from `dataStorage`:
 
+- `enabled` → `persistence.enabled`. Set it to `true` also when using `persistentVolumeClaimName` or `hostPath`: 0.x mounted them even with `enabled: false`, 1.0 refuses to render that.
 - `requestedSize` → `persistence.size`.
 - `className` → `persistence.storageClass`.
 - `persistentVolumeClaimName` → `persistence.existingClaim`.
 - `keepPvc` → `persistence.keepOnUninstall`.
+- `accessModes`, `subPath`, `hostPath`, `labels` and `annotations` keep their names.
 - `volumeName` is removed; the volume is always `valkey-data`.
 
 Replication, from `replica.persistence`: move the block to the top level as `persistence` (`size`, `storageClass` and `accessModes` keep their names) and add `enabled: true`.

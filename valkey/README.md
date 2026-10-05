@@ -19,6 +19,12 @@ A Helm chart for Kubernetes
 * <https://github.com/valkey-io/valkey-helm.git>
 * <https://valkey.io>
 
+## Requirements
+
+Valkey 9.0 or later.
+The chart replaces a Sentinel master through a coordinated failover (`SENTINEL FAILOVER <master> COORDINATED`), which Valkey added in 9.0.
+The default image already is a 9.x release; if you pin `image.tag`, pin a 9.x version.
+
 ## Upgrading
 
 Breaking changes and the steps to migrate an existing release are listed in [UPGRADE.md](UPGRADE.md).
@@ -136,11 +142,10 @@ The minimum permissions are:
 
 ```text
 ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof +replicaof
-+config|rewrite +client|setname +client|kill +client|pause +client|unpause
-+script|kill +psync +replconf
++config|rewrite +client +failover +script|kill +psync +replconf
 ```
 
-`+client|pause` and `+client|unpause` are for the `preStop` hook described below; without them failovers still work, but the writes the old master acknowledges during a graceful failover are lost.
+`+failover` and `+client` are what Sentinel needs for the coordinated failover described below, as listed in the [Sentinel documentation](https://valkey.io/topics/sentinel/).
 
 Sentinel can be enabled on an existing replication release without changing the Valkey StatefulSet's immutable fields.
 Changing `sentinel.persistence.enabled` later changes the Sentinel StatefulSet's `volumeClaimTemplates` and therefore requires recreating that StatefulSet.
@@ -158,13 +163,15 @@ It is off by default and not needed, because each Sentinel rediscovers the curre
 **Failover behaviour:**
 
 A master that stops responding for `sentinel.downAfterMilliseconds` is replaced within a few seconds.
-When a master pod is terminated, by a rolling update or a node drain, its `preStop` hook hands over to a replica before the pod goes away:
+When a master pod is terminated, by a rolling update or a node drain, its `preStop` hook asks Sentinel for a coordinated failover (`SENTINEL FAILOVER <master> COORDINATED`) before the pod goes away.
+Sentinel then has the master pause writes, wait until the chosen replica has all of them, and step down before that replica is promoted, so no acknowledged write is lost; clients writing during the handover wait briefly and then get an error or `-READONLY` and retry.
+If the replica cannot catch up, the handover is rolled back instead.
 
-1. It waits, for at most half of `sentinel.preStopFailoverTimeoutSeconds`, until a Sentinel sees every other pod as a healthy replica of this one. Sentinel only repoints the replicas it can reach when it promotes one, and a pod restarted a moment earlier is still marked down for several seconds after it is ready; one left behind can be promoted by a later failover, discarding every write made in between.
-2. It pauses writes, so that the replica Sentinel promotes has every write this pod acknowledged.
-3. It asks that Sentinel to fail over, then follows the new master and closes its client connections. Clients that wrote during the handover get a connection error and retry against the new master, instead of having their writes acknowledged and discarded.
+`sentinel.minReadySeconds` keeps a rolling update from moving on until a restarted pod has been ready for that long.
+Sentinel still marks a restarted pod as down for several seconds after it is ready, and does not repoint a pod it considers down when it fails over, so without the delay a pod can be left following a master that is about to go away.
 
-A failover that is not planned, a crashed pod or a lost node, has none of this: the master's last writes before it went away can still be lost.
+A failover that is not planned, a crashed pod or a lost node, is not coordinated: Valkey replicates asynchronously, so the writes the master acknowledged last before it went away can be lost.
+The Sentinel documentation covers this under [consistency under partitions](https://valkey.io/topics/sentinel/).
 The replication topology survives a full restart of the StatefulSet: each pod asks Sentinel for the current master instead of assuming it is pod-0.
 
 On a cold start the Sentinels are restarting too, and a Sentinel cannot name a master until a Valkey node is up, so waiting for one would leave both halves waiting for each other.
@@ -227,7 +234,8 @@ Clients see connection errors in the meantime and must reconnect, which is what 
 HAProxy follows the Sentinels rather than `role:master` alone because an old master keeps answering `role:master` for several seconds after Sentinel has promoted a replica, and the writes it takes in that time are discarded when it resyncs.
 The write port therefore also depends on the Sentinels: while a majority of them is unreachable, HAProxy closes new connections even if the master itself is healthy.
 
-When the old master goes away on its own `preStop` hook, it closes its client connections as it hands over, so connections that are already open follow the new master too.
+When the old master goes away on its own `preStop` hook, it steps down before the new master is promoted, so connections that are already open get `-READONLY` and are closed by HAProxy at the next health check instead of writing to a stale master.
+After an unplanned failover, they stay on the old master until Sentinel demotes it if it comes back.
 
 **Authentication:**
 
@@ -537,7 +545,7 @@ tls:
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.registry | string | `""` |  |
 | image.repository | string | `"docker.io/valkey/valkey"` |  |
-| image.tag | string | `""` |  |
+| image.tag | string | `""` | Defaults to the chart's appVersion; Valkey 9.0 or later is required |
 | imagePullSecrets | list | `[]` |  |
 | initResources | object | `{}` |  |
 | livenessProbe.customProbe | object | `{}` | Full probe spec to replace the default valkey-cli ping handler and timing |
@@ -694,6 +702,7 @@ tls:
 | sentinel.passwordKey | string | `"sentinel"` | Key of the Sentinel password in sentinel.existingSecret |
 | sentinel.preStopFailover | bool | `true` | Fail over before a master pod is terminated |
 | sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
+| sentinel.minReadySeconds | int | `15` | minReadySeconds of the Valkey StatefulSet, lets Sentinel catch up with a restarted pod during a rolling update |
 | sentinel.startupTimeoutSeconds | int | `60` |  |
 | sentinel.extraConfig | string | `""` | Raw lines appended to sentinel.conf; supports templating |
 | sentinel.resources | object | `{}` |  |

@@ -18,6 +18,9 @@ spec:
   serviceName: {{ include "valkey.headlessServiceName" . }}
   replicas: {{ .Values.replica.replicas }}
   podManagementPolicy: OrderedReady
+  {{- if .Values.sentinel.enabled }}
+  minReadySeconds: {{ .Values.sentinel.minReadySeconds }}
+  {{- end }}
   {{- if .Values.replica.persistentVolumeClaimRetentionPolicy }}
   persistentVolumeClaimRetentionPolicy:
     {{- toYaml .Values.replica.persistentVolumeClaimRetentionPolicy | nindent 4 }}

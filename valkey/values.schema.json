@@ -680,6 +680,10 @@
                 "masterSet": {
                     "type": "string"
                 },
+                "minReadySeconds": {
+                    "type": "integer",
+                    "minimum": 0
+                },
                 "monitorUser": {
                     "type": "string"
                 },

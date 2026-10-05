@@ -11,7 +11,8 @@ image:
   repository: valkey/valkey
   # Image pull policy (Always, IfNotPresent, Never)
   pullPolicy: IfNotPresent
-  # Image tag (leave empty to use .Chart.AppVersion)
+  # Image tag (leave empty to use .Chart.AppVersion). Valkey 9.0 or later is
+  # required.
   tag: ""
 
 # List of image pull secrets (for private registries)
@@ -339,11 +340,9 @@ sentinel:
   # sending them SLAVEOF, so a user without those permissions makes every
   # failover abort with -failover-abort-slave-timeout. The minimum is:
   #   ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof
-  #   +replicaof +config|rewrite +client|setname +client|kill +script|kill
-  # and, because the same user replicates, +psync +replconf. With
-  # preStopFailover, also +client|pause +client|unpause: the shutting down
-  # master pauses writes during the failover, otherwise the writes it
-  # acknowledges between the promotion and its own demotion are lost.
+  #   +replicaof +config|rewrite +client +failover +script|kill
+  # and, because the same user replicates, +psync +replconf. +client and
+  # +failover are for the coordinated failover of preStopFailover.
   monitorUser: ""
 
   # Password of Sentinel's own endpoint, used by clients, by the Sentinels
@@ -362,6 +361,12 @@ sentinel:
   # How long to wait for that failover to complete before shutting down anyway.
   # Keep it below terminationGracePeriodSeconds.
   preStopFailoverTimeoutSeconds: 20
+
+  # minReadySeconds of the Valkey StatefulSet. A rolling update moves on to the
+  # next pod only after the restarted one has been ready this long. Sentinel
+  # still marks a restarted pod as down for several seconds after it is ready,
+  # and a failover in that window leaves the pod following the old master.
+  minReadySeconds: 15
 
   # How long Sentinel waits for a peer or Valkey node on startup before it
   # gives up on discovering the current master and assumes pod-0 is the master

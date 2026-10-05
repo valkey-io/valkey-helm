@@ -409,12 +409,7 @@ data:
         fi
       fi
     }
-    # A pause left behind would block every write until it expires.
-    finish() {
-      local_cli client unpause >/dev/null || true
-      record_master
-    }
-    trap finish EXIT
+    trap record_master EXIT
 
     if [ "$(local_role)" != "master" ]; then
       log "This pod is not the master, shutting down"
@@ -423,13 +418,10 @@ data:
 
     MASTER_SET="{{ $masterSet }}"
     DEADLINE=$(($(date +%s) + {{ .Values.sentinel.preStopFailoverTimeoutSeconds }}))
-    # At most half of the budget goes to waiting for the replicas, the rest is
-    # for the failover itself.
-    ATTACH_DEADLINE=$(($(date +%s) + {{ .Values.sentinel.preStopFailoverTimeoutSeconds }} / 2))
 
-    # Each Sentinel by name rather than through the service, so that the one
-    # asked about the replicas is the one asked to fail over, and so that a
-    # Sentinel that is itself going away can be skipped for the next one.
+    # Each Sentinel by name rather than through the service, so that a
+    # Sentinel that is itself going away, as in a node drain, can be skipped
+    # for the next one.
     SENTINELS=""
     i=0
     while [ "$i" -lt "{{ int .Values.sentinel.replicas }}" ]; do
@@ -437,110 +429,46 @@ data:
       i=$((i + 1))
     done
 
-    PEERS=""
-    i=0
-    while [ "$i" -lt "{{ $valkeyPods }}" ]; do
-      peer="{{ include "valkey.statefulsetName" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-      [ "$peer" = "$SELF_HOST" ] || PEERS="$PEERS $peer"
-      i=$((i + 1))
-    done
-
-    # Whether a Sentinel sees every other Valkey pod as a healthy replica of
-    # this one. Sentinel only reconfigures the replicas it can reach when it
-    # promotes one, and it picks the replica to promote without checking which
-    # master it follows. A pod restarted a moment ago, as in a rolling update,
-    # is still marked down for several seconds after it is ready: failing over
-    # then leaves it following this pod after it is gone, and a later failover
-    # can promote it and discard every write made in between.
-    peers_attached() {
-      replicas=$(sentinel_cli "$1" sentinel replicas "$MASTER_SET")
-      [ -n "$replicas" ] || return 1
-      for peer in $PEERS; do
-        echo "$replicas" | awk -v peer="$peer" -v self="$SELF_HOST" '
-          function check() { if (ip == peer && flags == "slave" && link == "ok" && master == self) found = 1 }
-          NR % 2 == 1 { key = $0; next }
-          key == "name" { check(); ip = ""; flags = ""; link = ""; master = "" }
-          key == "ip" { ip = $0 }
-          key == "flags" { flags = $0 }
-          key == "master-link-status" { link = $0 }
-          key == "master-host" { master = $0 }
-          END { check(); exit !found }' || return 1
-      done
+    # Stepped down once it is a replica and the handover is no longer running.
+    handed_over() {
+      info=$(local_info)
+      [ "$(echo "$info" | sed -n 's/^role://p')" = "slave" ] &&
+        [ "$(echo "$info" | sed -n 's/^master_failover_state://p')" = "no-failover" ]
     }
 
-    log "This pod is the master, waiting for a Sentinel to see every replica attached to it"
-    CHOSEN=""
-    while [ -z "$CHOSEN" ]; do
+    # COORDINATED has Sentinel run FAILOVER on this node: it pauses writes,
+    # waits until the replica Sentinel picked has every write, and only then
+    # demotes itself and promotes that replica. A plain failover promotes the
+    # replica while this node still accepts writes, which are discarded when it
+    # rejoins as a replica. If the replica cannot catch up, the handover is
+    # rolled back rather than losing writes.
+    log "This pod is the master, asking Sentinel for a coordinated failover"
+    while [ "$(date +%s)" -lt "$DEADLINE" ]; do
       for sentinel in $SENTINELS; do
-        if peers_attached "$sentinel"; then
-          CHOSEN="$sentinel"
-          break
-        fi
+        [ "$(date +%s)" -lt "$DEADLINE" ] || break
+        reply=$(sentinel_cli "$sentinel" sentinel failover "$MASTER_SET" coordinated)
+        # INPROG: a failover is already running, wait for it like for this one.
+        case "$reply" in
+          OK|*INPROG*) ;;
+          *)
+            log "WARN: ${sentinel%%.*} answered '${reply:-nothing}'"
+            continue
+            ;;
+        esac
+        POLLS=0
+        while [ "$POLLS" -lt 25 ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+          if handed_over; then
+            log "Failover complete, following $(local_info | sed -n 's/^master_host://p')"
+            exit 0
+          fi
+          sleep 0.2
+          POLLS=$((POLLS + 1))
+        done
       done
-      if [ -z "$CHOSEN" ]; then
-        if [ "$(date +%s)" -ge "$ATTACH_DEADLINE" ]; then
-          log "WARN: no Sentinel sees every replica attached to this pod, failing over anyway"
-          break
-        fi
-        sleep 1
-      fi
+      sleep 1
     done
 
-    # Hold writes until the failover is done. The replica Sentinel promotes then
-    # has every write this pod acknowledged, and writes sent here in the
-    # meantime fail when their connection is closed below instead of being
-    # acknowledged and discarded. Reads and replication carry on.
-    PAUSE_MS=$(((DEADLINE - $(date +%s)) * 1000))
-    if [ "$(local_cli client pause "$PAUSE_MS" write)" = "OK" ]; then
-      log "Paused writes for the failover"
-    else
-      log "WARN: could not pause writes, {{ $monitorUser }} needs +client|pause and +client|unpause"
-    fi
-
-    # The chosen Sentinel first, then the others in case it does not answer or
-    # does not complete the failover.
-    NEW_MASTER=""
-    for sentinel in $CHOSEN $SENTINELS; do
-      [ "$(date +%s)" -lt "$DEADLINE" ] || break
-      log "Asking ${sentinel%%.*} to fail over"
-      reply=$(sentinel_cli "$sentinel" sentinel failover "$MASTER_SET")
-      # INPROG: a failover is already running, wait for it like for this one.
-      case "$reply" in
-        OK|*INPROG*) ;;
-        *) log "WARN: ${sentinel%%.*} answered '${reply}'"; continue ;;
-      esac
-      # The Sentinel running the failover reports the promoted replica as soon
-      # as it is promoted, before the rest of the Sentinels have caught up.
-      POLLS=0
-      while [ "$POLLS" -lt 25 ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
-        addr=$(sentinel_cli "$sentinel" sentinel get-master-addr-by-name "$MASTER_SET")
-        host=$(echo "$addr" | sed -n 1p)
-        port=$(echo "$addr" | sed -n 2p)
-        if [ -n "$host" ] && [ "$host" != "$SELF_HOST" ] && echo "$port" | grep -qE "^[0-9]+$"; then
-          NEW_MASTER="$host $port"
-          break 2
-        fi
-        sleep 0.2
-        POLLS=$((POLLS + 1))
-      done
-    done
-
-    if [ -z "$NEW_MASTER" ]; then
-      log "WARN: no Sentinel completed the failover, continuing with the shutdown"
-      exit 0
-    fi
-
-    # Become a replica of the new master now, as Sentinel itself would about
-    # ten seconds later. Until then this pod still answers role:master. Closing
-    # the client connections, the paused ones included, sends clients that are
-    # still connected here to the new master.
-    log "Failover complete, ${NEW_MASTER%% *} is the master, following it"
-    # shellcheck disable=SC2086
-    if [ "$(local_cli replicaof $NEW_MASTER)" = "OK" ]; then
-      local_cli client kill type normal >/dev/null || true
-    else
-      log "WARN: could not switch to the new master, Sentinel will"
-    fi
+    log "WARN: still the master after {{ .Values.sentinel.preStopFailoverTimeoutSeconds }}s, continuing with the shutdown"
   {{- end }}
   {{- with .Values.sentinel.extraConfig }}
   extra.conf: |-

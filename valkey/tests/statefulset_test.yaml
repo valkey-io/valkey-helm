@@ -641,3 +641,28 @@ tests:
       - equal:
           path: metadata.name
           value: RELEASE-NAME-valkey
+
+  # Sentinel still marks a restarted pod as down for several seconds after it
+  # is ready; a failover in that window leaves it following the old master.
+  - it: should hold a rolling update until Sentinel has caught up with a restarted pod
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 1Gi
+      sentinel.enabled: true
+      sentinel.password: "pw"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.minReadySeconds
+          value: 15
+
+  - it: should not delay rolling updates without Sentinel
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 1Gi
+    template: templates/statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.minReadySeconds
