@@ -48,8 +48,8 @@ spec:
     {{- toYaml .Values.podSecurityContext | nindent 4 }}
   initContainers:
     - name: {{ include "valkey.fullnameWithSuffix" (list . "init") }}
-      image: {{ include "valkey.image" . }}
-      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      image: {{ include "valkey.initContainer.image" . }}
+      imagePullPolicy: {{ .Values.initContainer.image.pullPolicy | default .Values.image.pullPolicy }}
       {{- with .Values.securityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
