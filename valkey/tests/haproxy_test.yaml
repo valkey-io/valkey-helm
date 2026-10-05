@@ -88,12 +88,12 @@ tests:
           path: data["haproxy.cfg"]
           pattern: 'server RELEASE-NAME-valkey-5 '
 
-  - it: should not authenticate the health check when auth is disabled
+  - it: should not authenticate the Valkey health check when auth is disabled
     template: templates/haproxy-configmap.yaml
     asserts:
       - notMatchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'tcp-check send AUTH'
+          pattern: 'tcp-check send AUTH\\ default'
 
   - it: should take the health check password from the secret, never the configmap
     set:
@@ -121,15 +121,14 @@ tests:
           password: "pw"
     template: templates/haproxy-deployment.yaml
     asserts:
-      - equal:
-          path: spec.template.spec.containers[0].env[0].name
-          value: VALKEY_CHECK_PASSWORD
-      - equal:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
-          value: RELEASE-NAME-valkey-auth
-      - equal:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
-          value: default-password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_CHECK_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-valkey-auth
+                key: default-password
 
   - it: should read the health check password from an existing secret
     set:
@@ -141,12 +140,42 @@ tests:
           passwordKey: "admin-pwd"
     template: templates/haproxy-deployment.yaml
     asserts:
-      - equal:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
-          value: my-users
-      - equal:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
-          value: admin-pwd
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_CHECK_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-users
+                key: admin-pwd
+
+  - it: should read the Sentinel password from the generated auth secret
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SENTINEL_CHECK_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-valkey-auth
+                key: sentinel-password
+
+  - it: should read the Sentinel password from sentinel.existingSecret
+    set:
+      sentinel.password: ""
+      sentinel.existingSecret: "my-sentinel"
+      sentinel.passwordKey: "pw"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SENTINEL_CHECK_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-sentinel
+                key: pw
 
   - it: should run without a writable root filesystem and without extra tooling
     template: templates/haproxy-deployment.yaml
@@ -211,12 +240,86 @@ tests:
           count: 1
 
 
-  - it: should send writes to a single node if two ever look like the master
+  # role:master alone also matches an old master that Sentinel has not demoted
+  # yet, and the writes it takes are discarded when it resyncs.
+  - it: should route only to the node a majority of Sentinels name as master
     template: templates/haproxy-configmap.yaml
     asserts:
       - matchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'backend valkey_master\n(.*\n)*?  balance first'
+          pattern: 'default-server weight 0 check'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'use-server RELEASE-NAME-valkey-1 if \{ srv_is_up\(valkey_master/RELEASE-NAME-valkey-1\) \} \{ nbsrv\(sentinel_master_1\) ge 2 \} \{ nbsrv\(sentinel_master_0\) lt 2 \} \{ nbsrv\(sentinel_master_2\) lt 2 \}\n'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'balance '
+
+  - it: should ask every Sentinel which node is the master
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'backend sentinel_master_2\n'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'backend sentinel_master_3'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check send AUTH\\ sentinel\\ "\$\{SENTINEL_CHECK_PASSWORD\}"\\r\\n'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check send SENTINEL\\ get-master-addr-by-name\\ mymaster\\r\\n'
+      # Sentinel has no QUIT: min-recv makes a mismatch final instead of a
+      # wait for "timeout check".
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check expect min-recv 1 string RELEASE-NAME-valkey-2\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local\\r\\n'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-sentinel-2 RELEASE-NAME-valkey-sentinel-2\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local:26379\n'
+
+  - it: should require a majority of all Sentinels, not the failover quorum
+    set:
+      sentinel.replicas: 5
+      sentinel.quorum: 2
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: '\{ nbsrv\(sentinel_master_0\) ge 3 \}'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-sentinel-4 '
+
+  - it: should verify the Sentinel certificates when TLS is enabled
+    set:
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+      tls.requireClientCertificate: true
+      haproxy.tls.clientCertFile: "haproxy.pem"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'backend sentinel_master_0\n(.*\n)*?  tcp-check connect ssl\n'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'backend sentinel_master_0\n(.*\n)*?  default-server .* ca-file /tls/ca.crt verify required crt /tls/haproxy.pem\n'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server RELEASE-NAME-valkey-sentinel-0 \S+ verifyhost RELEASE-NAME-valkey-sentinel-0\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local\n'
+
+  - it: should verify the pod name the StatefulSet actually uses for long names
+    set:
+      fullnameOverride: "a-very-long-release-name-that-goes-past-the-statefulset-limit"
+      tls.enabled: true
+      tls.existingSecret: "valkey-tls"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'server a-very-long-release-name-that-goes-past-the-stateful-0 \S+ verifyhost a-very-long-release-name-that-goes-past-the-stateful-0\.'
 
   - it: should make the TLS secret readable for the non-root user
     set:
@@ -541,13 +644,15 @@ tests:
           path: spec.template.metadata.annotations["checksum/secret"]
           pattern: '^[0-9a-f]{32}$'
 
-  - it: should not restart HAProxy for a Sentinel password change when auth is disabled
+  # The Sentinel health check reads the Sentinel password the same way.
+  - it: should restart HAProxy when the inline Sentinel password changes
     set:
       sentinel.password: "sentinel-password"
     template: templates/haproxy-deployment.yaml
     asserts:
-      - notExists:
+      - matchRegex:
           path: spec.template.metadata.annotations["checksum/secret"]
+          pattern: '^[0-9a-f]{32}$'
 
   - it: should not add a secret checksum when passwords come from usersExistingSecret only
     set:

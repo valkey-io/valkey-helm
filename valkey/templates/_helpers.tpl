@@ -515,6 +515,20 @@ HAProxy never holds a client's identity.
 {{- end -}}
 
 {{/*
+TLS options for HAProxy's checks of the Sentinels. The check connects with
+"tcp-check connect ssl", so check-ssl is not needed here.
+*/}}
+{{- define "valkey.haproxy.sentinelTlsOptions" -}}
+{{- if .Values.tls.enabled }}
+{{- if eq .Values.haproxy.tls.verify "required" }} ca-file /tls/{{ .Values.tls.caPublicKey }} verify required
+{{- else }} verify none
+{{- end }}
+{{- if .Values.tls.requireClientCertificate }} crt /tls/{{ .Values.haproxy.tls.clientCertFile }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Per-server certificate identity options for an HAProxy backend.
 */}}
 {{/*
@@ -538,7 +552,7 @@ Must stay in line with the files valkey.haproxy.serverTlsOptions references.
 {{- define "valkey.haproxy.serverTlsIdentityOptions" -}}
 {{- $root := .root -}}
 {{- if and $root.Values.tls.enabled (eq $root.Values.haproxy.tls.verify "required") -}}
-{{- $host := printf "%s-%d.%s.%s.svc.%s" (include "valkey.fullname" $root) .index (include "valkey.headlessServiceName" $root) $root.Release.Namespace $root.Values.clusterDomain -}}
+{{- $host := printf "%s-%d.%s.%s.svc.%s" (include "valkey.statefulsetName" $root) .index (include "valkey.headlessServiceName" $root) $root.Release.Namespace $root.Values.clusterDomain -}}
 {{- printf " verifyhost %s" $host -}}
 {{- end -}}
 {{- end -}}

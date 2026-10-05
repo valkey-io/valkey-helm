@@ -340,7 +340,10 @@ sentinel:
   # failover abort with -failover-abort-slave-timeout. The minimum is:
   #   ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof
   #   +replicaof +config|rewrite +client|setname +client|kill +script|kill
-  # and, because the same user replicates, +psync +replconf
+  # and, because the same user replicates, +psync +replconf. With
+  # preStopFailover, also +client|pause +client|unpause: the shutting down
+  # master pauses writes during the failover, otherwise the writes it
+  # acknowledges between the promotion and its own demotion are lost.
   monitorUser: ""
 
   # Password of Sentinel's own endpoint, used by clients, by the Sentinels
@@ -538,8 +541,8 @@ haproxy:
     # itself, so probing does not open connections towards the Valkey nodes.
     # Not published through the service.
     healthPort: 8404
-    # How often each Valkey node is health checked. This is also how long a
-    # failover takes to be reflected in the routing.
+    # How often each Valkey node and each Sentinel is health checked. This is
+    # also how long a failover takes to be reflected in the routing.
     checkInterval: 2s
     # Maximum duration of a single health check
     checkTimeout: 5s
@@ -561,16 +564,18 @@ haproxy:
     # must speak TLS and the server certificate has to be valid for the HAProxy
     # service name as well, that being the name clients connect to.
     #
-    # Certificate validation for the health check connections to the nodes,
-    # only used when tls.enabled is true. Either "required" or "none".
+    # Certificate validation for the health check connections to the nodes
+    # and the Sentinels, only used when tls.enabled is true. Either "required"
+    # or "none".
     #
     # "required" validates against tls.caPublicKey and, because HAProxy checks
-    # each node separately, also that the certificate it gets back covers that
+    # each pod separately, also that the certificate it gets back covers that
     # pod's own DNS name. A certificate issued for the service name alone,
     # which is the common case, fails that check and takes every backend down
     # with "Server presented an SSL certificate different from the configured
     # one". Use "none" for such a certificate, or add the pod names to it:
     #   <release>-valkey-<index>.<release>-valkey-headless.<ns>.svc.<domain>
+    #   <release>-valkey-sentinel-<index>.<release>-valkey-sentinel-hl.<ns>.svc.<domain>
     verify: required
     # Key in tls.existingSecret holding the client certificate HAProxy presents
     # to the nodes, required when tls.requireClientCertificate is true. HAProxy

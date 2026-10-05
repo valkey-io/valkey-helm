@@ -136,8 +136,11 @@ The minimum permissions are:
 
 ```text
 ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof +replicaof
-+config|rewrite +client|setname +client|kill +script|kill +psync +replconf
++config|rewrite +client|setname +client|kill +client|pause +client|unpause
++script|kill +psync +replconf
 ```
+
+`+client|pause` and `+client|unpause` are for the `preStop` hook described below; without them failovers still work, but the writes the old master acknowledges during a graceful failover are lost.
 
 Sentinel can be enabled on an existing replication release without changing the Valkey StatefulSet's immutable fields.
 Changing `sentinel.persistence.enabled` later changes the Sentinel StatefulSet's `volumeClaimTemplates` and therefore requires recreating that StatefulSet.
@@ -155,7 +158,13 @@ It is off by default and not needed, because each Sentinel rediscovers the curre
 **Failover behaviour:**
 
 A master that stops responding for `sentinel.downAfterMilliseconds` is replaced within a few seconds.
-When a master pod is terminated by a rolling update, its `preStop` hook asks Sentinel to promote a replica first, so the failover happens before the pod goes away rather than after.
+When a master pod is terminated, by a rolling update or a node drain, its `preStop` hook hands over to a replica before the pod goes away:
+
+1. It waits, for at most half of `sentinel.preStopFailoverTimeoutSeconds`, until a Sentinel sees every other pod as a healthy replica of this one. Sentinel only repoints the replicas it can reach when it promotes one, and a pod restarted a moment earlier is still marked down for several seconds after it is ready; one left behind can be promoted by a later failover, discarding every write made in between.
+2. It pauses writes, so that the replica Sentinel promotes has every write this pod acknowledged.
+3. It asks that Sentinel to fail over, then follows the new master and closes its client connections. Clients that wrote during the handover get a connection error and retry against the new master, instead of having their writes acknowledged and discarded.
+
+A failover that is not planned, a crashed pod or a lost node, has none of this: the master's last writes before it went away can still be lost.
 The replication topology survives a full restart of the StatefulSet: each pod asks Sentinel for the current master instead of assuming it is pod-0.
 
 On a cold start the Sentinels are restarting too, and a Sentinel cannot name a master until a Valkey node is up, so waiting for one would leave both halves waiting for each other.
@@ -189,8 +198,9 @@ When a client library does not support it, enable HAProxy to get a plain connect
 helm install valkey valkey/valkey -f examples/ha-sentinel.yaml --set haproxy.enabled=true
 ```
 
-HAProxy health checks every Valkey node with `INFO replication` and forwards the write port only to the node that answers `role:master`.
-The health check is the failover mechanism, so no sidecar, no runtime package installation and no admin socket are involved.
+HAProxy health checks every Valkey node with `INFO replication` and asks every Sentinel which node is the master.
+It forwards the write port only to the node that answers `role:master` and that a majority of the Sentinels name as the master.
+The health checks are the failover mechanism, so no sidecar, no runtime package installation and no admin socket are involved.
 
 **Services:**
 
@@ -210,15 +220,20 @@ Select the proxy pods with `app.kubernetes.io/name=valkey-haproxy` or `app.kuber
 **Failover behaviour:**
 
 A failover has two steps, and HAProxy only covers the second one.
-Sentinel first has to notice the failure (`sentinel.downAfterMilliseconds`) and promote a replica; HAProxy then needs up to `haproxy.config.checkInterval` to see the new master in its health check.
+Sentinel first has to notice the failure (`sentinel.downAfterMilliseconds`) and promote a replica; HAProxy then needs up to `haproxy.config.checkInterval` to see the change in its health checks.
 End to end that is the sum of both, not `checkInterval` alone.
 Clients see connection errors in the meantime and must reconnect, which is what a Sentinel-aware client would also do.
-A short `-READONLY` window is still possible while a recovered old master is being demoted by Sentinel.
+
+HAProxy follows the Sentinels rather than `role:master` alone because an old master keeps answering `role:master` for several seconds after Sentinel has promoted a replica, and the writes it takes in that time are discarded when it resyncs.
+The write port therefore also depends on the Sentinels: while a majority of them is unreachable, HAProxy closes new connections even if the master itself is healthy.
+
+When the old master goes away on its own `preStop` hook, it closes its client connections as it hands over, so connections that are already open follow the new master too.
 
 **Authentication:**
 
 HAProxy authenticates its health check as `haproxy.checkUser`, which defaults to the `default` user and needs `+info` and `+ping`.
-The password is passed to HAProxy as an environment variable read from the existing secret, so it never lands in a ConfigMap.
+It authenticates to the Sentinels as the `sentinel` user, with the Sentinel password.
+Both passwords are passed to HAProxy as environment variables read from their secrets, so they never land in a ConfigMap.
 
 **TLS:**
 
@@ -230,16 +245,16 @@ HAProxy never terminates a client's TLS connection.
 Doing so would put one proxy certificate in front of every client, and on a node that maps a certificate to a user, every client would inherit that user's rights.
 It follows that clients which cannot speak TLS cannot use this proxy against a TLS enabled cluster, because the nodes themselves listen on the TLS port only.
 
-HAProxy does speak TLS for its own health checks, and `haproxy.tls.verify` decides how far it validates the nodes.
+HAProxy does speak TLS for its own health checks, and `haproxy.tls.verify` decides how far it validates the nodes and the Sentinels.
 Of `tls.existingSecret` it only mounts what those checks read, `tls.caPublicKey` and, when set, `haproxy.tls.clientCertFile`, so the Valkey server's private key never reaches the HAProxy pods.
 
 `required`, the default, validates the certificate against `tls.caPublicKey` and checks that it covers the DNS name of the pod being checked.
-That second part is what usually surprises people: HAProxy checks each node separately, so a certificate issued for the service name alone fails, and every backend goes down with `Server presented an SSL certificate different from the configured one`.
-Either add the pod names to the certificate, as `<release>-valkey-<index>.<release>-valkey-headless.<namespace>.svc.<clusterDomain>`, or set `haproxy.tls.verify: none`, which keeps the health check encrypted but stops validating what it is talking to.
+That second part is what usually surprises people: HAProxy checks each pod separately, so a certificate issued for the service name alone fails, and every backend goes down with `Server presented an SSL certificate different from the configured one`.
+Either add the pod names to the certificate, as `<release>-valkey-<index>.<release>-valkey-headless.<namespace>.svc.<clusterDomain>` for the nodes and `<release>-valkey-sentinel-<index>.<release>-valkey-sentinel-hl.<namespace>.svc.<clusterDomain>` for the Sentinels, or set `haproxy.tls.verify: none`, which keeps the health checks encrypted but stops validating what they are talking to.
 
 **Client certificates:**
 
-With `tls.requireClientCertificate`, the nodes ask for a certificate on every connection, so HAProxy needs one of its own to health check them.
+With `tls.requireClientCertificate`, the nodes and the Sentinels ask for a certificate on every connection, so HAProxy needs one of its own to health check them.
 HAProxy reads a certificate and its private key from a single file, so the separate `tls.serverPublicKey` and `tls.serverKey` entries cannot serve as one.
 Naming the key after the certificate, as `client.pem.key`, does not work either: that fallback is for `bind` lines, not for the backend `crt` used here.
 
@@ -266,7 +281,7 @@ haproxy:
     clientCertFile: client.pem
 ```
 
-The same certificate is presented to every node, so it needs no SAN of its own, only a signature from `tls.caPublicKey`.
+The same certificate is presented to every node and Sentinel, so it needs no SAN of its own, only a signature from `tls.caPublicKey`.
 Leaving `haproxy.tls.clientCertFile` empty fails the install rather than starting a proxy whose health checks are refused by every node.
 
 ## Cluster Mode
@@ -634,7 +649,7 @@ tls:
 | haproxy.service.port | int | `6379` | Write port, follows the master |
 | haproxy.service.annotations | object | `{}` |  |
 | haproxy.config.maxconn | int | `4096` |  |
-| haproxy.config.checkInterval | string | `"2s"` | Time for HAProxy to notice a new master, on top of Sentinel's own detection |
+| haproxy.config.checkInterval | string | `"2s"` | How often HAProxy checks each node and Sentinel, the time it needs to notice a new master on top of Sentinel's own detection |
 | haproxy.config.checkTimeout | string | `"5s"` |  |
 | haproxy.config.healthPort | int | `8404` | Serves /healthz for the Kubernetes probes, not published |
 | haproxy.config.timeout.connect | string | `"5s"` |  |

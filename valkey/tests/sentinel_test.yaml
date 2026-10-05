@@ -505,12 +505,58 @@ tests:
           path: data["sentinel-ping.sh"]
           pattern: ' -a "\$'
 
-  - it: should contact the independent sentinel service during graceful shutdown
+  # Through the service, the Sentinel asked about the replicas and the one
+  # asked to fail over could differ, and a terminating one could be picked.
+  - it: should ask each Sentinel by name during graceful shutdown
+    set:
+      sentinel.replicas: 5
     template: templates/sentinel-configmap.yaml
     asserts:
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: '-h RELEASE-NAME-valkey-sentinel-hl -p 26379 sentinel failover mymaster'
+          pattern: 'while \[ "\$i" -lt "5" \]; do\n  SENTINELS="\$SENTINELS RELEASE-NAME-valkey-sentinel-\$\{i\}\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'sentinel_cli "\$sentinel" sentinel failover "\$MASTER_SET"'
+      - notMatchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: '-h RELEASE-NAME-valkey-sentinel-hl '
+
+  # A replica restarted a moment ago is still marked down by Sentinel, which
+  # would not repoint it to the new master.
+  - it: should wait for every replica to be attached before failing over
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'peers_attached\(\) \{\n  replicas=\$\(sentinel_cli "\$1" sentinel replicas "\$MASTER_SET"\)'
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'ip == peer && flags == "slave" && link == "ok" && master == self'
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'ATTACH_DEADLINE=\$\(\(\$\(date \+%s\) \+ 20 / 2\)\)'
+
+  # The promoted replica then has every acknowledged write, and writes sent in
+  # the meantime fail instead of being acknowledged and discarded.
+  - it: should pause writes during the failover and always unpause
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'local_cli client pause "\$PAUSE_MS" write'
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'trap finish EXIT'
+
+  # Sentinel only demotes the old master about ten seconds later, and it keeps
+  # acknowledging writes that are discarded until then.
+  - it: should follow the new master as soon as the failover is done
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'if \[ "\$\(local_cli replicaof \$NEW_MASTER\)" = "OK" \]; then\n  local_cli client kill type normal'
 
   - it: should escape sentinel configuration credentials
     template: templates/sentinel-configmap.yaml
@@ -722,7 +768,7 @@ tests:
       # while preStop runs; the local server is still up.
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: 'trap record_master EXIT'
+          pattern: 'finish\(\) \{\n  local_cli client unpause >/dev/null \|\| true\n  record_master\n\}\ntrap finish EXIT'
       - matchRegex:
           path: data["sentinel-prestop.sh"]
           pattern: 'mv /data/conf/last-master.tmp /data/conf/last-master'

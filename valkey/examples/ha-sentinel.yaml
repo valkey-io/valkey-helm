@@ -57,9 +57,10 @@ auth:
       password: "REPLACE-ME"
     replicator:
       # Sentinel needs all of these to monitor the nodes and to promote a
-      # replica, see sentinel.monitorUser in values.yaml
+      # replica, and the preStop hook pauses writes during a graceful
+      # failover; see sentinel.monitorUser in values.yaml
       permissions: >-
         on ~* &* +multi +exec +ping +info +role +subscribe +publish +slaveof
-        +replicaof +config|rewrite +client|setname +client|kill +script|kill
-        +psync +replconf
+        +replicaof +config|rewrite +client|setname +client|kill +client|pause
+        +client|unpause +script|kill +psync +replconf
       password: "REPLACE-ME-TOO"
