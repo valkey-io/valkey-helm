@@ -62,6 +62,11 @@ forwards to the node Sentinel promoted:
 
 ⚠️  The {{ include "valkey.fullname" . }} service load balances across ALL pods in this mode,
     so writes sent to it may hit a replica and fail with -READONLY.
+{{- if .Values.replica.sentinel.allowUnsafeTopology }}
+
+⚠️  replica.sentinel.allowUnsafeTopology is set. This topology cannot fail over
+    safely and is meant for development and test clusters only.
+{{- end }}
 {{- else }}
 ================================================================================
 🔄 REPLICATION MODE
