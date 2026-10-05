@@ -71,3 +71,11 @@ Replication, from `replica.persistence`: move the block to the top level as `per
 **Who is affected:** releases that set `metrics.service.extraLabels`, `metrics.serviceMonitor.extraLabels`, `metrics.podMonitor.extraLabels`, `metrics.prometheusRule.extraLabels` or `metrics.prometheusRule.extraAnnotations`.
 
 **How to configure:** rename `extraLabels` to `labels` and `extraAnnotations` to `annotations`.
+
+### Metrics exporter hardened by default
+
+**What changed:** `metrics.exporter.securityContext` defaults to `allowPrivilegeEscalation: false`, all capabilities dropped, a read-only root filesystem and `runAsNonRoot: true`, so pods with metrics enabled pass the restricted Pod Security Standard.
+
+**Who is affected:** releases with `metrics.enabled: true`, in particular those using a custom exporter image.
+
+**How to configure:** no action needed for the default exporter image. Values set under `metrics.exporter.securityContext` are merged onto the defaults; set it to `null` for an image that needs to write to its filesystem or run as root.

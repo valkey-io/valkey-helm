@@ -543,7 +543,7 @@ tls:
 | metrics.exporter.port | int | `9121` |  |
 | metrics.exporter.tlsServerName | string | `""` | Server name expected in the Valkey certificate with TLS, defaults to the service name |
 | metrics.exporter.resources | object | `{}` |  |
-| metrics.exporter.securityContext | object | `{}` |  |
+| metrics.exporter.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsNonRoot":true}` | Merged with user values; `null` drops them |
 | metrics.podMonitor.annotations | object | `{}` |  |
 | metrics.podMonitor.enabled | bool | `false` |  |
 | metrics.podMonitor.labels | object | `{}` | Labels on the PodMonitor, e.g. for a Prometheus `podMonitorSelector` |

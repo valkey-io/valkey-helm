@@ -738,15 +738,17 @@ metrics:
     extraEnv: []
     #  - name: REDIS_EXPORTER_INCL_SYSTEM_METRICS
     #    value: "true"
-    securityContext: {}
-      # Example:
-      # runAsNonRoot: true
-      # runAsUser: 1000
-      # runAsGroup: 1000
-      # capabilities:
-      #   drop:
-      #     - ALL
-      # readOnlyRootFilesystem: true
+    # Security context for the metrics exporter container. The defaults let the
+    # pod pass the restricted Pod Security Standard; the user and group come
+    # from podSecurityContext. Values set here are merged onto these defaults;
+    # set securityContext: null to drop them all.
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
 
   # Service configuration for the metrics exporter
   service:

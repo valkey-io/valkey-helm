@@ -727,3 +727,45 @@ tests:
             name: valkey-conf
             emptyDir:
               medium: Memory
+
+  - it: should harden the metrics exporter container by default
+    set:
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+
+  - it: should merge metrics exporter security context overrides onto the defaults
+    set:
+      metrics.enabled: true
+      metrics.exporter.securityContext:
+        runAsUser: 65532
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+
+  - it: should drop the metrics exporter security context when set to null
+    set:
+      metrics.enabled: true
+      metrics.exporter.securityContext: null
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[1].securityContext
