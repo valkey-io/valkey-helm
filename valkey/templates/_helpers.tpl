@@ -310,8 +310,8 @@ Validate sentinel configuration
   {{- if gt (int .Values.replica.sentinel.quorum) $sentinels }}
     {{- fail (printf "replica.sentinel.quorum (%d) cannot be greater than replica.sentinel.replicas (%d)." (int .Values.replica.sentinel.quorum) $sentinels) }}
   {{- end }}
-  {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
-    {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than replica.terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.replica.terminationGracePeriodSeconds)) }}
+  {{- if and .Values.replica.sentinel.preStopFailover (ge (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
+    {{- fail (printf "replica.sentinel.preStopFailoverTimeoutSeconds (%d) must be lower than terminationGracePeriodSeconds (%d), otherwise the pod is killed while the graceful failover is still running." (int .Values.replica.sentinel.preStopFailoverTimeoutSeconds) (int .Values.terminationGracePeriodSeconds)) }}
   {{- end }}
   {{- if .Values.replica.sentinel.podDisruptionBudget.enabled }}
     {{- if and (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.minAvailable) (kindIs "invalid" .Values.replica.sentinel.podDisruptionBudget.maxUnavailable) }}

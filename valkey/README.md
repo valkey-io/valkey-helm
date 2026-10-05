@@ -669,6 +669,7 @@ tls:
 | startupProbe.initialDelaySeconds | int | `0` |  |
 | startupProbe.periodSeconds | int | `10` |  |
 | startupProbe.timeoutSeconds | int | `1` |  |
+| terminationGracePeriodSeconds | int | `30` | Valkey pods, standalone and replication; must exceed replica.sentinel.preStopFailoverTimeoutSeconds |
 | tls.caPublicKey | string | `"ca.crt"` |  |
 | tls.dhParamKey | string | `""` |  |
 | tls.enabled | bool | `false` |  |

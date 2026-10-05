@@ -485,3 +485,14 @@ tests:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.name
+
+  - it: should set the termination grace period on the replication pods
+    set:
+      replica.enabled: true
+      replica.persistence.size: "5Gi"
+      terminationGracePeriodSeconds: 90
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 90

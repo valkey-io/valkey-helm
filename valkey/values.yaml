@@ -53,6 +53,12 @@ podSecurityContext:
   seccompProfile:
     type: RuntimeDefault
 
+# Grace period for a terminating Valkey pod, standalone and replication. Valkey
+# saves its dataset on shutdown, so raise it for large datasets. With Sentinel
+# it must also be longer than replica.sentinel.preStopFailoverTimeoutSeconds,
+# otherwise Kubernetes sends SIGKILL while the graceful failover is still running.
+terminationGracePeriodSeconds: 30
+
 # Priority class name for pod scheduling (leave empty to use cluster's default)
 priorityClassName: ""
 
@@ -244,11 +250,6 @@ replica:
 
   # Number of replica instances (total pods = replicas + 1 master)
   replicas: 2
-
-  # Grace period for a terminating pod. It must be longer than
-  # sentinel.preStopFailoverTimeoutSeconds, otherwise Kubernetes sends SIGKILL
-  # while the graceful failover is still running.
-  terminationGracePeriodSeconds: 30
 
   # Username for replicas to authenticate to master, ignored if auth.enabled is false.
   # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.

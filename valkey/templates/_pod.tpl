@@ -35,9 +35,7 @@ metadata:
     {{- end }}
 spec:
   {{- include "valkey.imagePullSecrets" . | nindent 2 }}
-  {{- if $replicated }}
-  terminationGracePeriodSeconds: {{ .Values.replica.terminationGracePeriodSeconds }}
-  {{- end }}
+  terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
   automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
   serviceAccountName: {{ include "valkey.serviceAccountName" . }}
   {{- if .Values.priorityClassName }}

@@ -604,9 +604,6 @@
                 "persistentVolumeClaimRetentionPolicy": {
                     "type": "object"
                 },
-                "terminationGracePeriodSeconds": {
-                    "type": "integer"
-                },
                 "replicas": {
                     "type": "integer"
                 },
@@ -911,6 +908,10 @@
                     "type": "string"
                 }
             }
+        },
+        "terminationGracePeriodSeconds": {
+            "type": "integer",
+            "minimum": 0
         },
         "tls": {
             "type": "object",
