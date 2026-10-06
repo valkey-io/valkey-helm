@@ -192,6 +192,9 @@ dataStorage:
   # If hostPath is set then a hostPath DirectoryOrCreate volume is used
   hostPath: ""
 
+  # Optional emptyDir options
+  emptyDir: {}
+
 # Mount additional secrets into the Valkey container
 extraValkeySecrets: []
 

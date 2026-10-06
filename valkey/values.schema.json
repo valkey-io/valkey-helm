@@ -46,6 +46,9 @@
                 "enabled": {
                     "type": "boolean"
                 },
+                "emptyDir": {
+                    "type": "object"
+                },
                 "hostPath": {
                     "type": "string"
                 },

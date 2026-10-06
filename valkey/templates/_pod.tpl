@@ -421,7 +421,8 @@ spec:
         path: {{ $storage.hostPath }}
         type: DirectoryOrCreate
     {{- else }}
-      emptyDir: {}
+      emptyDir:
+        {{- toYaml $storage.emptyDir | nindent 8 }}
     {{- end }}
     {{- end }}
     {{- with .Values.extraVolumes }}
