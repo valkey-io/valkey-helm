@@ -465,6 +465,7 @@ tls:
 | dataStorage.annotations | object | `{}` |  |
 | dataStorage.className | string | `""` |  |
 | dataStorage.enabled | bool | `false` |  |
+| dataStorage.emptyDir | object | `{}` |  |
 | dataStorage.keepPvc | bool | `false` |  |
 | dataStorage.labels | object | `{}` |  |
 | dataStorage.persistentVolumeClaimName | string | `""` |  |
