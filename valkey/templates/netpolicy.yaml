@@ -4,13 +4,10 @@ kind: NetworkPolicy
 metadata:
   name: {{ include "valkey.fullname" $ }}
   labels:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with (include "valkey.annotations" (dict "context" $ "annotations" .annotations)) }}
     {{- /* The chart's labels, as on every other resource, with
            networkPolicy.labels on top */}}
     {{- mustMergeOverwrite (include "valkey.labels" $ | fromYaml) (.labels | default dict) | toYaml | nindent 4 }}
-  {{- with .annotations }}
+  {{- with (include "valkey.annotations" (dict "context" $ "annotations" .annotations)) }}
   annotations:
     {{- . | nindent 4 }}
   {{- end }}

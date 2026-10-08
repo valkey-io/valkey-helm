@@ -67,6 +67,10 @@ Usage:
 {{- end -}}
 {{- with $annotations }}
 {{- toYaml . }}
+{{- end }}
+{{- end }}
+
+{{/*
 The app.kubernetes.io/version label, the Valkey version being deployed,
 shared by every resource of the release (with a leading newline)
 */}}
