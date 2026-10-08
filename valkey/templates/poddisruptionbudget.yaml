@@ -5,6 +5,10 @@ metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
+  {{- with (include "valkey.annotations" (dict "context" $)) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
 spec:
   {{- /* Tested for null rather than truthiness, so that an explicit 0 is
          kept: minAvailable takes precedence when both are set */}}

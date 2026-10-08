@@ -11,8 +11,8 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
   annotations:
-    {{- with .Values.metrics.service.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- with (include "valkey.annotations" (dict "context" $ "annotations" .Values.metrics.service.annotations)) }}
+    {{- . | nindent 4 }}
     {{- end }}
 spec:
   type: {{ .Values.metrics.service.type }}

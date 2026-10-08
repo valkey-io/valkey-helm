@@ -6,6 +6,10 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/component: headless
+  {{- with (include "valkey.annotations" (dict "context" $)) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
 spec:
   type: ClusterIP
   clusterIP: None

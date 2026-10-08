@@ -5,6 +5,10 @@ metadata:
   name: {{ include "valkey.fullname" . }}-config
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
+  {{- with (include "valkey.annotations" (dict "context" $)) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
 data:
   valkey.conf: |
     {{- .Values.valkeyConfig | nindent 4 }}

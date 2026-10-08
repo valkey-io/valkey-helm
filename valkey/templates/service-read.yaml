@@ -6,9 +6,9 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/component: read
-  {{- with .Values.replica.service.annotations }}
+  {{- with (include "valkey.annotations" (dict "context" $ "annotations" .Values.replica.service.annotations)) }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- . | nindent 4 }}
   {{- end }}
 spec:
   type: {{ .Values.replica.service.type }}

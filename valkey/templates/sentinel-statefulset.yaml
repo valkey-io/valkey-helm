@@ -9,9 +9,9 @@ metadata:
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
     app.kubernetes.io/component: sentinel
-  {{- with .Values.workloadAnnotations }}
+  {{- with (include "valkey.annotations" (dict "context" $ "annotations" .Values.workloadAnnotations)) }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- . | nindent 4 }}
   {{- end }}
 spec:
   serviceName: {{ include "valkey.sentinel.headlessServiceName" . }}

@@ -7,9 +7,9 @@ metadata:
     {{- /* The chart's labels, as on every other resource, with
            networkPolicy.labels on top */}}
     {{- mustMergeOverwrite (include "valkey.labels" $ | fromYaml) (.labels | default dict) | toYaml | nindent 4 }}
-  {{- with .annotations }}
+  {{- with (include "valkey.annotations" (dict "context" $ "annotations" .annotations)) }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- . | nindent 4 }}
   {{- end }}
 spec:
   podSelector:
