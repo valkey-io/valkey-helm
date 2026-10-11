@@ -141,6 +141,9 @@ spec:
             fieldRef:
               fieldPath: metadata.name
         {{- end }}
+        {{- with (include "valkey.probeAuthEnv" .) }}
+        {{- . | nindent 8 }}
+        {{- end }}
         {{- with .Values.extraEnv }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
