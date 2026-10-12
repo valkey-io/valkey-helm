@@ -409,11 +409,23 @@
                         "appProtocol": {
                             "type": "string"
                         },
+                        "clusterIP": {
+                            "type": "string"
+                        },
                         "enabled": {
                             "type": "boolean"
                         },
                         "labels": {
                             "type": "object"
+                        },
+                        "loadBalancerClass": {
+                            "type": "string"
+                        },
+                        "loadBalancerSourceRanges": {
+                            "type": "array"
+                        },
+                        "nodePort": {
+                            "type": "integer"
                         },
                         "port": {
                             "type": "integer"

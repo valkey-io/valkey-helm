@@ -824,6 +824,16 @@ metrics:
     type: ClusterIP
     # Port on which the metrics exporter service will be exposed
     port: 9121
+    # NodePort value (if service.type is NodePort)
+    nodePort: 0
+    # ClusterIP value
+    clusterIP: ""
+    # Class of a load balancer implementation
+    loadBalancerClass: ""
+    # If specified and supported by the platform, this will restrict traffic through the cloud-provider load-balancer
+    # will be restricted to the specified client IPs.
+    # This field will be ignored if the cloud-provider does not support the feature.
+    loadBalancerSourceRanges: []
     # Optional annotations for the metrics exporter service
     annotations: {}
     # Optional labels for the metrics exporter service

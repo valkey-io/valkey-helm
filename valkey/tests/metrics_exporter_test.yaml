@@ -4,6 +4,7 @@ templates:
   - templates/statefulset.yaml
   - templates/init_config.yaml
   - templates/secret.yaml
+  - templates/metrics-svc.yaml
 set:
   metrics.enabled: true
 tests:
@@ -219,3 +220,71 @@ tests:
     template: templates/deploy_valkey.yaml
     asserts:
       - notFailedTemplate: {}
+
+  # The metrics Service exposes the same parity fields as the other service
+  # blocks: clusterIP, loadBalancerClass, loadBalancerSourceRanges and
+  # nodePort render only when they apply.
+  - it: should render the metrics Service port on the flat path
+    template: templates/metrics-svc.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 9121
+
+  - it: should set nodePort on the metrics Service when type is NodePort
+    set:
+      metrics.service.type: NodePort
+      metrics.service.nodePort: 30091
+    template: templates/metrics-svc.yaml
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30091
+
+  - it: should not set nodePort when the metrics Service type is ClusterIP
+    set:
+      metrics.service.nodePort: 30091
+    template: templates/metrics-svc.yaml
+    asserts:
+      - notExists:
+          path: spec.ports[0].nodePort
+
+  - it: should restrict the metrics LoadBalancer to loadBalancerSourceRanges
+    set:
+      metrics.service.type: LoadBalancer
+      metrics.service.loadBalancerSourceRanges:
+        - 10.0.0.0/8
+    template: templates/metrics-svc.yaml
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+      - contains:
+          path: spec.loadBalancerSourceRanges
+          content: 10.0.0.0/8
+
+  - it: should set clusterIP and loadBalancerClass on the metrics Service when configured
+    set:
+      metrics.service.clusterIP: 10.96.0.42
+      metrics.service.loadBalancerClass: service.k8s.aws/nlb
+    template: templates/metrics-svc.yaml
+    asserts:
+      - equal:
+          path: spec.clusterIP
+          value: 10.96.0.42
+      - equal:
+          path: spec.loadBalancerClass
+          value: service.k8s.aws/nlb
+
+  - it: should not render clusterIP, loadBalancerClass or sourceRanges by default
+    template: templates/metrics-svc.yaml
+    asserts:
+      - notExists:
+          path: spec.clusterIP
+      - notExists:
+          path: spec.loadBalancerClass
+      - notExists:
+          path: spec.loadBalancerSourceRanges
