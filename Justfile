@@ -33,6 +33,14 @@ package:
     helm package ./valkey-operator
     helm package ./valkey-resources
 
+# Regenerate valkey/values.schema.json from the # @schema annotations in
+# valkey/values.yaml, using the losisin/helm-values-schema-json plugin
+# (invoked as `helm schema`, configured by valkey/.schema.yaml).
+# Scoped to the valkey chart only; not wired into `validate`.
+schema:
+    @echo "=== Generating valkey/values.schema.json ==="
+    cd valkey && helm schema
+
 # Run all validations
 validate: lint test
     @echo "=== All validations passed ==="
