@@ -90,6 +90,16 @@ Replication, from `replica.persistence`: move the block to the top level as `per
 
 ---
 
+### Metrics service port flattened to `metrics.service.port`
+
+**What changed:** the metrics Service port is a flat `metrics.service.port`, like every other service block (`service.port`, `replica.service.port`, `sentinel.service.port`, `haproxy.service.port`). The nested `metrics.service.ports.http` is gone and the chart refuses to render while it is set. The default stays `9121`.
+
+**Who is affected:** releases that set `metrics.service.ports.http`.
+
+**How to configure:** rename `metrics.service.ports.http` to `metrics.service.port`.
+
+---
+
 ### Metrics exporter hardened by default
 
 **What changed:** `metrics.exporter.securityContext` defaults to `allowPrivilegeEscalation: false`, all capabilities dropped, a read-only root filesystem and `runAsNonRoot: true`, so pods with metrics enabled pass the restricted Pod Security Standard.

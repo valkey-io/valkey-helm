@@ -415,13 +415,8 @@
                         "labels": {
                             "type": "object"
                         },
-                        "ports": {
-                            "type": "object",
-                            "properties": {
-                                "http": {
-                                    "type": "integer"
-                                }
-                            }
+                        "port": {
+                            "type": "integer"
                         },
                         "type": {
                             "type": "string"

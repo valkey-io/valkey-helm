@@ -823,8 +823,7 @@ metrics:
     # Service type (ClusterIP, NodePort, LoadBalancer)
     type: ClusterIP
     # Port on which the metrics exporter service will be exposed
-    ports:
-      http: 9121
+    port: 9121
     # Optional annotations for the metrics exporter service
     annotations: {}
     # Optional labels for the metrics exporter service

@@ -18,7 +18,7 @@ spec:
   type: {{ .Values.metrics.service.type }}
   ports:
     - name: metrics
-      port: {{ .Values.metrics.service.ports.http }}
+      port: {{ .Values.metrics.service.port }}
       protocol: TCP
       targetPort: metrics
       {{- if .Values.metrics.service.appProtocol }}
