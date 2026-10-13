@@ -25,11 +25,15 @@ make e2e
 ```
 
 `make e2e` runs the full suite and, if any step fails, dumps diagnostics before
-exiting non-zero. Use `make test` instead if you would rather see the failing
+exiting non-zero. If the kind cluster did not exist before the run, `make e2e`
+deletes it after a successful run and keeps it after a failed one so you can
+inspect it. Use `make test` instead if you would rather see the failing
 step's own error without a large dump after it.
 
 On a machine where the kind cluster and operator already exist the suite takes
 a few seconds. A cold run is dominated by `kind create cluster` and image pulls.
+For a fast local loop, create the cluster once with `make kind-up`: `make e2e`
+never deletes a cluster it did not create.
 
 ## What the suite does
 
@@ -52,7 +56,7 @@ Targets outside the chain:
 
 | Target | Purpose |
 | --- | --- |
-| `e2e` | Runs `test`, then `diagnostics` on failure |
+| `e2e` | Runs `test`, then `diagnostics` on failure. Deletes the kind cluster on success if this run created it |
 | `diagnostics` | Best-effort dump for triage. Never fails |
 | `template` | Renders the chart locally, no cluster needed |
 | `kind-down` | Deletes the kind cluster |
@@ -79,10 +83,17 @@ make diagnostics LOG_LINES=2000
 | `SMOKE_KEY` / `SMOKE_VAL` | `e2e:smoke` / `hello-e2e` | Key and value for the round-trip |
 | `GC_TIMEOUT` | `120` | Seconds `uninstall-check` polls for GC |
 | `LOG_LINES` | `200` | `--tail` for `diagnostics` log dumps |
+| `KUBE_CONTEXT` | `kind-$(CLUSTER_NAME)` | kubeconfig context passed to every `kubectl` and `helm` call |
 | `TOOLS` | the four binaries | Checked by `preflight` |
 
-Running against a non-kind cluster works if you skip `kind-up` and point your
-kubeconfig where you want it. Run the individual targets rather than `test`.
+Every cluster-facing command passes `KUBE_CONTEXT` explicitly, so the suite never
+acts on whatever context happens to be selected in your kubeconfig. To run against
+a non-kind cluster, skip `kind-up`, set `KUBE_CONTEXT` to that cluster's context,
+and run the individual targets rather than `test`:
+
+```sh
+make operator-install resources-install wait-ready verify-topology smoke KUBE_CONTEXT=my-context
+```
 
 ## Implementation notes
 
@@ -146,7 +157,7 @@ To inspect a broken cluster by hand, run the chain up to the failing step and st
 
 ```sh
 make kind-up operator-install resources-install
-kubectl get valkeyclusters,valkeynodes,pods -n valkey-e2e
+kubectl --context kind-valkey-e2e get valkeyclusters,valkeynodes,pods -n valkey-e2e
 ```
 
 Start over from scratch:
@@ -165,13 +176,19 @@ cd valkey-resources/e2e && make e2e
 fails red and the log carries the evidence.
 
 `kind-up` is idempotent and `uninstall-check` removes the release at the end, so
-the suite is safe to re-run against a persistent cluster. The kind cluster and the
-operator are deliberately left in place. Add `make kind-down` as a cleanup step if
-your runner is not ephemeral.
+the suite is safe to re-run against a persistent cluster. When `make e2e` creates
+the kind cluster itself, it deletes it after a successful run. After a failed run
+the cluster is kept so the failure can be inspected, so add `make kind-down` as an
+always-run cleanup step if your runner is not ephemeral. A cluster that existed
+before the run is never deleted.
 
 ## Extending
 
 Add a target, then add it to both `.PHONY` and the `test` prerequisite list.
+The Makefile sets `.NOTPARALLEL`, so prerequisites always run in the listed order,
+even under `make -j`. Use `$(KUBECTL)` and `$(HELM)` rather than bare `kubectl` and
+`helm` for anything that talks to the cluster, so the call is pinned to
+`KUBE_CONTEXT`.
 
 Existing targets are a reasonable starting shape: `verify-topology` shows reading
 spec and status fields into shell variables and asserting on them, `smoke` shows
