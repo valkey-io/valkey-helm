@@ -809,7 +809,9 @@ metrics:
     extraVolumeMounts: []
     # Additional environment variables for the exporter container, as a list
     # of Kubernetes EnvVar entries. An entry named like a variable the chart
-    # sets (REDIS_ADDR, REDIS_EXPORTER_TLS_*) replaces it.
+    # sets (REDIS_ADDR, REDIS_PASSWORD, REDIS_EXPORTER_TLS_*) replaces it.
+    # When the default user is defined only in auth.aclConfig the chart can't
+    # know its password, so set REDIS_PASSWORD here from your own secret.
     extraEnv: []
     #  - name: REDIS_EXPORTER_INCL_SYSTEM_METRICS
     #    value: "true"
