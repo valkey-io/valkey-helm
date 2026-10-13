@@ -93,7 +93,7 @@ tests:
     asserts:
       - notMatchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'tcp-check send AUTH\\ default'
+          pattern: 'VALKEY_CHECK_PASSWORD'
 
   - it: should take the health check password from the secret, never the configmap
     set:
@@ -107,10 +107,30 @@ tests:
     asserts:
       - matchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'tcp-check send AUTH\\ default\\ "\$\{VALKEY_CHECK_PASSWORD\}"'
+          pattern: 'tcp-check send-lf "\*3\\r\\n\\\$4\\r\\nAUTH\\r\\n\\\$7\\r\\ndefault\\r\\n\\\$%\[env\(VALKEY_CHECK_PASSWORD\),length\]\\r\\n%\[env\(VALKEY_CHECK_PASSWORD\)\]\\r\\n"'
       - notMatchRegex:
           path: data["haproxy.cfg"]
           pattern: 'supersecret'
+
+  - it: should send the check user's length with a custom haproxy.checkUser
+    set:
+      auth.enabled: true
+      haproxy.checkUser: haproxy-check
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "supersecret"
+        haproxy-check:
+          permissions: "-@all +info +ping"
+          password: "pass word"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'AUTH\\r\\n\\\$13\\r\\nhaproxy-check\\r\\n'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'pass word'
 
   - it: should read the health check password from the generated auth secret
     set:
@@ -266,7 +286,7 @@ tests:
           pattern: 'backend sentinel_master_3'
       - matchRegex:
           path: data["haproxy.cfg"]
-          pattern: 'tcp-check send AUTH\\ sentinel\\ "\$\{SENTINEL_CHECK_PASSWORD\}"\\r\\n'
+          pattern: 'tcp-check send-lf "\*3\\r\\n\\\$4\\r\\nAUTH\\r\\n\\\$8\\r\\nsentinel\\r\\n\\\$%\[env\(SENTINEL_CHECK_PASSWORD\),length\]\\r\\n%\[env\(SENTINEL_CHECK_PASSWORD\)\]\\r\\n"'
       - matchRegex:
           path: data["haproxy.cfg"]
           pattern: 'tcp-check send SENTINEL\\ get-master-addr-by-name\\ mymaster\\r\\n'

@@ -80,7 +80,10 @@ data:
       # none and verifyhost validates the certificate it gets back.
       tcp-check connect port {{ $port }}{{ if .Values.tls.enabled }} ssl{{ end }}
       {{- if .Values.auth.enabled }}
-      tcp-check send AUTH\ {{ $checkUser }}\ "${VALKEY_CHECK_PASSWORD}"\r\n
+      # AUTH goes out as a RESP array with each argument's length, so the
+      # password is sent as is whatever it contains. As an inline command a
+      # space in the password would split it into extra arguments.
+      tcp-check send-lf "*3\r\n\$4\r\nAUTH\r\n\${{ len $checkUser }}\r\n{{ $checkUser }}\r\n\$%[env(VALKEY_CHECK_PASSWORD),length]\r\n%[env(VALKEY_CHECK_PASSWORD)]\r\n"
       tcp-check expect string +OK
       {{- end }}
       # QUIT is sent before the expect so that the node closes the connection as
@@ -110,7 +113,7 @@ data:
     backend sentinel_master_{{ $i }}
       option tcp-check
       tcp-check connect{{ if $.Values.tls.enabled }} ssl{{ end }}
-      tcp-check send AUTH\ sentinel\ "${SENTINEL_CHECK_PASSWORD}"\r\n
+      tcp-check send-lf "*3\r\n\$4\r\nAUTH\r\n\$8\r\nsentinel\r\n\$%[env(SENTINEL_CHECK_PASSWORD),length]\r\n%[env(SENTINEL_CHECK_PASSWORD)]\r\n"
       tcp-check expect string +OK
       tcp-check send SENTINEL\ get-master-addr-by-name\ {{ $.Values.sentinel.masterSet }}\r\n
       # Sentinel has no QUIT and keeps the connection open, and an expect that
