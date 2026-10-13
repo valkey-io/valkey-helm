@@ -20,7 +20,15 @@ Upgrade with your complete, migrated values file, without `--reuse-values` or `-
 
 **Who is affected:** standalone releases (`replica.enabled: false`) that do not set `deploymentStrategy`.
 
-**How to configure:** no action needed. Without persistence, set `deploymentStrategy: RollingUpdate` to keep upgrades without downtime. If the release is applied with server-side apply (e.g. Argo CD `ServerSideApply=true`), run `kubectl patch deployment <release>-valkey -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'` before upgrading.
+**How to configure:** no action needed. Without persistence, set `deploymentStrategy: RollingUpdate` to keep upgrades without downtime.
+
+If the release is applied with server-side apply, run this before upgrading:
+
+```sh
+kubectl patch deployment <release>-valkey -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+```
+
+That covers releases installed with Helm 4, which uses server-side apply by default and keeps using it on upgrade, and Argo CD with `ServerSideApply=true`. Without the patch the upgrade fails with ``spec.strategy.rollingUpdate: Forbidden: may not be specified when strategy `type` is 'Recreate'``. Releases installed with Helm 3 are not affected, even when upgraded with Helm 4.
 
 ---
 
