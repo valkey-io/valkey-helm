@@ -167,6 +167,11 @@ Validate auth configuration
   {{- if not (or .Values.auth.aclUsers .Values.auth.aclConfig) }}
     {{- fail "auth.enabled is true but no authentication method is configured. Please provide auth.aclUsers or auth.aclConfig" }}
   {{- end }}
+  {{- /* Valkey keeps the default user on with no password unless the ACL
+         file defines it, so auth.aclConfig alone has to define it too */}}
+  {{- if and (not .Values.auth.aclUsers) (not (regexMatch "(?m)^\\s*user\\s+default(\\s|$)" .Values.auth.aclConfig)) }}
+    {{- fail "The 'default' user must be defined in auth.aclConfig when auth.aclUsers is empty. Without it, anyone can access the database without credentials." }}
+  {{- end }}
   {{- if .Values.auth.aclUsers }}
     {{- $hasUsersExistingSecret := .Values.auth.usersExistingSecret }}
     {{- if not (hasKey .Values.auth.aclUsers "default") }}

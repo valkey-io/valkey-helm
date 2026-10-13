@@ -133,6 +133,35 @@ tests:
       - isKind:
           of: Deployment
 
+  - it: should fail when aclConfig alone does not define the default user
+    set:
+      auth.enabled: true
+      auth.aclConfig: "user app on >password ~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "The 'default' user must be defined in auth.aclConfig"
+
+  - it: should not take another user whose name starts with default for the default user
+    set:
+      auth.enabled: true
+      auth.aclConfig: "user defaultish on >password ~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "The 'default' user must be defined in auth.aclConfig"
+
+  - it: should find the default user on any line of aclConfig
+    set:
+      auth.enabled: true
+      auth.aclConfig: |
+        user app on >password ~app:* +@all
+          user default on >password ~* &* +@all
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+
   - it: should succeed with aclUsers and aclConfig combined
     set:
       auth.enabled: true
