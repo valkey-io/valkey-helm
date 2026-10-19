@@ -642,9 +642,13 @@ TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on a
 | metrics.prometheusRule.labels | object | `{}` |  |
 | metrics.prometheusRule.rules | list | `[]` |  |
 | metrics.service.annotations | object | `{}` |  |
+| metrics.service.clusterIP | string | `""` |  |
 | metrics.service.enabled | bool | `true` |  |
 | metrics.service.labels | object | `{}` |  |
-| metrics.service.ports.http | int | `9121` |  |
+| metrics.service.loadBalancerClass | string | `""` |  |
+| metrics.service.loadBalancerSourceRanges | list | `[]` |  |
+| metrics.service.nodePort | int | `0` |  |
+| metrics.service.port | int | `9121` |  |
 | metrics.service.type | string | `"ClusterIP"` |  |
 | metrics.service.appProtocol | string | `""` |  |
 | metrics.serviceMonitor.annotations | object | `{}` |  |
