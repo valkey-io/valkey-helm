@@ -14,12 +14,12 @@ spec:
   {{- if .Values.sentinel.service.clusterIP }}
   clusterIP: {{ .Values.sentinel.service.clusterIP }}
   {{- end }}
-  {{- if .Values.sentinel.service.loadBalancerClass }}
+  {{- if and (eq .Values.sentinel.service.type "LoadBalancer") .Values.sentinel.service.loadBalancerClass }}
   loadBalancerClass: {{ .Values.sentinel.service.loadBalancerClass }}
   {{- end }}
-  {{- with .Values.sentinel.service.loadBalancerSourceRanges }}
+  {{- if and (eq .Values.sentinel.service.type "LoadBalancer") .Values.sentinel.service.loadBalancerSourceRanges }}
   loadBalancerSourceRanges:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .Values.sentinel.service.loadBalancerSourceRanges | nindent 4 }}
   {{- end }}
   ports:
     - name: sentinel

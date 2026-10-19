@@ -19,12 +19,12 @@ spec:
   {{- if .Values.metrics.service.clusterIP }}
   clusterIP: {{ .Values.metrics.service.clusterIP }}
   {{- end }}
-  {{- if .Values.metrics.service.loadBalancerClass }}
+  {{- if and (eq .Values.metrics.service.type "LoadBalancer") .Values.metrics.service.loadBalancerClass }}
   loadBalancerClass: {{ .Values.metrics.service.loadBalancerClass }}
   {{- end }}
-  {{- with .Values.metrics.service.loadBalancerSourceRanges }}
+  {{- if and (eq .Values.metrics.service.type "LoadBalancer") .Values.metrics.service.loadBalancerSourceRanges }}
   loadBalancerSourceRanges:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .Values.metrics.service.loadBalancerSourceRanges | nindent 4 }}
   {{- end }}
   ports:
     - name: metrics

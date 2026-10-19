@@ -15,12 +15,12 @@ spec:
   {{- if .Values.replica.service.clusterIP }}
   clusterIP: {{ .Values.replica.service.clusterIP }}
   {{- end }}
-  {{- if .Values.replica.service.loadBalancerClass }}
+  {{- if and (eq .Values.replica.service.type "LoadBalancer") .Values.replica.service.loadBalancerClass }}
   loadBalancerClass: {{ .Values.replica.service.loadBalancerClass }}
   {{- end }}
-  {{- with .Values.replica.service.loadBalancerSourceRanges }}
+  {{- if and (eq .Values.replica.service.type "LoadBalancer") .Values.replica.service.loadBalancerSourceRanges }}
   loadBalancerSourceRanges:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .Values.replica.service.loadBalancerSourceRanges | nindent 4 }}
   {{- end }}
   ports:
     - name: tcp

@@ -266,15 +266,21 @@ tests:
           path: spec.loadBalancerSourceRanges
           content: 10.0.0.0/8
 
-  - it: should set clusterIP and loadBalancerClass on the metrics Service when configured
+  - it: should set clusterIP on the metrics Service when configured
     set:
       metrics.service.clusterIP: 10.96.0.42
-      metrics.service.loadBalancerClass: service.k8s.aws/nlb
     template: templates/metrics-svc.yaml
     asserts:
       - equal:
           path: spec.clusterIP
           value: 10.96.0.42
+
+  - it: should set loadBalancerClass on the metrics Service when the type is LoadBalancer
+    set:
+      metrics.service.type: LoadBalancer
+      metrics.service.loadBalancerClass: service.k8s.aws/nlb
+    template: templates/metrics-svc.yaml
+    asserts:
       - equal:
           path: spec.loadBalancerClass
           value: service.k8s.aws/nlb
@@ -284,6 +290,21 @@ tests:
     asserts:
       - notExists:
           path: spec.clusterIP
+      - notExists:
+          path: spec.loadBalancerClass
+      - notExists:
+          path: spec.loadBalancerSourceRanges
+
+  # loadBalancerClass and loadBalancerSourceRanges are only valid on a
+  # LoadBalancer Service, so they are not rendered when the type is not
+  # LoadBalancer, even if set.
+  - it: should not render loadBalancer fields when the type is not LoadBalancer
+    set:
+      metrics.service.loadBalancerClass: service.k8s.aws/nlb
+      metrics.service.loadBalancerSourceRanges:
+        - 10.0.0.0/8
+    template: templates/metrics-svc.yaml
+    asserts:
       - notExists:
           path: spec.loadBalancerClass
       - notExists:
