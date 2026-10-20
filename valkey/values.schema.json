@@ -370,9 +370,6 @@
                         "extraEnv": {
                             "type": "array"
                         },
-                        "tlsServerName": {
-                            "type": "string"
-                        },
                         "extraVolumeMounts": {
                             "type": "array"
                         },
@@ -438,9 +435,6 @@
                         "enabled": {
                             "type": "boolean"
                         },
-                        "labels": {
-                            "type": "object"
-                        },
                         "honorLabels": {
                             "type": "boolean"
                         },
@@ -504,9 +498,6 @@
                         "enabled": {
                             "type": "boolean"
                         },
-                        "annotations": {
-                            "type": "object"
-                        },
                         "labels": {
                             "type": "object"
                         },
@@ -558,9 +549,6 @@
                         },
                         "enabled": {
                             "type": "boolean"
-                        },
-                        "labels": {
-                            "type": "object"
                         },
                         "honorLabels": {
                             "type": "boolean"
