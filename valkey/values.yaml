@@ -58,7 +58,7 @@ podSecurityContext:
 # saves its dataset on shutdown, so raise it for large datasets. With Sentinel
 # it must also be longer than sentinel.preStopFailoverTimeoutSeconds,
 # otherwise Kubernetes sends SIGKILL while the graceful failover is still running.
-terminationGracePeriodSeconds: 30
+terminationGracePeriodSeconds: 30 # @schema minimum:0
 
 # Priority class name for pod scheduling (leave empty to use cluster's default)
 priorityClassName: ""
@@ -282,7 +282,7 @@ replica:
 
   # Number of Valkey pods, the master included: 1 runs the master alone,
   # 3 runs a master and two replicas. Sentinel needs at least 2.
-  replicas: 3
+  replicas: 3 # @schema minimum:1
 
   # Username for replicas to authenticate to master, ignored if auth.enabled is false.
   # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
@@ -397,7 +397,7 @@ sentinel:
   # next pod only after the restarted one has been ready this long. Sentinel
   # still marks a restarted pod as down for several seconds after it is ready,
   # and a failover in that window leaves the pod following the old master.
-  minReadySeconds: 15
+  minReadySeconds: 15 # @schema minimum:0
 
   # How long Sentinel waits for a peer or Valkey node on startup before it
   # gives up on discovering the current master and assumes pod-0 is the master
@@ -507,9 +507,9 @@ sentinel:
   #         matchLabels:
   #           app.kubernetes.io/instance: <release name>
   #           app.kubernetes.io/component: sentinel
-  nodeSelector: null
+  nodeSelector: null # @schema type:[object, null]
   affinity: {}
-  tolerations: null
+  tolerations: null # @schema type:[array, null]
   topologySpreadConstraints: []
 
   # PodDisruptionBudget for the Sentinel pods. Without one, a node drain can
@@ -520,12 +520,15 @@ sentinel:
     # Enable the PodDisruptionBudget
     enabled: false
     # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
+    # @schema oneOf:[{type: integer, minimum: 0}, {type: string, pattern: "^[0-9]+%$"}, {type: "null"}]
     minAvailable: null
     # Maximum number of pods that can be unavailable during disruptions.
     # 0 is honoured and forbids every voluntary eviction, which blocks node drains.
+    # @schema oneOf:[{type: integer, minimum: 0}, {type: string, pattern: "^[0-9]+%$"}, {type: "null"}]
     maxUnavailable: 1
     # Unhealthy pod eviction policy (optional)
     # Valid values: IfHealthyBudget, AlwaysAllow
+    # @schema type:[string, null]; enum:[IfHealthyBudget, AlwaysAllow, "", null]
     unhealthyPodEvictionPolicy: ""
 
 # HAProxy in front of a Sentinel setup, for clients that cannot talk to Sentinel.
@@ -612,7 +615,7 @@ haproxy:
     # one". Use "none" for such a certificate, or add the pod names to it:
     #   <release>-valkey-<index>.<release>-valkey-headless.<ns>.svc.<domain>
     #   <release>-valkey-sentinel-<index>.<release>-valkey-sentinel-hl.<ns>.svc.<domain>
-    verify: required
+    verify: required # @schema enum:[required, none]
     # Key in tls.existingSecret holding the client certificate HAProxy presents
     # to the nodes, required when tls.requireClientCertificate is true. HAProxy
     # reads the certificate and its private key from one file, so this key must
@@ -625,12 +628,15 @@ haproxy:
     # Enable the PodDisruptionBudget
     enabled: false
     # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
+    # @schema oneOf:[{type: integer, minimum: 0}, {type: string, pattern: "^[0-9]+%$"}, {type: "null"}]
     minAvailable: null
     # Maximum number of pods that can be unavailable during disruptions.
     # 0 is honoured and forbids every voluntary eviction, which blocks node drains.
+    # @schema oneOf:[{type: integer, minimum: 0}, {type: string, pattern: "^[0-9]+%$"}, {type: "null"}]
     maxUnavailable: 1
     # Unhealthy pod eviction policy (optional)
     # Valid values: IfHealthyBudget, AlwaysAllow
+    # @schema type:[string, null]; enum:[IfHealthyBudget, AlwaysAllow, "", null]
     unhealthyPodEvictionPolicy: ""
 
   # Resource limits/requests for the HAProxy container
@@ -672,9 +678,9 @@ haproxy:
   # topologySpreadConstraints do not, as those written for the Valkey pods
   # select the Valkey pods' labels. priorityClassName and runtimeClassName
   # come from the top level values.
-  nodeSelector: null
+  nodeSelector: null # @schema type:[object, null]
   affinity: {}
-  tolerations: null
+  tolerations: null # @schema type:[array, null]
   topologySpreadConstraints: []
 
   # Additional init containers, volumes and volume mounts. Mounts on /tls or
@@ -750,15 +756,18 @@ podDisruptionBudget:
   # Enable PodDisruptionBudget
   enabled: false
   # Minimum number of pods that must be available (takes precedence over maxUnavailable if both set)
+  # @schema oneOf:[{type: integer, minimum: 0}, {type: string, pattern: "^[0-9]+%$"}, {type: "null"}]
   minAvailable: null
   # Maximum number of pods that can be unavailable during disruptions
+  # @schema oneOf:[{type: integer, minimum: 0}, {type: string, pattern: "^[0-9]+%$"}, {type: "null"}]
   maxUnavailable: 1
   # Unhealthy pod eviction policy (optional)
   # Valid values: IfHealthyBudget, AlwaysAllow
+  # @schema type:[string, null]; enum:[IfHealthyBudget, AlwaysAllow, "", null]
   unhealthyPodEvictionPolicy: ""
 
 # Valkey logging level: debug, verbose, notice, warning
-valkeyLogLevel: "notice"
+valkeyLogLevel: "notice" # @schema enum:[debug, verbose, notice, warning, nothing]
 # Additional environment variables for the Valkey container, as a list of
 # Kubernetes EnvVar entries (value or valueFrom)
 extraEnv: []
@@ -827,8 +836,17 @@ metrics:
     # Service type (ClusterIP, NodePort, LoadBalancer)
     type: ClusterIP
     # Port on which the metrics exporter service will be exposed
-    ports:
-      http: 9121
+    port: 9121
+    # NodePort value (if service.type is NodePort)
+    nodePort: 0
+    # ClusterIP value
+    clusterIP: ""
+    # Class of a load balancer implementation
+    loadBalancerClass: ""
+    # If specified and supported by the platform, this will restrict traffic through the cloud-provider load-balancer
+    # will be restricted to the specified client IPs.
+    # This field will be ignored if the cloud-provider does not support the feature.
+    loadBalancerSourceRanges: []
     # Optional annotations for the metrics exporter service
     annotations: {}
     # Optional labels for the metrics exporter service
@@ -859,8 +877,10 @@ metrics:
     # Pod labels to copy onto the generated metrics
     podTargetLabels: []
     # Maximum number of samples to collect per scrape (an integer; false for no limit)
+    # @schema oneOf:[{type: integer, minimum: 0}, {const: false}, {type: "null"}]
     sampleLimit: false
     # Maximum number of scrape targets allowed (an integer; false for no limit)
+    # @schema oneOf:[{type: integer, minimum: 0}, {const: false}, {type: "null"}]
     targetLimit: false
   podMonitor:
     # Enable PodMonitor resource for scraping pod metrics
@@ -885,8 +905,10 @@ metrics:
     # Pod labels to attach to the metrics
     podTargetLabels: []
     # Maximum samples to scrape from each Pod (an integer; false for no limit)
+    # @schema oneOf:[{type: integer, minimum: 0}, {const: false}, {type: "null"}]
     sampleLimit: false
     # Maximum number of pods to scrape (an integer; false for no limit)
+    # @schema oneOf:[{type: integer, minimum: 0}, {const: false}, {type: "null"}]
     targetLimit: false
 
   # PrometheusRule configuration for alerting rules (used by kube-prometheus-stack)

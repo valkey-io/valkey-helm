@@ -53,6 +53,7 @@ tests:
           value: "my-protocol"
   - it: should be able to set custom loadBalancerClass
     set:
+      service.type: LoadBalancer
       service.loadBalancerClass: "custom-lb-class"
     template: templates/service.yaml
     asserts:
@@ -71,6 +72,7 @@ tests:
   # More than one entry: a single one also rendered fine as a Go-formatted list
   - it: should be able to set loadBalancerSourceRanges
     set:
+      service.type: LoadBalancer
       service.loadBalancerSourceRanges: ["10.0.0.1/32", "192.168.0.0/16"]
     template: templates/service.yaml
     asserts:

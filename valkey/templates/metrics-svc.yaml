@@ -16,11 +16,24 @@ metadata:
     {{- end }}
 spec:
   type: {{ .Values.metrics.service.type }}
+  {{- if .Values.metrics.service.clusterIP }}
+  clusterIP: {{ .Values.metrics.service.clusterIP }}
+  {{- end }}
+  {{- if and (eq .Values.metrics.service.type "LoadBalancer") .Values.metrics.service.loadBalancerClass }}
+  loadBalancerClass: {{ .Values.metrics.service.loadBalancerClass }}
+  {{- end }}
+  {{- if and (eq .Values.metrics.service.type "LoadBalancer") .Values.metrics.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml .Values.metrics.service.loadBalancerSourceRanges | nindent 4 }}
+  {{- end }}
   ports:
     - name: metrics
-      port: {{ .Values.metrics.service.ports.http }}
+      port: {{ .Values.metrics.service.port }}
       protocol: TCP
       targetPort: metrics
+      {{- if and (eq .Values.metrics.service.type "NodePort") .Values.metrics.service.nodePort }}
+      nodePort: {{ .Values.metrics.service.nodePort }}
+      {{- end }}
       {{- if .Values.metrics.service.appProtocol }}
       appProtocol: {{ .Values.metrics.service.appProtocol }}
       {{- end }}

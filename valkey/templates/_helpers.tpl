@@ -302,6 +302,7 @@ Helm would delete the claim and the pod would start on an empty volume.
   (list "metrics.exporter.extraEnvs" "metrics.exporter.extraEnvs was replaced by metrics.exporter.extraEnv, a list of Kubernetes EnvVar entries (name, value or valueFrom).")
   (list "metrics.exporter.extraExporterSecrets" "metrics.exporter.extraExporterSecrets was removed: add a secret volume to extraVolumes and mount it with metrics.exporter.extraVolumeMounts.")
   (list "metrics.service.extraLabels" "metrics.service.extraLabels was renamed to metrics.service.labels.")
+  (list "metrics.service.ports" "metrics.service.ports was flattened to metrics.service.port: set metrics.service.port directly.")
   (list "metrics.serviceMonitor.extraLabels" "metrics.serviceMonitor.extraLabels was renamed to metrics.serviceMonitor.labels.")
   (list "metrics.podMonitor.extraLabels" "metrics.podMonitor.extraLabels was renamed to metrics.podMonitor.labels.")
   (list "metrics.prometheusRule.extraLabels" "metrics.prometheusRule.extraLabels was renamed to metrics.prometheusRule.labels.")

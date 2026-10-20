@@ -123,6 +123,15 @@ tests:
       - failedTemplate:
           errorPattern: "metrics.service.extraLabels was renamed to metrics.service.labels.*See UPGRADE.md."
 
+  - it: should refuse metrics.service.ports
+    set:
+      metrics.service.ports:
+        http: 9121
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.service.ports was flattened to metrics.service.port.*See UPGRADE.md."
+
   - it: should refuse metrics.serviceMonitor.extraLabels
     set:
       metrics.serviceMonitor.extraLabels:

@@ -42,14 +42,16 @@ You will need the following tools installed locally:
 | ---------------------------------------------------------------------- | --------------- | ---------------------------------------- |
 | [Helm](https://helm.sh/docs/intro/install/)                            | 3.5+            | Linting, templating, and packaging.      |
 | [helm-unittest](https://github.com/helm-unittest/helm-unittest) plugin | 1.0.2+          | Running the chart unit tests.            |
+| [helm-values-schema-json](https://github.com/losisin/helm-values-schema-json) plugin | any recent | Generating `values.schema.json` (`helm schema`). |
 | [Git](https://git-scm.com/)                                            | any recent      | Version control and DCO sign-off.        |
 | [just](https://github.com/casey/just) (optional)                       | any recent      | Convenience task runner (`Justfile`).    |
 | A Kubernetes cluster (optional)                                        | 1.20+           | End-to-end verification (kind/minikube). |
 
-Install the `helm-unittest` plugin:
+Install the `helm-unittest` and `helm-values-schema-json` plugins:
 
 ```bash
 helm plugin install https://github.com/helm-unittest/helm-unittest --version 1.0.2
+helm plugin install https://github.com/losisin/helm-values-schema-json
 ```
 
 ### Cloning the repository
@@ -113,9 +115,14 @@ Common places you will make changes within `./valkey`:
 
 - `templates/` — Kubernetes manifest templates (StatefulSet, Services,
   ConfigMaps, etc.) and `_helpers.tpl` for shared template logic.
-- `values.yaml` — default configuration values exposed to users.
-- `values.schema.json` — JSON schema validating user-supplied values. **Keep it
-  in sync with `values.yaml`** when you add, remove, or rename a value.
+- `values.yaml` — default configuration values exposed to users. Validation
+  constraints are declared here as `# @schema` annotations (see
+  [helm-values-schema-json](https://github.com/losisin/helm-values-schema-json)).
+- `values.schema.json` — **generated** JSON schema validating user-supplied
+  values. **Do not hand-edit it.** Add or change a constraint through the
+  `# @schema` annotations in `values.yaml`, then regenerate the schema with the
+  Justfile `schema` target (`just schema`, or `cd valkey && helm schema`). The
+  generator is configured by `valkey/.schema.yaml`.
 - `README.md` — user-facing chart documentation. Update it when you change
   configurable values or behavior.
 - `tests/` — `helm-unittest` test suites.
@@ -127,8 +134,9 @@ Common places you will make changes within `./valkey`:
   requires it.
 - Make new behavior **opt-in** and preserve existing defaults so upgrades stay
   non-breaking wherever possible.
-- Every new or changed configurable value should be reflected in `values.yaml`,
-  `values.schema.json`, and documented in `README.md`.
+- Every new or changed configurable value should be reflected in `values.yaml`
+  (with `# @schema` annotations for any validation constraint), regenerated into
+  `values.schema.json` via `just schema`, and documented in `README.md`.
 - Add or update unit tests in `tests/` for any template change.
 
 ---
