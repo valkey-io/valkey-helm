@@ -28,7 +28,8 @@ tests:
     template: templates/statefulset.yaml
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
     asserts:
       - exists:
           path: spec.template.spec.containers[0].startupProbe

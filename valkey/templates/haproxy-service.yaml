@@ -14,12 +14,12 @@ spec:
   {{- if .Values.haproxy.service.clusterIP }}
   clusterIP: {{ .Values.haproxy.service.clusterIP }}
   {{- end }}
-  {{- if .Values.haproxy.service.loadBalancerClass }}
+  {{- if and (eq .Values.haproxy.service.type "LoadBalancer") .Values.haproxy.service.loadBalancerClass }}
   loadBalancerClass: {{ .Values.haproxy.service.loadBalancerClass }}
   {{- end }}
-  {{- with .Values.haproxy.service.loadBalancerSourceRanges }}
+  {{- if and (eq .Values.haproxy.service.type "LoadBalancer") .Values.haproxy.service.loadBalancerSourceRanges }}
   loadBalancerSourceRanges:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .Values.haproxy.service.loadBalancerSourceRanges | nindent 4 }}
   {{- end }}
   ports:
     - name: valkey-write

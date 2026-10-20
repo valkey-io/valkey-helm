@@ -1,17 +1,20 @@
 suite: network policy
 templates:
   - templates/netpolicy.yaml
+set:
+  networkPolicy.enabled: true
 tests:
+  - it: should not render a policy by default
+    set:
+      networkPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: should carry the chart's standard labels and commonLabels
     set:
       commonLabels:
         team: data
-      networkPolicy:
-        ingress:
-          - from:
-              - podSelector:
-                  matchLabels:
-                    app: client
     asserts:
       - equal:
           path: metadata.labels["app.kubernetes.io/instance"]
@@ -27,15 +30,11 @@ tests:
     set:
       commonLabels:
         team: data
-      networkPolicy:
-        labels:
-          policy-tier: restricted
-          team: overridden
-        ingress:
-          - from:
-              - podSelector:
-                  matchLabels:
-                    app: client
+      networkPolicy.labels:
+        policy-tier: restricted
+        team: overridden
+      networkPolicy.annotations:
+        owner: platform
     asserts:
       - equal:
           path: metadata.labels.policy-tier
@@ -46,8 +45,186 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
           value: valkey
+      - equal:
+          path: metadata.annotations.owner
+          value: platform
 
-  - it: should not render a policy by default
+  - it: should select the Valkey pods and govern both directions
     asserts:
-      - hasDocuments:
-          count: 0
+      - equal:
+          path: spec.podSelector.matchLabels
+          value:
+            app.kubernetes.io/name: valkey
+            app.kubernetes.io/instance: RELEASE-NAME
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+            - Egress
+
+  - it: should admit any client on the Valkey port and allow all egress by default
+    asserts:
+      - equal:
+          path: spec.ingress[0]
+          value:
+            ports:
+              - port: 6379
+      - equal:
+          path: spec.egress
+          value:
+            - {}
+
+  - it: should admit only labelled clients and this release's pods when allowExternal is false
+    release:
+      name: rn
+    set:
+      networkPolicy.allowExternal: false
+    asserts:
+      - equal:
+          path: spec.ingress[0].from
+          value:
+            - podSelector:
+                matchLabels:
+                  rn-valkey-client: "true"
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: valkey
+                  app.kubernetes.io/instance: rn
+
+  # Without these, Sentinel cannot monitor the nodes and HAProxy cannot check
+  # or reach them.
+  - it: should admit this release's Sentinel and HAProxy pods when allowExternal is false
+    set:
+      networkPolicy.allowExternal: false
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 1Gi
+      sentinel.enabled: true
+      haproxy.enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress[0].from
+          content:
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: valkey-sentinel
+                app.kubernetes.io/instance: RELEASE-NAME
+                app.kubernetes.io/component: sentinel
+      - contains:
+          path: spec.ingress[0].from
+          content:
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: valkey-haproxy
+                app.kubernetes.io/instance: RELEASE-NAME
+                app.kubernetes.io/component: haproxy
+
+  - it: should add the namespace selectors when ingressNSMatchLabels is set
+    set:
+      networkPolicy.allowExternal: false
+      networkPolicy.ingressNSMatchLabels:
+        kubernetes.io/metadata.name: my-app
+      networkPolicy.ingressNSPodMatchLabels:
+        role: client
+    asserts:
+      - contains:
+          path: spec.ingress[0].from
+          content:
+            namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: my-app
+            podSelector:
+              matchLabels:
+                role: client
+
+  # A label name is limited to 63 characters.
+  - it: should keep the client label valid for long names
+    set:
+      fullnameOverride: "a-very-long-release-name-that-goes-past-the-label-name-limit"
+      networkPolicy.allowExternal: false
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchLabels["a-very-long-release-name-that-goes-past-the-label-name-l-client"]
+          value: "true"
+
+  - it: should limit egress to DNS and this release's pods when allowExternalEgress is false
+    set:
+      networkPolicy.allowExternalEgress: false
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 1Gi
+      sentinel.enabled: true
+    asserts:
+      - notContains:
+          path: spec.egress
+          content: {}
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - port: 53
+                protocol: UDP
+              - port: 53
+                protocol: TCP
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - port: 6379
+            to:
+              - podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: valkey
+                    app.kubernetes.io/instance: RELEASE-NAME
+      # The init container and the preStop hook ask Sentinel for the master.
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - port: 26379
+            to:
+              - podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: valkey-sentinel
+                    app.kubernetes.io/instance: RELEASE-NAME
+                    app.kubernetes.io/component: sentinel
+
+  - it: should open the metrics port only when metrics are enabled
+    set:
+      metrics.enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - port: 9121
+
+  - it: should not open the metrics port when metrics are disabled
+    asserts:
+      - notContains:
+          path: spec.ingress
+          content:
+            ports:
+              - port: 9121
+
+  - it: should add extra ingress and egress rules as they are
+    set:
+      networkPolicy.extraIngress:
+        - ports:
+            - port: 8080
+      networkPolicy.extraEgress:
+        - to:
+            - ipBlock:
+                cidr: 10.0.0.0/8
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - port: 8080
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 10.0.0.0/8

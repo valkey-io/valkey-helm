@@ -1,0 +1,263 @@
+suite: persistence
+templates:
+  - templates/deploy_valkey.yaml
+  - templates/statefulset.yaml
+  - templates/pvc.yaml
+  - templates/init_config.yaml
+  - templates/secret.yaml
+release:
+  name: rel
+tests:
+  # Standalone
+
+  - it: should use an emptyDir without persistence
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            emptyDir: {}
+
+  - it: should not create a PVC without persistence
+    template: templates/pvc.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should keep the standalone PVC named after the release
+    set:
+      persistence.enabled: true
+      persistence.size: 5Gi
+      persistence.storageClass: fast
+    template: templates/pvc.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: rel-valkey
+      - equal:
+          path: spec
+          value:
+            accessModes:
+              - ReadWriteOnce
+            volumeMode: Filesystem
+            resources:
+              requests:
+                storage: 5Gi
+            storageClassName: fast
+      - notExists:
+          path: metadata.annotations
+
+  - it: should mount the standalone PVC
+    set:
+      persistence.enabled: true
+      persistence.size: 5Gi
+      persistence.subPath: data
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            persistentVolumeClaim:
+              claimName: rel-valkey
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-data
+            mountPath: /data
+            subPath: data
+
+  - it: should label, annotate and keep the standalone PVC
+    set:
+      persistence.enabled: true
+      persistence.size: 5Gi
+      persistence.keepOnUninstall: true
+      persistence.labels:
+        backup: daily
+      persistence.annotations:
+        note: valkey
+    template: templates/pvc.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.backup
+          value: daily
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/resource-policy: keep
+            note: valkey
+
+  - it: should mount an existing claim instead of creating one
+    set:
+      persistence.enabled: true
+      persistence.existingClaim: my-claim
+      persistence.size: 5Gi
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            persistentVolumeClaim:
+              claimName: my-claim
+
+  - it: should not create a PVC for an existing claim
+    set:
+      persistence.enabled: true
+      persistence.existingClaim: my-claim
+    template: templates/pvc.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should prefer the created PVC over hostPath, as in 0.x
+    set:
+      persistence.enabled: true
+      persistence.size: 5Gi
+      persistence.hostPath: /srv/valkey
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            persistentVolumeClaim:
+              claimName: rel-valkey
+
+  - it: should use a hostPath volume
+    set:
+      persistence.enabled: true
+      persistence.hostPath: /srv/valkey
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            hostPath:
+              path: /srv/valkey
+              type: DirectoryOrCreate
+
+  - it: should fail when persistence is enabled without a volume source
+    set:
+      persistence.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "persistence.enabled needs persistence.size, persistence.existingClaim or persistence.hostPath.*"
+
+  - it: should fail when a volume source is set but persistence is disabled
+    set:
+      persistence.existingClaim: my-claim
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: ".*is set but persistence.enabled is false.*"
+
+  # Replication
+
+  - it: should keep the replication claim template unchanged by default
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 5Gi
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates
+          value:
+            - apiVersion: v1
+              kind: PersistentVolumeClaim
+              metadata:
+                name: valkey-data
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 5Gi
+
+  - it: should render the replication storage class, labels, annotations and subPath
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 5Gi
+      persistence.storageClass: fast
+      persistence.subPath: data
+      persistence.labels:
+        backup: daily
+      persistence.annotations:
+        note: valkey
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata
+          value:
+            name: valkey-data
+            labels:
+              backup: daily
+            annotations:
+              note: valkey
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: fast
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-data
+            mountPath: /data
+            subPath: data
+
+  - it: should not create a standalone PVC in replication mode
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 5Gi
+    template: templates/pvc.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail in replication mode without persistence
+    set:
+      replica.enabled: true
+      persistence.size: 5Gi
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Replication requires persistent storage.*"
+
+  - it: should fail on standalone only options in replication mode
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 5Gi
+      persistence.existingClaim: my-claim
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: ".*only apply to standalone mode.*"
+
+  # 0.x values
+
+  - it: should refuse the 0.x dataStorage values
+    set:
+      dataStorage:
+        enabled: true
+        requestedSize: 5Gi
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "dataStorage was replaced by persistence.*"
+
+  - it: should refuse the 0.x replica.persistence values
+    set:
+      replica.enabled: true
+      replica.persistence.size: 5Gi
+      persistence.enabled: true
+      persistence.size: 5Gi
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "replica.persistence was replaced by persistence.*"

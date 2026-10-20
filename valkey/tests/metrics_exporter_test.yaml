@@ -4,6 +4,7 @@ templates:
   - templates/statefulset.yaml
   - templates/init_config.yaml
   - templates/secret.yaml
+  - templates/metrics-svc.yaml
 set:
   metrics.enabled: true
 tests:
@@ -28,7 +29,8 @@ tests:
   - it: should point the StatefulSet exporter at the local Valkey port
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
       service.port: 6380
     template: templates/statefulset.yaml
     asserts:
@@ -72,7 +74,8 @@ tests:
   - it: should connect the StatefulSet exporter over TLS
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
       tls.enabled: true
       tls.existingSecret: valkey-tls
     template: templates/statefulset.yaml
@@ -121,10 +124,11 @@ tests:
             name: REDIS_EXPORTER_TLS_SERVER_NAME
             value: valkey.example.svc.cluster.local
 
-  - it: should leave REDIS_ADDR to metrics.exporter.extraEnvs instead of setting it twice
+  - it: should leave REDIS_ADDR to metrics.exporter.extraEnv instead of setting it twice
     set:
-      metrics.exporter.extraEnvs:
-        REDIS_ADDR: redis://localhost:6390
+      metrics.exporter.extraEnv:
+        - name: REDIS_ADDR
+          value: redis://localhost:6390
     template: templates/deploy_valkey.yaml
     asserts:
       - contains:
@@ -138,14 +142,16 @@ tests:
             name: REDIS_ADDR
             value: redis://localhost:6379
 
-  - it: should leave TLS settings to metrics.exporter.extraEnvs instead of setting them twice
+  - it: should leave TLS settings to metrics.exporter.extraEnv instead of setting them twice
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
       tls.enabled: true
       tls.existingSecret: valkey-tls
-      metrics.exporter.extraEnvs:
-        REDIS_EXPORTER_TLS_CLIENT_CERT_FILE: /client/tls.crt
+      metrics.exporter.extraEnv:
+        - name: REDIS_EXPORTER_TLS_CLIENT_CERT_FILE
+          value: /client/tls.crt
     template: templates/statefulset.yaml
     asserts:
       - contains:
@@ -164,10 +170,13 @@ tests:
             name: REDIS_EXPORTER_TLS_CA_CERT_FILE
             value: /tls/ca.crt
 
-  - it: should not mount /tls twice when extraVolumeMounts already mounts it
+  # The 0.x workaround for an exporter without TLS files; the chart mounts
+  # them now, and Kubernetes rejects two mounts on one path.
+  - it: should refuse a /tls mount in metrics.exporter.extraVolumeMounts
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
       tls.enabled: true
       tls.existingSecret: valkey-tls
       metrics.exporter.extraVolumeMounts:
@@ -175,19 +184,8 @@ tests:
           mountPath: /tls/
     template: templates/statefulset.yaml
     asserts:
-      - lengthEqual:
-          path: spec.template.spec.containers[1].volumeMounts
-          count: 1
-      - contains:
-          path: spec.template.spec.containers[1].volumeMounts
-          content:
-            name: my-exporter-tls
-            mountPath: /tls/
-      - contains:
-          path: spec.template.spec.containers[1].env
-          content:
-            name: REDIS_EXPORTER_TLS_CA_CERT_FILE
-            value: /tls/ca.crt
+      - failedTemplate:
+          errorPattern: "metrics.exporter.extraVolumeMounts mounts /tls, which the chart uses for the TLS files.*See UPGRADE.md."
 
   - it: should keep its own /tls mount next to unrelated extraVolumeMounts
     set:
@@ -222,3 +220,92 @@ tests:
     template: templates/deploy_valkey.yaml
     asserts:
       - notFailedTemplate: {}
+
+  # The metrics Service exposes the same parity fields as the other service
+  # blocks: clusterIP, loadBalancerClass, loadBalancerSourceRanges and
+  # nodePort render only when they apply.
+  - it: should render the metrics Service port on the flat path
+    template: templates/metrics-svc.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 9121
+
+  - it: should set nodePort on the metrics Service when type is NodePort
+    set:
+      metrics.service.type: NodePort
+      metrics.service.nodePort: 30091
+    template: templates/metrics-svc.yaml
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30091
+
+  - it: should not set nodePort when the metrics Service type is ClusterIP
+    set:
+      metrics.service.nodePort: 30091
+    template: templates/metrics-svc.yaml
+    asserts:
+      - notExists:
+          path: spec.ports[0].nodePort
+
+  - it: should restrict the metrics LoadBalancer to loadBalancerSourceRanges
+    set:
+      metrics.service.type: LoadBalancer
+      metrics.service.loadBalancerSourceRanges:
+        - 10.0.0.0/8
+    template: templates/metrics-svc.yaml
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+      - contains:
+          path: spec.loadBalancerSourceRanges
+          content: 10.0.0.0/8
+
+  - it: should set clusterIP on the metrics Service when configured
+    set:
+      metrics.service.clusterIP: 10.96.0.42
+    template: templates/metrics-svc.yaml
+    asserts:
+      - equal:
+          path: spec.clusterIP
+          value: 10.96.0.42
+
+  - it: should set loadBalancerClass on the metrics Service when the type is LoadBalancer
+    set:
+      metrics.service.type: LoadBalancer
+      metrics.service.loadBalancerClass: service.k8s.aws/nlb
+    template: templates/metrics-svc.yaml
+    asserts:
+      - equal:
+          path: spec.loadBalancerClass
+          value: service.k8s.aws/nlb
+
+  - it: should not render clusterIP, loadBalancerClass or sourceRanges by default
+    template: templates/metrics-svc.yaml
+    asserts:
+      - notExists:
+          path: spec.clusterIP
+      - notExists:
+          path: spec.loadBalancerClass
+      - notExists:
+          path: spec.loadBalancerSourceRanges
+
+  # loadBalancerClass and loadBalancerSourceRanges are only valid on a
+  # LoadBalancer Service, so they are not rendered when the type is not
+  # LoadBalancer, even if set.
+  - it: should not render loadBalancer fields when the type is not LoadBalancer
+    set:
+      metrics.service.loadBalancerClass: service.k8s.aws/nlb
+      metrics.service.loadBalancerSourceRanges:
+        - 10.0.0.0/8
+    template: templates/metrics-svc.yaml
+    asserts:
+      - notExists:
+          path: spec.loadBalancerClass
+      - notExists:
+          path: spec.loadBalancerSourceRanges

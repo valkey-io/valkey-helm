@@ -1,0 +1,12 @@
+# Configuration for losisin/helm-values-schema-json (invoked as `helm schema`).
+# Regenerates values.schema.json from values.yaml and its `# @schema`
+# annotations. Run from this chart directory via the repo Justfile `schema`
+# target. Do not hand-edit values.schema.json; edit the annotations instead.
+values:
+  - values.yaml
+output: values.schema.json
+draft: 2020
+indent: 4
+# values.yaml already declares a top-level `global` block, so the generator's
+# automatic `global` injection is not needed.
+noDefaultGlobal: true

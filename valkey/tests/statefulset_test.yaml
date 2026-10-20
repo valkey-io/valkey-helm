@@ -7,16 +7,18 @@ tests:
   - it: should fail when replica enabled but no size provided
     set:
       replica.enabled: true
-      replica.persistence.size: ""
+      persistence.enabled: true
+      persistence.size: ""
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "Replica mode requires persistent storage.*"
+          errorPattern: "Replication requires persistent storage.*"
 
   - it: should succeed when replica enabled with size provided
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
     template: templates/statefulset.yaml
     asserts:
       - isKind:
@@ -28,8 +30,9 @@ tests:
   - it: should succeed when replica enabled with custom storageClass
     set:
       replica.enabled: true
-      replica.persistence.size: "10Gi"
-      replica.persistence.storageClass: "fast-ssd"
+      persistence.enabled: true
+      persistence.size: "10Gi"
+      persistence.storageClass: "fast-ssd"
     template: templates/statefulset.yaml
     asserts:
       - isKind:
@@ -44,7 +47,8 @@ tests:
   - it: should always have annotations block even without podAnnotations
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podAnnotations: null
     template: templates/statefulset.yaml
     asserts:
@@ -58,7 +62,8 @@ tests:
   - it: should include podAnnotations when provided
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       podAnnotations:
         prometheus.io/scrape: "true"
         custom.annotation: "value"
@@ -78,7 +83,8 @@ tests:
   - it: should use image pull policy for containers, initContainers and metrics
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       image.pullPolicy: Always
       metrics.enabled: true
       metrics.exporter.image.pullPolicy: Always
@@ -97,7 +103,8 @@ tests:
   - it: should not have imagePullSecrets when not configured
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
     template: templates/statefulset.yaml
     asserts:
       - isKind:
@@ -108,7 +115,8 @@ tests:
   - it: should render imagePullSecrets from values.imagePullSecrets
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       imagePullSecrets:
         - myregistrykey
         - anotherregistrykey
@@ -125,7 +133,8 @@ tests:
   - it: should render imagePullSecrets from global.imagePullSecrets
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       global.imagePullSecrets:
         - globalregistrykey
     template: templates/statefulset.yaml
@@ -140,7 +149,8 @@ tests:
   - it: should merge global and local imagePullSecrets
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       global.imagePullSecrets:
         - globalregistrykey
       imagePullSecrets:
@@ -158,7 +168,8 @@ tests:
   - it: should include extraContainers when provided
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       extraContainers:
         - name: nginx
           image: registry.hub.docker.com/nginx/nginx:stable-alpine
@@ -172,7 +183,8 @@ tests:
   - it: should render extraVolumes
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       extraVolumes:
         - name: extra-config
           configMap:
@@ -200,7 +212,8 @@ tests:
   - it: should render extraVolumeMounts for main container
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       extraVolumeMounts:
         - name: extra-config
           mountPath: /extra-config
@@ -226,7 +239,8 @@ tests:
   - it: should render both extraVolumes and extraVolumeMounts together
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       extraVolumes:
         - name: extra-config
           configMap:
@@ -255,7 +269,8 @@ tests:
   - it: should include persistentVolumeClaimRetentionPolicy when configured
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       replica.persistentVolumeClaimRetentionPolicy:
         whenDeleted: Retain
         whenScaled: Delete
@@ -273,7 +288,8 @@ tests:
   - it: should include workload annotations when provided
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       workloadAnnotations:
         example.com/annotation: "test-value"
         custom.annotation: "custom-value"
@@ -291,7 +307,8 @@ tests:
   - it: should render users-secret volume with templated usersExistingSecret
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       auth.enabled: true
       auth.usersExistingSecret: "my-custom-secret-{{ .Release.Name }}"
       auth.aclUsers:
@@ -312,7 +329,8 @@ tests:
   - it: should not have REDIS_PASSWORD env in metrics exporter when auth is disabled
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       auth.enabled: false
       metrics.enabled: true
     template: templates/statefulset.yaml
@@ -327,7 +345,8 @@ tests:
   - it: should set REDIS_PASSWORD from generated secret in metrics exporter when auth is enabled
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       auth.enabled: true
       auth.aclUsers:
         default:
@@ -350,7 +369,8 @@ tests:
   - it: should set REDIS_PASSWORD from existing secret in metrics exporter when usersExistingSecret is set
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       auth.enabled: true
       auth.usersExistingSecret: "my-custom-secret"
       auth.aclUsers:
@@ -373,7 +393,8 @@ tests:
   - it: should render templated usersExistingSecret in metrics exporter
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       auth.enabled: true
       auth.usersExistingSecret: "my-custom-secret-{{ .Release.Name }}"
       auth.aclUsers:
@@ -396,7 +417,8 @@ tests:
   - it: should set REDIS_PASSWORD using custom passwordKey in metrics exporter when usersExistingSecret is set
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       auth.enabled: true
       auth.usersExistingSecret: "my-custom-secret"
       auth.aclUsers:
@@ -419,7 +441,8 @@ tests:
   - it: should not set runtimeClassName when empty
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       runtimeClassName: ""
     template: templates/statefulset.yaml
     asserts:
@@ -431,7 +454,8 @@ tests:
   - it: should set runtimeClassName when provided
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       runtimeClassName: "kata-containers"
     template: templates/statefulset.yaml
     asserts:
@@ -446,7 +470,8 @@ tests:
   - it: should not render extraVolumeMounts for the init container
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
       extraVolumeMounts:
         - name: extra-data
           mountPath: /extra/data
@@ -468,7 +493,8 @@ tests:
   - it: should give the init and main containers the pod name
     set:
       replica.enabled: true
-      replica.persistence.size: 1Gi
+      persistence.enabled: true
+      persistence.size: 1Gi
     template: templates/statefulset.yaml
     asserts:
       - contains:
@@ -489,10 +515,154 @@ tests:
   - it: should set the termination grace period on the replication pods
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
       terminationGracePeriodSeconds: 90
     template: templates/statefulset.yaml
     asserts:
       - equal:
           path: spec.template.spec.terminationGracePeriodSeconds
           value: 90
+
+  - it: should harden the metrics exporter container by default
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: "5Gi"
+      metrics.enabled: true
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+
+  - it: should merge metrics exporter security context overrides onto the defaults
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: "5Gi"
+      metrics.enabled: true
+      metrics.exporter.securityContext:
+        runAsUser: 65532
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+
+  - it: should run as many pods as replica.replicas, the master included
+    set:
+      replica.enabled: true
+      replica.replicas: 3
+      persistence.enabled: true
+      persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should accept a master without replicas
+    set:
+      replica.enabled: true
+      replica.replicas: 1
+      persistence.enabled: true
+      persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: should refuse zero Valkey pods
+    set:
+      replica.enabled: true
+      replica.replicas: 0
+      persistence.enabled: true
+      persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate: {}
+
+  - it: should use fixed container names
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: "5Gi"
+      metrics.enabled: true
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: init
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: valkey
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: metrics
+
+  - it: should label the Valkey pods and workload with the valkey component, outside the selector
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: valkey
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: valkey
+      - notExists:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+
+  - it: should keep the default StatefulSet name
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-valkey
+
+  # Sentinel still marks a restarted pod as down for several seconds after it
+  # is ready; a failover in that window leaves it following the old master.
+  - it: should hold a rolling update until Sentinel has caught up with a restarted pod
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 1Gi
+      sentinel.enabled: true
+      sentinel.password: "pw"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.minReadySeconds
+          value: 15
+
+  - it: should not delay rolling updates without Sentinel
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 1Gi
+    template: templates/statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.minReadySeconds

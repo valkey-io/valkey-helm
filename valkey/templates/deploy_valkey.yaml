@@ -1,5 +1,6 @@
 {{- if not .Values.replica.enabled }}
 {{- include "valkey.validateAuthConfig" . }}
+{{- include "valkey.validatePersistence" . }}
 {{- include "valkey.validateSentinelConfig" . }}
 apiVersion: apps/v1
 kind: Deployment
@@ -7,6 +8,7 @@ metadata:
   name: {{ include "valkey.fullname" . }}
   labels:
     {{- include "valkey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
   {{- with .Values.workloadAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

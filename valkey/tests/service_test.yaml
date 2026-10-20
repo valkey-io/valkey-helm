@@ -53,6 +53,7 @@ tests:
           value: "my-protocol"
   - it: should be able to set custom loadBalancerClass
     set:
+      service.type: LoadBalancer
       service.loadBalancerClass: "custom-lb-class"
     template: templates/service.yaml
     asserts:
@@ -71,6 +72,7 @@ tests:
   # More than one entry: a single one also rendered fine as a Go-formatted list
   - it: should be able to set loadBalancerSourceRanges
     set:
+      service.type: LoadBalancer
       service.loadBalancerSourceRanges: ["10.0.0.1/32", "192.168.0.0/16"]
     template: templates/service.yaml
     asserts:
@@ -91,9 +93,10 @@ tests:
   - it: should not call itself the primary endpoint in sentinel mode
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
-      replica.sentinel.enabled: true
-      replica.sentinel.password: "sentinelpw"
+      persistence.enabled: true
+      persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.password: "sentinelpw"
     template: templates/service.yaml
     asserts:
       # The master can be any pod and a Service cannot select on a role that
@@ -108,7 +111,8 @@ tests:
   - it: should pin to pod-0 and call itself primary without sentinel
     set:
       replica.enabled: true
-      replica.persistence.size: "5Gi"
+      persistence.enabled: true
+      persistence.size: "5Gi"
     template: templates/service.yaml
     asserts:
       # Without Sentinel the master is pod-0 for the life of the release, so

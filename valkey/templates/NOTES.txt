@@ -11,31 +11,31 @@ Chart:        {{ .Chart.Name }} {{ .Chart.Version }}
 App version:  {{ .Chart.AppVersion }}
 
 {{- if .Values.replica.enabled }}
-{{- if .Values.replica.sentinel.enabled }}
+{{- if .Values.sentinel.enabled }}
 ================================================================================
 🔄 HIGH AVAILABILITY MODE (Sentinel)
 ================================================================================
 
 Your Valkey deployment is running in REPLICATION mode with Sentinel:
-- {{ add (int .Values.replica.replicas) 1 }} Valkey pods, 1 of them the master at any time
-- {{ .Values.replica.sentinel.replicas }} Sentinels in a separate StatefulSet, quorum {{ .Values.replica.sentinel.quorum }}
+- {{ .Values.replica.replicas }} Valkey pods, 1 of them the master at any time
+- {{ .Values.sentinel.replicas }} Sentinels in a separate StatefulSet, quorum {{ .Values.sentinel.quorum }}
 
 Sentinel promotes a replica when the master stops responding for
-{{ .Values.replica.sentinel.downAfterMilliseconds }}ms, so the master can be any pod. Clients must therefore
+{{ .Values.sentinel.downAfterMilliseconds }}ms, so the master can be any pod. Clients must therefore
 ask Sentinel for the current master instead of connecting to a fixed pod:
 
-{{- if .Values.replica.sentinel.service.enabled }}
+{{- if .Values.sentinel.service.enabled }}
 {{- $sentinelHost := include "valkey.sentinel.fullname" . }}
-{{- $sentinelPort := .Values.replica.sentinel.service.port }}
+{{- $sentinelPort := .Values.sentinel.service.port }}
 
   $ valkey-cli -h {{ $sentinelHost }} -p {{ $sentinelPort }}{{ include "valkey.cli.tlsFlagsHint" . }} --user sentinel -a <sentinel password> \
-      SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }}
+      SENTINEL get-master-addr-by-name {{ .Values.sentinel.masterSet }}
 
 Most client libraries do this for you, e.g. in Python:
 
   Sentinel([("{{ $sentinelHost }}", {{ $sentinelPort }})],
            sentinel_kwargs={"username": "sentinel", "password": "<sentinel password>"{{ include "valkey.python.tlsDictItems" . }}}{{ include "valkey.python.tlsKwargs" . }}
-           ).master_for("{{ .Values.replica.sentinel.masterSet }}"{{ if .Values.auth.enabled }}, username="<Valkey user>", password="<Valkey password>"{{ end }})
+           ).master_for("{{ .Values.sentinel.masterSet }}"{{ if .Values.auth.enabled }}, username="<Valkey user>", password="<Valkey password>"{{ end }})
 {{- if .Values.tls.enabled }}
 
   The options appear twice on purpose: the ones inside sentinel_kwargs reach
@@ -43,10 +43,10 @@ Most client libraries do this for you, e.g. in Python:
 {{- end }}
 {{- else }}
 
-The Sentinel service is disabled (replica.sentinel.service.enabled), so address
+The Sentinel service is disabled (sentinel.service.enabled), so address
 the Sentinels through the headless service instead:
-{{- range $i := until (int .Values.replica.sentinel.replicas) }}
-  {{ include "valkey.sentinel.fullname" $ }}-{{ $i }}.{{ include "valkey.sentinel.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $.Values.replica.sentinel.port }}
+{{- range $i := until (int .Values.sentinel.replicas) }}
+  {{ include "valkey.sentinel.fullname" $ }}-{{ $i }}.{{ include "valkey.sentinel.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:{{ $.Values.sentinel.port }}
 {{- end }}
 {{- end }}
 
@@ -68,8 +68,8 @@ forwards to the node Sentinel promoted:
 ================================================================================
 
 Your Valkey deployment is running in REPLICATION mode:
-- 1 Master  ({{ include "valkey.fullname" . }}-0)
-- {{ .Values.replica.replicas }} Replica(s)
+- 1 Master  ({{ include "valkey.statefulsetName" . }}-0)
+- {{ sub (int .Values.replica.replicas) 1 }} Replica(s)
 {{- end }}
 
 {{- if .Values.replica.service.enabled }}
@@ -98,30 +98,30 @@ READ Operations (Load-balanced across all pods):
 {{- end }}
 
 Direct Pod Access:
-{{- if .Values.replica.sentinel.enabled }}
-{{- range $i := until (add (int .Values.replica.replicas) 1 | int) }}
-  Pod:     {{ include "valkey.fullname" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
+{{- if .Values.sentinel.enabled }}
+{{- range $i := until (int .Values.replica.replicas) }}
+  Pod:     {{ include "valkey.statefulsetName" $ }}-{{ $i }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
 {{- end }}
 {{- else }}
-  Master:  {{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
-{{- range $i := until (int .Values.replica.replicas) }}
-  Replica: {{ include "valkey.fullname" $ }}-{{ add $i 1 }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
+  Master:  {{ include "valkey.statefulsetName" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+{{- range $i := until (sub (int .Values.replica.replicas) 1 | int) }}
+  Replica: {{ include "valkey.statefulsetName" $ }}-{{ add $i 1 }}.{{ include "valkey.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}
 {{- end }}
 {{- end }}
 
-{{- if .Values.replica.sentinel.enabled }}
+{{- if .Values.sentinel.enabled }}
 WRITE Operations (resolve the master via Sentinel first):
 
 1) In-cluster access:
-  $ MASTER=$(valkey-cli -h {{ include "valkey.sentinel.fullname" . }} -p {{ .Values.replica.sentinel.service.port }}{{ include "valkey.cli.tlsFlagsHint" . }} --user sentinel -a <sentinel password> --raw \
-      SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} | tr '\n' ' ')
+  $ MASTER=$(valkey-cli -h {{ include "valkey.sentinel.fullname" . }} -p {{ .Values.sentinel.service.port }}{{ include "valkey.cli.tlsFlagsHint" . }} --user sentinel -a <sentinel password> --raw \
+      SENTINEL get-master-addr-by-name {{ .Values.sentinel.masterSet }} | tr '\n' ' ')
   $ set -- $MASTER
   $ valkey-cli -h "$1" -p "$2"{{ include "valkey.cli.tlsFlagsHint" . }}{{ if .Values.auth.enabled }} --user <Valkey user> -a <Valkey password>{{ end }} PING
 
 2) Local access:
   $ MASTER=$(kubectl -n {{ .Release.Namespace }} exec {{ include "valkey.sentinel.fullname" . }}-0 -- \
-      env REDISCLI_AUTH=<sentinel password> valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel -p {{ .Values.replica.sentinel.port }} --raw \
-      SENTINEL get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} | tr '\n' ' ')
+      env REDISCLI_AUTH=<sentinel password> valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel -p {{ .Values.sentinel.port }} --raw \
+      SENTINEL get-master-addr-by-name {{ .Values.sentinel.masterSet }} | tr '\n' ' ')
   $ set -- $MASTER
   $ kubectl -n {{ .Release.Namespace }} port-forward "pod/${1%%.*}" "6379:$2"
   $ valkey-cli -h 127.0.0.1 -p 6379{{ include "valkey.cli.tlsFlagsHint" . }}{{ if .Values.auth.enabled }} --user <Valkey user> -a <Valkey password>{{ end }} SET key value
@@ -176,7 +176,7 @@ Port:         {{ .Values.service.port }}
 {{ end }}
 
 ✅ Quick test
-{{- if .Values.replica.sentinel.enabled }}
+{{- if .Values.sentinel.enabled }}
 Resolve the current master using the WRITE Operations commands above, then run:
 $ valkey-cli -h <master host> -p <master port>{{ include "valkey.cli.tlsFlagsHint" . }}{{ if .Values.auth.enabled }} --user <user> -a <password>{{ end }}
 {{- else }}
@@ -189,29 +189,31 @@ valkey> GET foo
 💾 Persistence
 {{- if .Values.replica.enabled }}
 - Persistence is ENABLED (required for replication mode). Each instance has its own volume.
-- Size: {{ .Values.replica.persistence.size }}
-{{- if .Values.replica.persistence.storageClass }}
-- Storage class: {{ .Values.replica.persistence.storageClass }}
+- Size: {{ .Values.persistence.size }}
+{{- if .Values.persistence.storageClass }}
+- Storage class: {{ .Values.persistence.storageClass }}
 {{- end }}
 - To see PVCs:
   $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }}
 {{- else }}
-{{ if .Values.dataStorage.enabled -}}
-{{ if .Values.dataStorage.hostPath -}}
-- Persistence is ENABLED. A hostPath volume is used at path='`{{ .Values.dataStorage.hostPath }}`'.
+{{ if .Values.persistence.enabled -}}
+{{ if and .Values.persistence.hostPath (not .Values.persistence.existingClaim) (not .Values.persistence.size) -}}
+- Persistence is ENABLED. A hostPath volume is used at path='`{{ .Values.persistence.hostPath }}`'.
+{{ else if .Values.persistence.existingClaim -}}
+- Persistence is ENABLED, using the existing PVC `{{ .Values.persistence.existingClaim }}`.
 {{ else -}}
 - Persistence is ENABLED. To see it:
   $ kubectl -n {{ .Release.Namespace }} get pvc -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name={{ include "valkey.name" . }}
-- Note: `dataStorage.keepPvc={{ .Values.dataStorage.keepPvc }}` controls whether the PVC is kept on uninstall.
+- Note: `persistence.keepOnUninstall={{ .Values.persistence.keepOnUninstall }}` controls whether the PVC is kept on uninstall.
 {{ end -}}
 {{ else -}}
 - Persistence is DISABLED. Data will not survive Pod restarts.
 - Enable with:
-    `--set dataStorage.enabled=true --set dataStorage.requestedSize=5Gi` (optionally set `dataStorage.className`)
+    `--set persistence.enabled=true --set persistence.size=5Gi` (optionally set `persistence.storageClass`)
     or
-    `--set dataStorage.enabled=true --set dataStorage.persistentVolumeClaimName=valkey-data-pvc` to use an existing PVC
+    `--set persistence.enabled=true --set persistence.existingClaim=valkey-data-pvc` to use an existing PVC
     or
-    `--set dataStorage.enabled=true --set dataStorage.hostPath=/some/path/` to use a hostPath volume.
+    `--set persistence.enabled=true --set persistence.hostPath=/some/path/` to use a hostPath volume.
 {{- end }}
 {{- end }}
 

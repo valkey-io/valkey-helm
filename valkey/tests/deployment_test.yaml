@@ -3,6 +3,7 @@ templates:
   - templates/deploy_valkey.yaml
   - templates/init_config.yaml
   - templates/secret.yaml
+  - templates/configmap.yaml
 tests:
   - it: should not have auth volumes when auth disabled
     set:
@@ -525,30 +526,60 @@ tests:
 
   # The pod template is shared with the StatefulSet; this is the one mount
   # that is deliberately left to the Deployment.
-  - it: should render extraVolumeMounts for the init container
+  - it: should mount extraVolumeMounts in the Valkey container only
     set:
+      extraVolumes:
+        - name: extra-data
+          emptyDir: {}
       extraVolumeMounts:
         - name: extra-data
           mountPath: /extra/data
     template: templates/deploy_valkey.yaml
     asserts:
       - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-data
+            mountPath: /extra/data
+      - notContains:
           path: spec.template.spec.initContainers[0].volumeMounts
           content:
             name: extra-data
             mountPath: /extra/data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-data
+            emptyDir: {}
 
-  - it: should escape env values that contain quotes or backslashes
+  - it: should render extraEnv entries as given, including valueFrom
     set:
-      env:
-        QUOTED: 'say "hi"'
-        WINDOWS_PATH: 'C:\path\n'
-        NUMBER: 5
+      extraEnv:
+        - name: QUOTED
+          value: 'say "hi"'
+        - name: WINDOWS_PATH
+          value: 'C:\path\n'
+        - name: NUMBER
+          value: "5"
+        - name: FROM_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: my-secret
+              key: token
       metrics.enabled: true
-      metrics.exporter.extraEnvs:
-        EXPORTER_QUOTED: 'say "hi"'
+      metrics.exporter.extraEnv:
+        - name: EXPORTER_QUOTED
+          value: 'say "hi"'
     template: templates/deploy_valkey.yaml
     asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: FROM_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: token
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -616,3 +647,152 @@ tests:
     template: templates/deploy_valkey.yaml
     asserts:
       - failedTemplate: {}
+
+  - it: should recreate the standalone pod by default
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.strategy
+          value:
+            type: Recreate
+
+  - it: should use a rolling update when asked to
+    set:
+      deploymentStrategy: RollingUpdate
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.strategy
+          value:
+            type: RollingUpdate
+
+  - it: should reject an unknown deployment strategy
+    set:
+      deploymentStrategy: Rolling
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate: {}
+
+  - it: should render extraConfig with templating into the config map
+    set:
+      extraConfig: |
+        maxmemory 1gb
+        include /extra/{{ .Release.Name }}.conf
+    template: templates/configmap.yaml
+    asserts:
+      - equal:
+          path: data["valkey.conf"]
+          value: |
+            maxmemory 1gb
+            include /extra/RELEASE-NAME.conf
+
+  - it: should mount extraConfig for the init container and roll the pod on changes
+    set:
+      extraConfig: "maxmemory 1gb"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: valkey-config
+            mountPath: /usr/local/etc/valkey/valkey.conf
+            subPath: valkey.conf
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: should not render the extraConfig config map by default
+    template: templates/configmap.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should keep the ACL file on the valkey-conf volume, without a volume of its own
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: pw
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-acl
+            emptyDir:
+              medium: Memory
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-conf
+            emptyDir:
+              medium: Memory
+
+  - it: should harden the metrics exporter container by default
+    set:
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+
+  - it: should merge metrics exporter security context overrides onto the defaults
+    set:
+      metrics.enabled: true
+      metrics.exporter.securityContext:
+        runAsUser: 65532
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+
+  - it: should drop the metrics exporter security context when set to null
+    set:
+      metrics.enabled: true
+      metrics.exporter.securityContext: null
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[1].securityContext
+
+  - it: should use fixed container names
+    set:
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: init
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: valkey
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: metrics
+
+  - it: should label the Valkey pod and workload with the valkey component, outside the selector
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: valkey
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: valkey
+      - notExists:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]

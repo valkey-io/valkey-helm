@@ -2,20 +2,20 @@
 Pod template shared by the standalone Deployment and the replicated
 StatefulSet, so that an option added to one cannot silently miss the other.
 The parts that only apply to one mode are gated on replica.enabled (and on
-replica.sentinel.enabled, which the validation only allows with replication).
+sentinel.enabled, which the validation only allows with replication).
 Include it under the workload's spec.template with nindent 4.
 */}}
 {{- define "valkey.podTemplate" -}}
 {{- $replicated := .Values.replica.enabled }}
-{{- $sentinel := and $replicated .Values.replica.sentinel.enabled }}
-{{- $preStopFailover := and $sentinel .Values.replica.sentinel.preStopFailover }}
-{{- $storage := .Values.dataStorage }}
-{{- $createPVC := and $storage.enabled (not (empty $storage.requestedSize)) (empty $storage.persistentVolumeClaimName) }}
-{{- /* The StatefulSet's volumeClaimTemplate is always named valkey-data */}}
-{{- $dataVolume := ternary "valkey-data" $storage.volumeName $replicated -}}
+{{- $sentinel := and $replicated .Values.sentinel.enabled }}
+{{- $preStopFailover := and $sentinel .Values.sentinel.preStopFailover }}
+{{- $storage := .Values.persistence -}}
+{{- include "valkey.validateMountPaths" . }}
 metadata:
   labels:
     {{- include "valkey.selectorLabels" . | nindent 4 }}
+    {{- /* Not part of the selectors, which are immutable: only a label */}}
+    app.kubernetes.io/component: valkey
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -27,7 +27,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
     checksum/initconfig: {{ include (print $.Template.BasePath "/init_config.yaml") . | sha256sum | trunc 32 | quote }}
-    {{- if .Values.valkeyConfig }}
+    {{- if .Values.extraConfig }}
     checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 | quote }}
     {{- end }}
     {{- with (include "valkey.authSecretChecksum" .) }}
@@ -47,7 +47,7 @@ spec:
   securityContext:
     {{- toYaml .Values.podSecurityContext | nindent 4 }}
   initContainers:
-    - name: {{ include "valkey.fullnameWithSuffix" (list . "init") }}
+    - name: init
       image: {{ include "valkey.image" . }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
       {{- with .Values.securityContext }}
@@ -69,10 +69,10 @@ spec:
               fieldPath: metadata.name
       {{- end }}
       volumeMounts:
-        - name: {{ $dataVolume }}
+        - name: valkey-data
           mountPath: /data
-          {{- if and (not $replicated) $storage.subPath }}
-          subPath: {{ $storage.subPath }}
+          {{- with $storage.subPath }}
+          subPath: {{ . }}
           {{- end }}
         - name: valkey-conf
           mountPath: /valkey-conf
@@ -91,18 +91,12 @@ spec:
           mountPath: /tls
           readOnly: true
         {{- end }}
-        {{- if .Values.valkeyConfig }}
+        {{- if .Values.extraConfig }}
         - name: valkey-config
           mountPath: /usr/local/etc/valkey/valkey.conf
           subPath: valkey.conf
         {{- end }}
-        {{- if .Values.extraSecretValkeyConfigs }}
-        - name: extravalkeyconfigs-volume
-          mountPath: /extravalkeyconfigs
-        {{- end }}
         {{- if .Values.auth.enabled }}
-        - name: valkey-acl
-          mountPath: /etc/valkey
         {{- if .Values.auth.usersExistingSecret }}
         - name: valkey-users-secret
           mountPath: /valkey-users-secret
@@ -114,12 +108,6 @@ spec:
           readOnly: true
         {{- end }}
         {{- end }}
-        {{- /* Only the Deployment adds extraVolumeMounts to the init container, on purpose */}}
-        {{- if not $replicated }}
-        {{- with .Values.extraVolumeMounts }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- end }}
       {{- with .Values.initResources }}
       resources:
         {{- toYaml . | nindent 8 }}
@@ -128,7 +116,7 @@ spec:
   {{- toYaml . | nindent 4 }}
   {{- end }}
   containers:
-    - name: {{ include "valkey.fullname" . }}
+    - name: valkey
       image: {{ include "valkey.image" . }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
       {{- if $sentinel }}
@@ -153,9 +141,8 @@ spec:
             fieldRef:
               fieldPath: metadata.name
         {{- end }}
-        {{- range $key, $val := .Values.env }}
-        - name: {{ $key }}
-          value: {{ $val | quote }}
+        {{- with .Values.extraEnv }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       ports:
         - name: tcp
@@ -173,10 +160,10 @@ spec:
       resources:
         {{- toYaml .Values.resources | nindent 8 }}
       volumeMounts:
-        - name: {{ $dataVolume }}
+        - name: valkey-data
           mountPath: /data
-          {{- if and (not $replicated) $storage.subPath }}
-          subPath: {{ $storage.subPath }}
+          {{- with $storage.subPath }}
+          subPath: {{ . }}
           {{- end }}
         - name: valkey-conf
           mountPath: /valkey-conf
@@ -196,8 +183,6 @@ spec:
           mountPath: /tls
         {{- end }}
         {{- if .Values.auth.enabled }}
-        - name: valkey-acl
-          mountPath: /etc/valkey
         {{- if $preStopFailover }}
         {{- if .Values.auth.usersExistingSecret }}
         - name: valkey-users-secret
@@ -210,14 +195,6 @@ spec:
           readOnly: true
         {{- end }}
         {{- end }}
-        {{- end }}
-        {{- range $secret := .Values.extraValkeySecrets }}
-        - name: {{ $secret.name }}-valkey
-          mountPath: {{ $secret.mountPath }}
-        {{- end }}
-        {{- range $config := .Values.extraValkeyConfigs }}
-        - name: {{ $config.name }}-valkey
-          mountPath: {{ $config.mountPath }}
         {{- end }}
         {{- with .Values.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
@@ -255,19 +232,15 @@ spec:
       resources:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- $exporterEnvs := .Values.metrics.exporter.extraEnvs | default dict }}
-      {{- /* A /tls mount the user already added through extraVolumeMounts
-             (the workaround before the chart mounted it) takes the place of
-             the chart's own, as Kubernetes rejects a repeated mountPath */}}
-      {{- $exporterTlsMount := .Values.tls.enabled }}
-      {{- range .Values.metrics.exporter.extraVolumeMounts }}
-      {{- if eq (.mountPath | toString | trimSuffix "/") "/tls" }}
-      {{- $exporterTlsMount = false }}
+      {{- /* Names set through metrics.exporter.extraEnv, which replace the
+             chart's own entry of the same name */}}
+      {{- $exporterEnvs := dict }}
+      {{- range .Values.metrics.exporter.extraEnv }}
+      {{- $_ := set $exporterEnvs .name true }}
       {{- end }}
-      {{- end }}
-      {{- if or .Values.metrics.exporter.extraVolumeMounts $exporterTlsMount }}
+      {{- if or .Values.metrics.exporter.extraVolumeMounts .Values.tls.enabled }}
       volumeMounts:
-        {{- if $exporterTlsMount }}
+        {{- if .Values.tls.enabled }}
         - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
           mountPath: /tls
         {{- end }}
@@ -278,7 +251,7 @@ spec:
       env:
         - name: REDIS_ALIAS
           value: {{ include "valkey.fullname" . }}
-        {{- /* A variable also set in metrics.exporter.extraEnvs is left to that
+        {{- /* A variable also set in metrics.exporter.extraEnv is left to that
                entry, so the container never carries the same name twice */}}
         {{- if not (hasKey $exporterEnvs "REDIS_ADDR") }}
         - name: REDIS_ADDR
@@ -311,17 +284,16 @@ spec:
               key: default-password
               {{- end }}
         {{- end }}
-        {{- range $key, $val := .Values.metrics.exporter.extraEnvs }}
-        - name: {{ $key }}
-          value: {{ $val | quote }}
+        {{- with .Values.metrics.exporter.extraEnv }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
     {{- end }}
   {{- with .Values.extraContainers }}
   {{- toYaml . | nindent 4 }}
   {{- end }}
   volumes:
-    # Holds valkey.conf, which init.sh generates there. Memory backed
-    # because the file carries credentials in plain text, and with
+    # Holds valkey.conf and users.acl, which init.sh generates there. Memory
+    # backed because valkey.conf carries credentials in plain text, and with
     # replication CONFIG REWRITE rewrites them into it whenever Sentinel
     # changes the topology.
     - name: valkey-conf
@@ -336,62 +308,16 @@ spec:
       configMap:
         name: {{ include "valkey.fullname" . }}-sentinel-scripts
         defaultMode: 0555
-    - name: sentinel-auth
-      projected:
-        defaultMode: 0400
-        sources:
-          {{- if .Values.auth.usersExistingSecret }}
-          - secret:
-              name: {{ tpl .Values.auth.usersExistingSecret . }}
-              optional: true
-              items:
-                - key: {{ .Values.replica.sentinel.passwordKey }}
-                  path: existing-password
-          {{- end }}
-          {{- if .Values.replica.sentinel.password }}
-          - secret:
-              name: {{ include "valkey.fullname" . }}-auth
-              optional: true
-              items:
-                - key: sentinel-password
-                  path: inline-password
-          {{- end }}
+    {{- include "valkey.sentinel.authVolume" . | nindent 4 }}
     {{- end }}
-    {{- if .Values.auth.enabled }}
-    - name: valkey-acl
-      emptyDir:
-        medium: Memory
-    {{- end }}
-    {{- if .Values.valkeyConfig }}
+    {{- if .Values.extraConfig }}
     - name: valkey-config
       configMap:
         name: {{ include "valkey.fullname" . }}-config
     {{- end }}
-    {{- range .Values.extraValkeySecrets }}
-    - name: {{ .name }}-valkey
-      secret:
-        secretName: {{ .name }}
-        defaultMode: {{ .defaultMode | default 0440 }}
-    {{- end }}
     {{- if .Values.tls.enabled }}
     - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
-      secret:
-        secretName: {{ required "An existing secret is required to enable TLS" .Values.tls.existingSecret }}
-        defaultMode: 0400
-    {{- end }}
-    {{- range .Values.extraValkeyConfigs }}
-    - name: {{ .name }}-valkey
-      configMap:
-        name: {{ .name }}
-        defaultMode: {{ .defaultMode | default 0440 }}
-    {{- end }}
-    {{- if .Values.metrics.enabled }}
-    {{- range .Values.metrics.exporter.extraExporterSecrets }}
-    - name: {{ .name }}-exporter
-      secret:
-        secretName: {{ .name }}
-        defaultMode: {{ .defaultMode | default 0440 }}
-    {{- end }}
+      {{- include "valkey.tls.volumeSource" . | nindent 6 }}
     {{- end }}
     {{- if .Values.auth.enabled }}
     {{- if .Values.auth.usersExistingSecret }}
@@ -409,11 +335,13 @@ spec:
     {{- end }}
     {{- /* The StatefulSet provides the data volume through its volumeClaimTemplate */}}
     {{- if not $replicated }}
-    - name: {{ $dataVolume }}
-    {{- if $storage.persistentVolumeClaimName }}
+    - name: valkey-data
+    {{- if not $storage.enabled }}
+      emptyDir: {}
+    {{- else if $storage.existingClaim }}
       persistentVolumeClaim:
-        claimName: {{ $storage.persistentVolumeClaimName }}
-    {{- else if $createPVC }}
+        claimName: {{ $storage.existingClaim }}
+    {{- else if $storage.size }}
       persistentVolumeClaim:
         claimName: {{ include "valkey.fullname" . }}
     {{- else if $storage.hostPath }}

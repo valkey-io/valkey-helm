@@ -1,0 +1,223 @@
+suite: tls volume and reserved mount paths
+templates:
+  - templates/statefulset.yaml
+  - templates/deploy_valkey.yaml
+  - templates/sentinel-statefulset.yaml
+  - templates/haproxy-deployment.yaml
+  - templates/tests/auth.yaml
+  - templates/init_config.yaml
+  - templates/sentinel-configmap.yaml
+  - templates/haproxy-configmap.yaml
+  - templates/secret.yaml
+set:
+  replica.enabled: true
+  persistence.enabled: true
+  persistence.size: 1Gi
+  tls.enabled: true
+tests:
+  - it: should mount tls.existingSecret as a secret volume
+    set:
+      tls.existingSecret: valkey-tls
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: RELEASE-NAME-valkey-tls
+            secret:
+              secretName: valkey-tls
+              defaultMode: 0400
+
+  - it: should mount tls.volume as given in the Valkey pods
+    set:
+      tls.volume:
+        projected:
+          sources:
+            - secret:
+                name: valkey-cert
+                items:
+                  - {key: tls.crt, path: server.crt}
+            - configMap:
+                name: valkey-ca-bundle
+                items:
+                  - {key: trust-bundle.pem, path: ca.crt}
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: RELEASE-NAME-valkey-tls
+            projected:
+              sources:
+                - secret:
+                    name: valkey-cert
+                    items:
+                      - {key: tls.crt, path: server.crt}
+                - configMap:
+                    name: valkey-ca-bundle
+                    items:
+                      - {key: trust-bundle.pem, path: ca.crt}
+
+  - it: should mount tls.volume in the Sentinel pods
+    set:
+      sentinel.enabled: true
+      sentinel.password: pw
+      tls.volume:
+        csi:
+          driver: csi.cert-manager.io
+          readOnly: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: RELEASE-NAME-valkey-tls
+            csi:
+              driver: csi.cert-manager.io
+              readOnly: true
+
+  # A volume source cannot be narrowed down like the Secret's items, so the
+  # container mounts only the files it reads and never sees the private key.
+  - it: should mount only the files HAProxy reads from tls.volume
+    set:
+      sentinel.enabled: true
+      sentinel.password: pw
+      haproxy.enabled: true
+      tls.requireClientCertificate: true
+      haproxy.tls.clientCertFile: client.pem
+      tls.volume:
+        csi:
+          driver: csi.cert-manager.io
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: RELEASE-NAME-valkey-tls
+            csi:
+              driver: csi.cert-manager.io
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts
+          value:
+            - name: haproxy-config
+              mountPath: /usr/local/etc/haproxy
+              readOnly: true
+            - name: RELEASE-NAME-valkey-tls
+              mountPath: /tls/ca.crt
+              subPath: ca.crt
+              readOnly: true
+            - name: RELEASE-NAME-valkey-tls
+              mountPath: /tls/client.pem
+              subPath: client.pem
+              readOnly: true
+
+  - it: should still mount only the files HAProxy reads from tls.existingSecret
+    set:
+      sentinel.enabled: true
+      sentinel.password: pw
+      haproxy.enabled: true
+      tls.existingSecret: valkey-tls
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: RELEASE-NAME-valkey-tls
+            secret:
+              secretName: valkey-tls
+              items:
+                - key: ca.crt
+                  path: ca.crt
+              defaultMode: 0440
+
+  - it: should mount tls.volume in the test pods
+    set:
+      replica.enabled: false
+      persistence.enabled: false
+      persistence.size: ""
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: pw
+      tls.volume:
+        csi:
+          driver: csi.cert-manager.io
+    template: templates/tests/auth.yaml
+    asserts:
+      - contains:
+          path: spec.volumes
+          content:
+            name: valkey-tls
+            csi:
+              driver: csi.cert-manager.io
+
+  - it: should refuse tls.existingSecret together with tls.volume
+    set:
+      tls.existingSecret: valkey-tls
+      tls.volume:
+        csi:
+          driver: csi.cert-manager.io
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "tls.existingSecret and tls.volume are both set"
+
+  - it: should require tls.existingSecret or tls.volume
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "TLS needs tls.existingSecret or tls.volume"
+
+  - it: should refuse an extraVolumeMounts entry on or below a path the chart uses
+    set:
+      tls.existingSecret: valkey-tls
+      extraVolumeMounts:
+        - name: backup
+          mountPath: /data/backup
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "extraVolumeMounts mounts /data/backup, which the chart uses itself"
+
+  - it: should refuse a TLS file overlaid below /tls
+    set:
+      tls.existingSecret: valkey-tls
+      extraVolumeMounts:
+        - name: ca-bundle
+          mountPath: /tls/ca-bundle.pem
+          subPath: ca-bundle.pem
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "extraVolumeMounts mounts /tls/ca-bundle.pem, which the chart uses for the TLS files.*tls.volume"
+
+  - it: should accept paths that only share a prefix with a reserved one
+    set:
+      tls.existingSecret: valkey-tls
+      extraVolumeMounts:
+        - name: extra
+          mountPath: /tls-extra
+        - name: other
+          mountPath: /database
+    template: templates/statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra
+            mountPath: /tls-extra
+
+  - it: should refuse an HAProxy mount on its configuration directory
+    set:
+      tls.existingSecret: valkey-tls
+      sentinel.enabled: true
+      sentinel.password: pw
+      haproxy.enabled: true
+      haproxy.extraVolumeMounts:
+        - name: cfg
+          mountPath: /usr/local/etc/haproxy
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "haproxy.extraVolumeMounts mounts /usr/local/etc/haproxy, which the chart uses itself"
