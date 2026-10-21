@@ -352,17 +352,17 @@ If Sentinel cannot fail over, a pod with an empty volume waits up to `sentinel.i
 - Without quorum, `SENTINEL FAILOVER <masterSet>` on one Sentinel forces the failover without the agreement of the others.
 - If that answers `NOGOODSLAVE`, no replica qualifies, for example because every one was cut off from the master for too long. `SENTINEL FAILOVER` cannot override that: promote a replica by hand with `REPLICAOF NO ONE`, then point each Sentinel at it with `SENTINEL REMOVE <masterSet>`, `SENTINEL MONITOR` and the `SENTINEL SET` options the chart configures.
 
-Losing every pod at once still loses the data. If the Sentinels survive it, they still know the old replicas, and what happens next depends on which pod they name as master:
+Without persistence, losing every Valkey pod at once still loses the data; with it, the PVCs keep the data and the pods come back in their recorded roles. If the Sentinels survive the loss, they still know the old replicas, and what happens next depends on which pod they name as master:
 
 - Another pod than pod-0: the pods before it start as empty replicas of it, and Sentinel promotes one of them once its failover retries come round, which can take a few minutes.
 - Pod-0: it waits for a failover that cannot happen, because the StatefulSet only starts the other pods once pod-0 is ready.
 
-In either case, start over to recover without waiting:
+In either case, start over to recover without waiting. `<release>` is the Helm release name; the selectors include it so that other releases in the namespace are left alone:
 
 ```sh
 kubectl scale statefulset <valkey> --replicas=0
-kubectl wait --for=delete pod -l app.kubernetes.io/component=valkey
-kubectl delete pod -l app.kubernetes.io/component=sentinel
+kubectl wait --for=delete pod -l app.kubernetes.io/instance=<release>,app.kubernetes.io/component=valkey
+kubectl delete pod -l app.kubernetes.io/instance=<release>,app.kubernetes.io/component=sentinel
 # wait sentinel.startupTimeoutSeconds, until each Sentinel logs that it is bootstrapping with pod-0 as master
 kubectl scale statefulset <valkey> --replicas=<replica.replicas>
 ```
