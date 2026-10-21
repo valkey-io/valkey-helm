@@ -42,7 +42,7 @@ Standalone, from `dataStorage`:
 - `accessModes`, `subPath`, `hostPath`, `labels` and `annotations` keep their names.
 - `volumeName` is removed; the volume is always `valkey-data`.
 
-Replication, from `replica.persistence`: move the block to the top level as `persistence` (`size`, `storageClass` and `accessModes` keep their names) and add `enabled: true`.
+Replication, from `replica.persistence`: move the block to the top level as `persistence` (`size`, `storageClass` and `accessModes` keep their names) and add `enabled: true`. With Sentinel the chart also renders without persistence, but leaving out `enabled: true` drops the StatefulSet's `volumeClaimTemplates`, and Kubernetes rejects the upgrade.
 
 ---
 

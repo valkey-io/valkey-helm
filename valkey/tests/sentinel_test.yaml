@@ -3,6 +3,7 @@ templates:
   - templates/statefulset.yaml
   - templates/sentinel-statefulset.yaml
   - templates/init_config.yaml
+  - templates/configmap.yaml
   - templates/secret.yaml
   - templates/sentinel-configmap.yaml
   - templates/sentinel-service.yaml
@@ -228,6 +229,94 @@ tests:
           path: data["sentinel-start.sh"]
           pattern: 'DEFAULT_MASTER_HOST="RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local"'
 
+  - it: should refuse to start as an empty master while a replica may hold data
+    template: templates/init_config.yaml
+    asserts:
+      # Any Sentinel knowing a replica refuses; a quorum has to confirm none.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '\{ \[ ! -f "\$MASTER_MARKER" \] \|\| \[ -n "\$SERVER_RESTARTED" \]; \} &&\n\s+\{ \[ -n "\$SENTINEL_REPLICAS" \] \|\| \[ "\$SENTINEL_NONE" -lt "2" \] \|\| peer_up; \}'
+      # After an in-place restart, a record naming this pod no longer counts,
+      # while one naming another master still lets a replica start.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'if \[ "\$host" = "\$SELF_HOST" \] && \[ -n "\$SERVER_RESTARTED" \]; then\n\s+return 0'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'known=\$\(reply_field num-slaves\)'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '""\|\*\[!0-9\]\*\) ;;\n\s+0\) SENTINEL_NONE=\$\(\(SENTINEL_NONE \+ 1\)\) ;;\n\s+\*\) SENTINEL_REPLICAS="yes" ;;'
+      # Both the first answer and a late one are held to the same check.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'if \[ -n "\$SENTINEL_MASTER" \] && \[ "\$\{SENTINEL_MASTER% \*\}" = "\$SELF_HOST" \] && empty_master_refused; then\n(.*\n){2}\s+wait_for_topology\n'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'if \[ "\$\{SENTINEL_MASTER% \*\}" != "\$SELF_HOST" \] \|\| ! empty_master_refused; then\n\s+follow_master "\$SENTINEL_MASTER" "Sentinel reports"\n\s+return 0'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'SENTINEL RESET mymaster on every Sentinel lets this pod start empty'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'valkey-cli\s+-t 2 -h "\$node" -p 6379 ping'
+
+  - it: should rerun init, keeping the record, when the server restarts in place
+    template: templates/init_config.yaml
+    asserts:
+      # With no wait it exits rather than outlasting the startup probe. The
+      # record stays: a replica still needs it when no Sentinel answers.
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'if \[ -f "\$STARTED" \]; then\n(.*\n)*?\s+if ! \{ mkdir -p /data/conf && : > /data/conf/restarted; \}; then\n(.*\n){3}\s+VALKEY_TOPOLOGY_WAIT_SECONDS=0 /scripts/init.sh \|\| exit 1\n'
+      - notMatchRegex:
+          path: data["valkey-start.sh"]
+          pattern: 'rm -f "\$MARKER"'
+      # On the data volume, so a pod that replaces a stuck one with the same
+      # volume is held to the same check, and cleared once a role is settled.
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'RESTART_FLAG="/data/conf/restarted"\n\s*SERVER_RESTARTED=""\n\s*if \[ -f "\$RESTART_FLAG" \]; then\n\s+SERVER_RESTARTED="yes"'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'mv "\$MASTER_MARKER.tmp" "\$MASTER_MARKER"\n(.*\n){2}\s*rm -f "\$RESTART_FLAG"'
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: ': > "\$STARTED"\n\n\s*track_master &\n\s*exec valkey-server'
+
+  - it: should give the valkey container what init reads, without preStopFailover
+    template: templates/statefulset.yaml
+    set:
+      sentinel.preStopFailover: false
+      extraConfig: "maxmemory 100mb"
+      auth.enabled: true
+      auth.aclUsers.default.password: pw
+      auth.aclUsers.default.permissions: "~* &* +@all"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: sentinel-auth
+            mountPath: /sentinel-auth
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-config
+            mountPath: /usr/local/etc/valkey/valkey.conf
+            subPath: valkey.conf
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: valkey-auth-secret
+            mountPath: /valkey-auth-secret
+            readOnly: true
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: sentinel-scripts
+            mountPath: /sentinel-scripts
+
   - it: should secure the sentinel port when valkey auth is disabled
     template: templates/sentinel-configmap.yaml
     asserts:
@@ -355,7 +444,10 @@ tests:
     asserts:
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)[\s\S]*if \[ -n "\$DISCOVERED" \]; then[\s\S]*else[\s\S]*refusing to start without a confirmed replication role[\s\S]*exit 1'
+          pattern: 'else\n\s+wait_for_topology\nfi'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'refusing to start without a confirmed replication role"\n\s+fi\n\s+exit 1'
       - notMatchRegex:
           path: data["init.sh"]
           pattern: 'HAS_PREVIOUS_CONFIG|SAVED_REPLICAOF|Bootstrapping cluster'
@@ -377,19 +469,32 @@ tests:
     asserts:
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'master_from_sentinels\(\) \{'
+          pattern: 'ask_sentinels\(\) \{'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'DISCOVERED=\$\(master_from_sentinels \|\| true\)'
+          pattern: 'sentinel master mymaster 2>/dev/null'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'sentinel get-master-addr-by-name mymaster'
+          pattern: 'host=\$\(reply_field ip\)\n\s+port=\$\(reply_field port\)'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'peer="RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
+          pattern: 'peer="RELEASE-NAME-valkey-sentinel-\$\{i\}\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
       - notMatchRegex:
           path: data["init.sh"]
           pattern: 'replica\.sentinel\.replicas'
+
+  - it: should find a running sentinel peer by name and wait by the clock
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'peer="RELEASE-NAME-valkey-sentinel-\$\{i\}\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'SENTINEL_HOST'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'WAITED=\$\(\(\$\(date \+%s\) - STARTED_AT\)\)'
   - it: should mount the dedicated sentinel credential in the valkey script containers
     template: templates/statefulset.yaml
     asserts:
@@ -697,10 +802,10 @@ tests:
           pattern: 'MASTER_MARKER="/data/conf/last-master"'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'No Sentinel answered; last recorded master is'
+          pattern: 'follow_master "\$RECORDED" "No Sentinel answered; the last record names"'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'No Sentinel answered and no recorded topology; refusing to start'
+          pattern: 'No Sentinel named another master and there is no recorded topology; refusing to start'
 
   - it: should record the master without writing a credential
     template: templates/init_config.yaml
@@ -732,14 +837,14 @@ tests:
       # truncated port such as "6".
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'IFS= read -r MARKED < "\$MASTER_MARKER" \|\| MARKED=""'
+          pattern: 'IFS= read -r marked < "\$MASTER_MARKER" \|\| return 0'
       - notMatchRegex:
           path: data["init.sh"]
           pattern: 'head -n 1 "\$MASTER_MARKER"'
       # A port outside the range cannot be a listening one either.
       - matchRegex:
           path: data["init.sh"]
-          pattern: '\[ "\$MARKED_PORT" -ge 1 \] && \[ "\$MARKED_PORT" -le 65535 \]'
+          pattern: '\[ "\$port" -ge 1 \] && \[ "\$port" -le 65535 \]'
 
   - it: should refresh the recorded master from the local node on shutdown
     template: templates/sentinel-configmap.yaml
@@ -905,7 +1010,7 @@ tests:
     asserts:
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'while \[ "\$WAITED" -lt "330" \]; do'
+          pattern: 'TOPOLOGY_WAIT="\$\{VALKEY_TOPOLOGY_WAIT_SECONDS:-330\}"'
 
   - it: should wait for the topology on a first install instead of failing
     template: templates/init_config.yaml
@@ -916,7 +1021,7 @@ tests:
       # the init container until a retry happens to land after that.
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'while \[ "\$WAITED" -lt "180" \]; do'
+          pattern: 'TOPOLOGY_WAIT="\$\{VALKEY_TOPOLOGY_WAIT_SECONDS:-180\}"'
       - matchRegex:
           path: data["init.sh"]
           pattern: 'Waiting for a Sentinel or a running node to report the topology'
@@ -933,7 +1038,7 @@ tests:
     asserts:
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'while \[ "\$WAITED" -lt "42" \]; do'
+          pattern: 'TOPOLOGY_WAIT="\$\{VALKEY_TOPOLOGY_WAIT_SECONDS:-42\}"'
 
   - it: should prefer a node that is already up over the recorded topology
     set:
@@ -955,7 +1060,7 @@ tests:
           pattern: 'RUNNING=\$\(master_from_running_nodes \|\| true\)'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'already up as the master, starting as REPLICA'
+          pattern: 'elif \[ -n "\$RUNNING" \]; then\n\s+follow_master "\$RUNNING" "No Sentinel answered, but a running node reports"\n\s*elif \[ -n "\$RECORDED" \]'
       # Only a node that answers as the master counts, and this pod is not
       # running yet, so it is skipped rather than waited for.
       - matchRegex:

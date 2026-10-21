@@ -342,8 +342,15 @@ would start on an empty volume.
   {{- fail "replica.replicas counts the Valkey pods, the master included, and must be at least 1." }}
 {{- end }}
 {{- if .Values.replica.enabled }}
-  {{- if not (and $p.enabled $p.size) }}
-    {{- fail "Replication requires persistent storage, otherwise a restarted primary comes back empty and its replicas copy the empty dataset. Please set persistence.enabled=true and persistence.size (e.g. '5Gi')." }}
+  {{- /* Without persistence every pod gets an emptyDir. With Sentinel the
+         init container keeps a restarted master with no data from coming
+         back as master while Sentinel can still promote a replica. Without
+         Sentinel pod-0 is always the master, so nothing would stop it. */}}
+  {{- if and (not $p.enabled) (not .Values.sentinel.enabled) }}
+    {{- fail "Replication without Sentinel requires persistent storage, otherwise a restarted primary comes back empty and its replicas copy the empty dataset. Please set persistence.enabled=true and persistence.size (e.g. '5Gi'), or sentinel.enabled=true." }}
+  {{- end }}
+  {{- if and $p.enabled (not $p.size) }}
+    {{- fail "persistence.enabled in replication mode needs persistence.size (e.g. '5Gi')." }}
   {{- end }}
   {{- if or $p.existingClaim $p.hostPath $p.keepOnUninstall }}
     {{- fail "persistence.existingClaim, persistence.hostPath and persistence.keepOnUninstall only apply to standalone mode. In replication mode the StatefulSet creates one PVC per pod, named valkey-data-<statefulset>-<index>; pre-create claims with those names to reuse existing volumes." }}
