@@ -228,18 +228,30 @@ tests:
           path: data["sentinel-start.sh"]
           pattern: 'DEFAULT_MASTER_HOST="RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local"'
 
-  - it: should refuse to start as an empty master while another node is up
+  - it: should refuse to start as an empty master while a replica may hold data
     template: templates/init_config.yaml
     asserts:
       - matchRegex:
           path: data["init.sh"]
-          pattern: '\[ ! -f "\$MASTER_MARKER" \] && peer_up'
+          pattern: '\[ ! -f "\$MASTER_MARKER" \] && \{ sentinel_knows_replicas \|\| peer_up; \}'
       - matchRegex:
           path: data["init.sh"]
-          pattern: '\s+if empty_master_refused; then\n'
+          pattern: 'sentinel replicas mymaster 2>/dev/null\) \|\| continue'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'if \[ "\$\{DISCOVERED% \*\}" = "\$SELF_HOST" \] && empty_master_refused; then'
+          pattern: '\[ "\$confirmed" -lt "2" \]'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'RELEASE-NAME-valkey-sentinel-\$\{i\}\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'if \[ "\$FOUND_HOST" = "\$SELF_HOST" \] && empty_master_refused; then\n.*\n\s+wait_for_topology\n'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'if \[ "\$\{DISCOVERED% \*\}" != "\$SELF_HOST" \] \|\| ! empty_master_refused; then\n\s+return 0'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'SENTINEL RESET mymaster on every Sentinel lets this pod start empty'
       - matchRegex:
           path: data["init.sh"]
           pattern: 'valkey-cli\s+-t 2 -h "\$node" -p 6379 ping'

@@ -414,14 +414,88 @@ data:
       return 1
     }
 
+    # Succeeds unless a quorum of Sentinels confirms that no replica of the
+    # master set is known. Sentinel keeps every replica it has seen, reachable
+    # or not, until SENTINEL RESET, so that answer means none ever replicated,
+    # as on a fresh install. A peer that does not answer this pod's PING is
+    # not proof that no data survives: its connection may be what failed. So
+    # one Sentinel listing a replica is enough to refuse, while a Sentinel that
+    # does not answer, or answers with an error, does not count towards the
+    # confirmation.
+    sentinel_knows_replicas() {
+      sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 0
+      confirmed=0
+      i=0
+      while [ "$i" -lt "{{ int .Values.sentinel.replicas }}" ]; do
+        sentinel="{{ include "valkey.sentinel.fullname" . }}-${i}.{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        i=$((i + 1))
+        replicas=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+          -t 2 -h "$sentinel" -p {{ .Values.sentinel.port }} \
+          sentinel replicas {{ .Values.sentinel.masterSet }} 2>/dev/null) || continue
+        case "$replicas" in
+          *[![:space:]]*)
+            # A replica, or an error reply, which proves nothing either way.
+            case "$replicas" in
+              *ERR*|*NOAUTH*|*NOPERM*|*WRONGPASS*) continue ;;
+            esac
+            return 0
+            ;;
+        esac
+        confirmed=$((confirmed + 1))
+      done
+      [ "$confirmed" -lt "{{ int .Values.sentinel.quorum }}" ]
+    }
+
     # Succeeds when this pod must not take the master role Sentinel names it
     # for. A pod that restarts on an empty volume before Sentinel noticed it
     # was down is still named as master. Starting would make it an empty master
-    # that every replica then resyncs from, wiping the data. Only when another
-    # node is up: on a fresh install, or with every pod gone, there is nothing
-    # to promote and this pod has to bootstrap.
+    # that every replica then resyncs from, wiping the data. Only when no
+    # replica can hold data: on a fresh install, or after the Sentinels were
+    # reset, there is nothing to promote and this pod has to bootstrap.
     empty_master_refused() {
-      [ ! -f "$MASTER_MARKER" ] && peer_up
+      [ ! -f "$MASTER_MARKER" ] && { sentinel_knows_replicas || peer_up; }
+    }
+
+    # Waits for a Sentinel, or a running node, to name a master this pod may
+    # take, and leaves it in DISCOVERED. A Sentinel naming this pod while it
+    # must not start as master counts as no answer: Sentinel fails over within
+    # down-after-milliseconds, and a later answer names the new master. On a
+    # fresh install it is also what holds the first pod until a quorum of
+    # Sentinels is up to confirm there is no replica. Waiting here rather than
+    # exiting spares the init container a crash loop that only ends when a
+    # retry happens to land after the answer.
+    wait_for_topology() {
+      WAITED=0
+      REFUSED=""
+      while [ "$WAITED" -lt "{{ .Values.sentinel.initialTopologyWaitSeconds }}" ]; do
+        sleep 5
+        WAITED=$((WAITED + 5))
+        DISCOVERED=$(master_from_sentinels || true)
+        if [ -z "$DISCOVERED" ]; then
+          DISCOVERED=$(master_from_running_nodes || true)
+        fi
+        if [ -n "$DISCOVERED" ]; then
+          if [ "${DISCOVERED% *}" != "$SELF_HOST" ] || ! empty_master_refused; then
+            return 0
+          fi
+          REFUSED="yes"
+          log "Empty volume but Sentinel still names this pod as master and a replica may hold data, waiting for Sentinel to fail over"
+          DISCOVERED=""
+        fi
+        log "Waiting for a Sentinel or a running node to report the topology, ${WAITED}s of {{ .Values.sentinel.initialTopologyWaitSeconds }}s"
+      done
+      if [ -n "$REFUSED" ]; then
+        # Sentinel may be unable to fail over, e.g. without quorum, when every
+        # replica was cut off from this pod for too long to qualify, or when
+        # every pod lost its data. The pod then keeps exiting until an
+        # operator steps in. SENTINEL FAILOVER only skips the agreement between
+        # Sentinels, it still refuses a replica that does not qualify.
+        log "Sentinel still names this pod as master; it cannot fail over, check the Sentinel logs"
+        log "Without quorum, SENTINEL FAILOVER {{ .Values.sentinel.masterSet }} forces it; if that answers NOGOODSLAVE, no replica qualifies and one has to be promoted by hand; if every Valkey pod lost its data, SENTINEL RESET {{ .Values.sentinel.masterSet }} on every Sentinel lets this pod start empty. See the chart README"
+      else
+        log "No Sentinel named another master and there is no recorded topology; refusing to start without a confirmed replication role"
+      fi
+      exit 1
     }
     {{- end }}
 
@@ -434,19 +508,13 @@ data:
     if [ -n "$DISCOVERED" ]; then
       FOUND_HOST=${DISCOVERED% *}
       FOUND_PORT=${DISCOVERED#* }
+      if [ "$FOUND_HOST" = "$SELF_HOST" ] && empty_master_refused; then
+        log "Empty volume but Sentinel still names this pod as master and a replica may hold data, waiting for Sentinel to fail over"
+        wait_for_topology
+        FOUND_HOST=${DISCOVERED% *}
+        FOUND_PORT=${DISCOVERED#* }
+      fi
       if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
-        # Exit rather than start as an empty master, so Sentinel fails over
-        # and the next attempt joins the new master.
-        if empty_master_refused; then
-          # Sentinel may be unable to fail over, e.g. without quorum or when
-          # every replica was cut off from this pod for too long to qualify.
-          # The pod then keeps exiting until an operator steps in.
-          log "Empty volume but Sentinel still names this pod as master, exiting so Sentinel can fail over"
-          # SENTINEL FAILOVER only skips the agreement between Sentinels, it
-          # still refuses a replica that does not qualify (NOGOODSLAVE).
-          log "If this repeats, Sentinel cannot fail over; check the Sentinel logs. Without quorum, SENTINEL FAILOVER {{ .Values.sentinel.masterSet }} forces it; if that answers NOGOODSLAVE, no replica qualifies and one has to be promoted by hand, see the chart README"
-          exit 1
-        fi
         log "Sentinel reports this pod as the master, starting as MASTER"
       else
         log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
@@ -494,33 +562,10 @@ data:
         # once sentinel.startupTimeoutSeconds expires, and this pod only
         # has to be around to be told. Exiting here instead leaves the init
         # container crash looping until a retry happens to land after that, so
-        # wait for the answer rather than for the next backoff.
-        WAITED=0
-        while [ "$WAITED" -lt "{{ .Values.sentinel.initialTopologyWaitSeconds }}" ]; do
-          sleep 5
-          WAITED=$((WAITED + 5))
-          DISCOVERED=$(master_from_sentinels || true)
-          if [ -z "$DISCOVERED" ]; then
-            DISCOVERED=$(master_from_running_nodes || true)
-          fi
-          if [ -n "$DISCOVERED" ]; then
-            # The volume is empty on this path, so a Sentinel that answers
-            # late is held to the same check as one that answered at once.
-            # Keep waiting instead of exiting: Sentinel fails over within
-            # down-after-milliseconds, and a later answer names the new master.
-            if [ "${DISCOVERED% *}" = "$SELF_HOST" ] && empty_master_refused; then
-              log "Empty volume but Sentinel still names this pod as master, waiting for Sentinel to fail over"
-              DISCOVERED=""
-            else
-              break
-            fi
-          fi
-          log "Waiting for a Sentinel or a running node to report the topology, ${WAITED}s of {{ .Values.sentinel.initialTopologyWaitSeconds }}s"
-        done
-        if [ -z "$DISCOVERED" ]; then
-          log "No Sentinel named another master and there is no recorded topology; refusing to start without a confirmed replication role"
-          exit 1
-        fi
+        # wait for the answer rather than for the next backoff. The volume is
+        # empty on this path, so a Sentinel that answers late is held to the
+        # same check as one that answered at once.
+        wait_for_topology
         FOUND_HOST=${DISCOVERED% *}
         FOUND_PORT=${DISCOVERED#* }
         if [ "$FOUND_HOST" = "$SELF_HOST" ]; then

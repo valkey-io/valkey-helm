@@ -336,13 +336,17 @@ When more than one is set, `existingClaim` wins over `size`, which wins over `ho
 Without Sentinel, persistent storage is **mandatory** in replication mode. Without it, the primary might come up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
 
 With Sentinel (`sentinel.enabled: true`), persistence is optional; without it each pod gets an `emptyDir`.
-A master pod that restarts on an empty volume while Sentinel still names it as master and another Valkey pod is up refuses to start, so Sentinel fails over to a replica that still has the data, and the pod then joins the new master.
-If Sentinel cannot fail over, the pod keeps restarting until a replica is promoted:
+A master pod that restarts on an empty volume while Sentinel still names it as master does not start as master when a Sentinel knows of a replica or another Valkey pod is up. It waits until Sentinel fails over to a replica that still has the data, and then joins the new master.
+Sentinel remembers every replica it has seen, so a replica that is unreachable at that moment still counts.
+The pod only starts as an empty master once a quorum of Sentinels reports no replica at all, as on a fresh install.
+If Sentinel cannot fail over within `sentinel.initialTopologyWaitSeconds`, the init container exits and the pod keeps restarting until a replica is promoted:
 
 - Without quorum, `SENTINEL FAILOVER <masterSet>` on one Sentinel forces the failover without the agreement of the others.
 - If that answers `NOGOODSLAVE`, no replica qualifies, for example because every one was cut off from the master for too long. `SENTINEL FAILOVER` cannot override that: promote a replica by hand with `REPLICAOF NO ONE`, then point each Sentinel at it with `SENTINEL REMOVE <masterSet>`, `SENTINEL MONITOR` and the `SENTINEL SET` options the chart configures.
 
 Losing every pod at once still loses the data.
+If the Sentinels survive it, they still know the old replicas, and the first pod waits for an operator to confirm the loss: `SENTINEL RESET <masterSet>` on every Sentinel makes them forget the replicas, and the pod then starts empty.
+If the Sentinels restart as well, they bootstrap as on a fresh install and need no reset.
 
 ```yaml
 replica:
