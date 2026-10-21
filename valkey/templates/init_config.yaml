@@ -134,6 +134,25 @@ data:
       done
     }
 
+    # The config volume belongs to the pod, so this file outlives the container
+    # and tells a restart of the server inside a running pod (a crash, an OOM
+    # kill, a failed liveness probe) from a new pod. Kubernetes does not rerun
+    # the init container then, and starting on the config it left would make
+    # this pod the master again on whatever is on disk, which every replica
+    # would then resync from. Rerun it instead, telling it not to trust the
+    # data. It runs in the background so that a stop request from the kubelet
+    # ends the wait at once rather than after it.
+    STARTED="/valkey-conf/.server-started"
+    if [ -f "$STARTED" ]; then
+      echo "$(date) The server restarted inside a running pod, checking the replication role again" >&2
+      VALKEY_SERVER_RESTARTED=yes /scripts/init.sh &
+      init_pid=$!
+      trap 'kill "$init_pid" 2>/dev/null; exit 1' TERM INT
+      wait "$init_pid" || exit 1
+      trap - TERM INT
+    fi
+    : > "$STARTED"
+
     track_master &
     exec valkey-server "$@"
 {{- end }}
@@ -160,6 +179,12 @@ data:
     # only durable topology left once the config moved to a memory backed
     # volume, and it is what breaks the cold start deadlock below.
     MASTER_MARKER="/data/conf/last-master"
+    # Set by valkey-start.sh when it reruns this script because the server
+    # restarted inside a running pod. The data volume and the record above
+    # survive that restart, but the dataset in memory does not, and whatever
+    # is on disk may be older than what the replicas hold, or missing. That
+    # run gives the record no say in whether this pod may lead.
+    SERVER_RESTARTED="${VALKEY_SERVER_RESTARTED:-}"
     {{- end }}
     DATA_DIR="$(dirname "$VALKEY_CONFIG")"
 
@@ -447,13 +472,15 @@ data:
     }
 
     # Succeeds when this pod must not take the master role Sentinel names it
-    # for. A pod that restarts on an empty volume before Sentinel noticed it
-    # was down is still named as master. Starting would make it an empty master
-    # that every replica then resyncs from, wiping the data. Only when no
-    # replica can hold data: on a fresh install, or after the Sentinels were
-    # reset, there is nothing to promote and this pod has to bootstrap.
+    # for. A pod that restarts on an empty volume, or whose server restarted
+    # in place, before Sentinel noticed it was down is still named as master.
+    # Starting would make it a master with no data, or old data, that every
+    # replica then resyncs from, wiping theirs. Only when no replica can hold
+    # data: on a fresh install, or after the Sentinels were reset, there is
+    # nothing to promote and this pod has to bootstrap.
     empty_master_refused() {
-      [ ! -f "$MASTER_MARKER" ] && { sentinel_knows_replicas || peer_up; }
+      { [ ! -f "$MASTER_MARKER" ] || [ -n "$SERVER_RESTARTED" ]; } &&
+        { sentinel_knows_replicas || peer_up; }
     }
 
     # Waits for a Sentinel, or a running node, to name a master this pod may
@@ -479,7 +506,7 @@ data:
             return 0
           fi
           REFUSED="yes"
-          log "Empty volume but Sentinel still names this pod as master and a replica may hold data, waiting for Sentinel to fail over"
+          log "Sentinel still names this pod as master, but this pod has no data it can vouch for and a replica may hold data, waiting for Sentinel to fail over"
           DISCOVERED=""
         fi
         log "Waiting for a Sentinel or a running node to report the topology, ${WAITED}s of {{ .Values.sentinel.initialTopologyWaitSeconds }}s"
@@ -509,7 +536,7 @@ data:
       FOUND_HOST=${DISCOVERED% *}
       FOUND_PORT=${DISCOVERED#* }
       if [ "$FOUND_HOST" = "$SELF_HOST" ] && empty_master_refused; then
-        log "Empty volume but Sentinel still names this pod as master and a replica may hold data, waiting for Sentinel to fail over"
+        log "Sentinel still names this pod as master, but this pod has no data it can vouch for and a replica may hold data, waiting for Sentinel to fail over"
         wait_for_topology
         FOUND_HOST=${DISCOVERED% *}
         FOUND_PORT=${DISCOVERED#* }
@@ -550,7 +577,21 @@ data:
       if [ -n "$MARKED_HOST" ] && [ "$MARKED_HOST" != "$MARKED_PORT" ] &&
          echo "$MARKED_PORT" | grep -qE "^[0-9]+$" &&
          [ "$MARKED_PORT" -ge 1 ] && [ "$MARKED_PORT" -le 65535 ]; then
-        if [ "$MARKED_HOST" = "$SELF_HOST" ]; then
+        if [ "$MARKED_HOST" = "$SELF_HOST" ] && [ -n "$SERVER_RESTARTED" ]; then
+          # The record names this pod, but the server restarted in place, so
+          # it is no evidence that the data on disk is current. Wait for a
+          # Sentinel to settle the role, under the same check as above.
+          log "No Sentinel answered; last recorded master is this pod, but the server restarted in place"
+          wait_for_topology
+          FOUND_HOST=${DISCOVERED% *}
+          FOUND_PORT=${DISCOVERED#* }
+          if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
+            log "Sentinel reports this pod as the master, starting as MASTER"
+          else
+            log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
+            REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
+          fi
+        elif [ "$MARKED_HOST" = "$SELF_HOST" ]; then
           log "No Sentinel answered; last recorded master is this pod, starting as MASTER"
         else
           log "No Sentinel answered; last recorded master is $MARKED_HOST:$MARKED_PORT, starting as REPLICA"

@@ -339,7 +339,12 @@ With Sentinel (`sentinel.enabled: true`), persistence is optional; without it ea
 A master pod that restarts on an empty volume while Sentinel still names it as master does not start as master when a Sentinel knows of a replica or another Valkey pod is up. It waits until Sentinel fails over to a replica that still has the data, and then joins the new master.
 Sentinel remembers every replica it has seen, so a replica that is unreachable at that moment still counts.
 The pod only starts as an empty master once a quorum of Sentinels reports no replica at all, as on a fresh install.
-If Sentinel cannot fail over within `sentinel.initialTopologyWaitSeconds`, the init container exits and the pod keeps restarting until a replica is promoted:
+
+The same applies when only the Valkey container restarts inside a running pod (a crash, an OOM kill or a failed liveness probe), with or without persistence.
+Kubernetes does not rerun the init container then, so the container's start script reruns its checks itself, and a master that restarted this way waits for Sentinel to fail over rather than serving whatever it has on disk, which may be older than the replicas' data.
+Because the configuration is generated again on such a restart, changes made at runtime with `CONFIG SET` or `ACL SETUSER` do not survive it; put them in `extraConfig` or `auth` instead.
+
+If Sentinel cannot fail over within `sentinel.initialTopologyWaitSeconds`, the pod keeps restarting until a replica is promoted:
 
 - Without quorum, `SENTINEL FAILOVER <masterSet>` on one Sentinel forces the failover without the agreement of the others.
 - If that answers `NOGOODSLAVE`, no replica qualifies, for example because every one was cut off from the master for too long. `SENTINEL FAILOVER` cannot override that: promote a replica by hand with `REPLICAOF NO ONE`, then point each Sentinel at it with `SENTINEL REMOVE <masterSet>`, `SENTINEL MONITOR` and the `SENTINEL SET` options the chart configures.
