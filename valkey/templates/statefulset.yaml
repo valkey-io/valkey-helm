@@ -31,6 +31,7 @@ spec:
   {{- /* Kubernetes rejects any change to volumeClaimTemplates, and the claim
          name is part of every PVC name (valkey-data-<statefulset>-<index>):
          with default values this must render exactly as in 0.x. */}}
+  {{- if .Values.persistence.enabled }}
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim
@@ -52,6 +53,7 @@ spec:
       resources:
         requests:
           storage: {{ .Values.persistence.size | quote }}
+  {{- end }}
   template:
     {{- include "valkey.podTemplate" . | nindent 4 }}
 {{- end }}

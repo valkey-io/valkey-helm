@@ -333,8 +333,8 @@ spec:
         defaultMode: 0400
     {{- end }}
     {{- end }}
-    {{- /* The StatefulSet provides the data volume through its volumeClaimTemplate */}}
-    {{- if not $replicated }}
+    {{- /* With persistence the StatefulSet provides the data volume through its volumeClaimTemplate */}}
+    {{- if or (not $replicated) (not $storage.enabled) }}
     - name: valkey-data
     {{- if not $storage.enabled }}
       emptyDir: {}

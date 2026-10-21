@@ -333,7 +333,12 @@ When more than one is set, `existingClaim` wins over `size`, which wins over `ho
 
 ### Replication Storage
 
-Persistent storage is **mandatory** in replication mode. Without it, the primary might come up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
+Without Sentinel, persistent storage is **mandatory** in replication mode. Without it, the primary might come up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
+
+With Sentinel (`sentinel.enabled: true`), persistence is optional and each pod gets an `emptyDir`.
+A master pod that restarts on an empty volume while Sentinel still names it as master and another Valkey pod is up refuses to start, so Sentinel fails over to a replica that still has the data, and the pod then joins the new master.
+If Sentinel cannot fail over, because it has no quorum or no replica qualifies (for example one that was cut off from the master for too long), the pod keeps restarting until a replica is promoted, e.g. with `SENTINEL FAILOVER <masterSet>`.
+Losing every pod at once still loses the data.
 
 ```yaml
 replica:
@@ -346,7 +351,7 @@ persistence:
 
 Each pod gets its own PVC from the StatefulSet's `volumeClaimTemplates`.
 `existingClaim`, `hostPath` and `keepOnUninstall` do not apply; to reuse existing volumes, create the claims as `valkey-data-<statefulset>-<index>` before installing.
-Kubernetes does not allow changing `volumeClaimTemplates`, so `persistence.labels` and `persistence.annotations` only apply to new installs, and changing `accessModes` or `storageClass` later requires recreating the StatefulSet.
+Kubernetes does not allow changing `volumeClaimTemplates`, so `persistence.labels` and `persistence.annotations` only apply to new installs, and changing `persistence.enabled`, `accessModes` or `storageClass` later requires recreating the StatefulSet.
 
 ## Customizing Valkey
 
@@ -674,7 +679,7 @@ TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on a
 | networkPolicy.labels | object | `{}` |  |
 | networkPolicy.annotations | object | `{}` |  |
 | nodeSelector | object | `{}` |  |
-| persistence.enabled | bool | `false` | Required in replication mode |
+| persistence.enabled | bool | `false` | Required in replication mode without Sentinel |
 | persistence.size | string | `""` | PVC size (one per pod in replication) |
 | persistence.storageClass | string | `""` |  |
 | persistence.accessModes | list | `["ReadWriteOnce"]` |  |

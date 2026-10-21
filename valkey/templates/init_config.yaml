@@ -396,6 +396,23 @@ data:
       done
       return 1
     }
+
+    # Succeeds when any other Valkey pod answers at all. Any reply counts, even
+    # NOAUTH: a node that is up may hold the data Sentinel can promote.
+    peer_up() {
+      i=0
+      while [ "$i" -lt "{{ $pods }}" ]; do
+        node="{{ include "valkey.statefulsetName" . }}-${i}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        i=$((i + 1))
+        if [ "$node" = "$SELF_HOST" ]; then
+          continue
+        fi
+        if [ -n "$(valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} -t 2 -h "$node" -p {{ .Values.service.port }} ping 2>/dev/null)" ]; then
+          return 0
+        fi
+      done
+      return 1
+    }
     {{- end }}
 
     # Determine the replication target for this pod.
@@ -408,6 +425,20 @@ data:
       FOUND_HOST=${DISCOVERED% *}
       FOUND_PORT=${DISCOVERED#* }
       if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
+        # A pod that restarts on an empty volume before Sentinel noticed it was
+        # down is still named as master. Starting would make it an empty master
+        # that every replica then resyncs from, wiping the data. Exit instead,
+        # so Sentinel fails over and the next attempt joins the new master.
+        # Only when another node is up: on a fresh install, or with every pod
+        # gone, there is nothing to promote and this pod has to bootstrap.
+        if [ ! -f "$MASTER_MARKER" ] && peer_up; then
+          # Sentinel may be unable to fail over, e.g. without quorum or when
+          # every replica was cut off from this pod for too long to qualify.
+          # The pod then keeps exiting until an operator steps in.
+          log "Empty volume but Sentinel still names this pod as master, exiting so Sentinel can fail over"
+          log "If this repeats, Sentinel cannot promote a replica (no quorum, or no replica qualifies); check the Sentinel logs, or promote one with SENTINEL FAILOVER {{ .Values.sentinel.masterSet }}"
+          exit 1
+        fi
         log "Sentinel reports this pod as the master, starting as MASTER"
       else
         log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"

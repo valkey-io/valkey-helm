@@ -228,6 +228,16 @@ tests:
           path: data["sentinel-start.sh"]
           pattern: 'DEFAULT_MASTER_HOST="RELEASE-NAME-valkey-0\.RELEASE-NAME-valkey-headless\.NAMESPACE\.svc\.cluster\.local"'
 
+  - it: should refuse to start as an empty master while another node is up
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'if \[ ! -f "\$MASTER_MARKER" \] && peer_up; then'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'valkey-cli\s+-t 2 -h "\$node" -p 6379 ping'
+
   - it: should secure the sentinel port when valkey auth is disabled
     template: templates/sentinel-configmap.yaml
     asserts:

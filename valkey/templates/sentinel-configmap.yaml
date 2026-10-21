@@ -352,7 +352,7 @@ data:
     {{- end }}
 
     # HOSTNAME is the pod name for a StatefulSet pod.
-    SELF_HOST="${HOSTNAME}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    SELF_HOST="$HOSTNAME.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
 
     local_cli() {
       {{- if .Values.auth.enabled }}
