@@ -464,10 +464,23 @@ tests:
           pattern: 'sentinel get-master-addr-by-name mymaster'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'peer="RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
+          pattern: 'peer="RELEASE-NAME-valkey-sentinel-\$\{i\}\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
       - notMatchRegex:
           path: data["init.sh"]
           pattern: 'replica\.sentinel\.replicas'
+
+  - it: should find a running sentinel peer by name and wait by the clock
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'peer="RELEASE-NAME-valkey-sentinel-\$\{i\}\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'SENTINEL_HOST'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'WAITED=\$\(\(\$\(date \+%s\) - STARTED_AT\)\)'
   - it: should mount the dedicated sentinel credential in the valkey script containers
     template: templates/statefulset.yaml
     asserts:

@@ -365,18 +365,28 @@ data:
     # Ask the Sentinels that are already running which node is the master.
     # Without this, a pod that lost its volume would fall back to the pod index
     # and pod-0 would come back as a second writable master after a failover.
+    # Each Sentinel by name rather than through the headless service, which
+    # resolves to every Sentinel pod, ready or not, of which the client only
+    # tries the first: one that is down would read as no Sentinel at all.
     master_from_sentinels() {
       sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
-      peer="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-      addr=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
-        -t 2 -h "$peer" -p {{ .Values.sentinel.port }} \
-        sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }} 2>/dev/null || true)
-      host=$(echo "$addr" | sed -n 1p)
-      port=$(echo "$addr" | sed -n 2p)
-      # Reject anything that is not a complete host/port pair, an error reply
-      # would otherwise be turned into a bogus replication target.
-      [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$" || return 1
-      printf '%s %s\n' "$host" "$port"
+      i=0
+      while [ "$i" -lt "{{ int .Values.sentinel.replicas }}" ]; do
+        peer="{{ include "valkey.sentinel.fullname" . }}-${i}.{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        i=$((i + 1))
+        addr=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+          -t 2 -h "$peer" -p {{ .Values.sentinel.port }} \
+          sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }} 2>/dev/null | tr -d '\r' || true)
+        host=$(echo "$addr" | sed -n 1p)
+        port=$(echo "$addr" | sed -n 2p)
+        # Reject anything that is not a complete host/port pair, an error reply
+        # would otherwise be turned into a bogus replication target.
+        if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
+          printf '%s %s\n' "$host" "$port"
+          return 0
+        fi
+      done
+      return 1
     }
 
     # Ask the Valkey nodes that are already running which of them is the master.
