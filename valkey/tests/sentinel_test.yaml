@@ -256,7 +256,7 @@ tests:
           pattern: 'if \[ "\$\{SENTINEL_MASTER% \*\}" != "\$SELF_HOST" \] \|\| ! empty_master_refused; then\n\s+follow_master "\$SENTINEL_MASTER" "Sentinel reports"\n\s+return 0'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'SENTINEL RESET mymaster on every Sentinel lets this pod start empty'
+          pattern: 'scale the Valkey StatefulSet to 0 and restart every Sentinel to start over'
       - matchRegex:
           path: data["init.sh"]
           pattern: 'valkey-cli\s+-t 2 -h "\$node" -p 6379 ping'

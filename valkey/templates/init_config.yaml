@@ -571,7 +571,7 @@ data:
         # operator steps in. SENTINEL FAILOVER only skips the agreement between
         # Sentinels, it still refuses a replica that does not qualify.
         log "Sentinel still names this pod as master after ${WAITED}s, exiting; the next attempt checks again"
-        log "If this repeats, Sentinel cannot fail over; check the Sentinel logs. Without quorum, SENTINEL FAILOVER {{ .Values.sentinel.masterSet }} forces it; if that answers NOGOODSLAVE, no replica qualifies and one has to be promoted by hand; if every Valkey pod lost its data, SENTINEL RESET {{ .Values.sentinel.masterSet }} on every Sentinel lets this pod start empty. See the chart README"
+        log "If this repeats, Sentinel cannot fail over; check the Sentinel logs. Without quorum, SENTINEL FAILOVER {{ .Values.sentinel.masterSet }} forces it; if that answers NOGOODSLAVE, no replica qualifies and one has to be promoted by hand; if every Valkey pod lost its data, scale the Valkey StatefulSet to 0 and restart every Sentinel to start over. See the chart README"
       else
         log "No Sentinel named another master and there is no recorded topology; refusing to start without a confirmed replication role"
       fi

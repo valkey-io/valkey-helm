@@ -352,9 +352,23 @@ If Sentinel cannot fail over, a pod with an empty volume waits up to `sentinel.i
 - Without quorum, `SENTINEL FAILOVER <masterSet>` on one Sentinel forces the failover without the agreement of the others.
 - If that answers `NOGOODSLAVE`, no replica qualifies, for example because every one was cut off from the master for too long. `SENTINEL FAILOVER` cannot override that: promote a replica by hand with `REPLICAOF NO ONE`, then point each Sentinel at it with `SENTINEL REMOVE <masterSet>`, `SENTINEL MONITOR` and the `SENTINEL SET` options the chart configures.
 
-Losing every pod at once still loses the data.
-If the Sentinels survive it, they still know the old replicas, and the first pod waits for an operator to confirm the loss: `SENTINEL RESET <masterSet>` on every Sentinel makes them forget the replicas, and the pod then starts empty.
-If the Sentinels restart as well, they bootstrap as on a fresh install and need no reset.
+Losing every pod at once still loses the data. If the Sentinels survive it, they still know the old replicas, and what happens next depends on which pod they name as master:
+
+- Another pod than pod-0: the pods before it start as empty replicas of it, and Sentinel promotes one of them once its failover retries come round, which can take a few minutes.
+- Pod-0: it waits for a failover that cannot happen, because the StatefulSet only starts the other pods once pod-0 is ready.
+
+In either case, start over to recover without waiting:
+
+```sh
+kubectl scale statefulset <valkey> --replicas=0
+kubectl wait --for=delete pod -l app.kubernetes.io/component=valkey
+kubectl delete pod -l app.kubernetes.io/component=sentinel
+# wait sentinel.startupTimeoutSeconds, until each Sentinel logs that it is bootstrapping with pod-0 as master
+kubectl scale statefulset <valkey> --replicas=<replica.replicas>
+```
+
+With no Valkey pod and no Sentinel peer to ask, the Sentinels bootstrap as on a fresh install, knowing no replica, and pod-0 starts as an empty master.
+If the Sentinels restart along with the Valkey pods, this happens on its own.
 
 ```yaml
 replica:
