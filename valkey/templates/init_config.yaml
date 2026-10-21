@@ -4,17 +4,6 @@
 {{- if and .Values.auth.enabled (hasKey .Values.auth.aclUsers $initMonitorUser) }}
 {{- $initMonitorKey = (index .Values.auth.aclUsers $initMonitorUser).passwordKey | default $initMonitorUser }}
 {{- end }}
-{{- /* A rerun of init.sh after an in-place restart happens in the Valkey
-       container, where the startup probe is already counting. Keep its wait
-       inside the probe's budget, so it ends with its own message and a clean
-       exit rather than being killed halfway; the next attempt checks again. */}}
-{{- $restartWait := int .Values.sentinel.initialTopologyWaitSeconds }}
-{{- with .Values.startupProbe }}
-{{- if and .enabled (not .customProbe) }}
-{{- $budget := add (int (.initialDelaySeconds | default 0)) (mul (int (.periodSeconds | default 10)) (int (.failureThreshold | default 3))) }}
-{{- $restartWait = min $restartWait (max 5 (sub $budget 15)) }}
-{{- end }}
-{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -150,17 +139,17 @@ data:
     # kill, a failed liveness probe) from a new pod. Kubernetes does not rerun
     # the init container then, and starting on the config it left would make
     # this pod the master again on whatever is on disk, which every replica
-    # would then resync from. Rerun it instead, telling it not to trust the
-    # data. It runs in the background so that a stop request from the kubelet
-    # ends the wait at once rather than after it.
+    # would then resync from. Rerun it instead, without the record: the
+    # data volume then looks like an empty one to it, which holds this pod
+    # back from leading while a replica may hold data. With no wait it exits
+    # rather than waits, so the startup probe never cuts it short, and the
+    # kubelet starts the next attempt after its back-off; by then Sentinel
+    # has usually failed over, and this pod joins the new master.
     STARTED="/valkey-conf/.server-started"
     if [ -f "$STARTED" ]; then
       echo "$(date) The server restarted inside a running pod, checking the replication role again" >&2
-      VALKEY_SERVER_RESTARTED=yes VALKEY_TOPOLOGY_WAIT_SECONDS={{ $restartWait }} /scripts/init.sh &
-      init_pid=$!
-      trap 'kill "$init_pid" 2>/dev/null; exit 1' TERM INT
-      wait "$init_pid" || exit 1
-      trap - TERM INT
+      rm -f "$MARKER"
+      VALKEY_TOPOLOGY_WAIT_SECONDS=0 /scripts/init.sh || exit 1
     fi
     : > "$STARTED"
 
@@ -190,13 +179,8 @@ data:
     # only durable topology left once the config moved to a memory backed
     # volume, and it is what breaks the cold start deadlock below.
     MASTER_MARKER="/data/conf/last-master"
-    # Set by valkey-start.sh when it reruns this script because the server
-    # restarted inside a running pod. The data volume and the record above
-    # survive that restart, but the dataset in memory does not, and whatever
-    # is on disk may be older than what the replicas hold, or missing. That
-    # run gives the record no say in whether this pod may lead.
-    SERVER_RESTARTED="${VALKEY_SERVER_RESTARTED:-}"
-    # That rerun also passes a shorter wait, one that fits the startup probe.
+    # valkey-start.sh passes 0 when it reruns this script after the server
+    # restarted inside a running pod: it exits rather than waits there.
     TOPOLOGY_WAIT="${VALKEY_TOPOLOGY_WAIT_SECONDS:-{{ .Values.sentinel.initialTopologyWaitSeconds }}}"
     {{- end }}
     DATA_DIR="$(dirname "$VALKEY_CONFIG")"
@@ -375,31 +359,52 @@ data:
     {{- if .Values.sentinel.enabled }}
     SELF_HOST="{{ include "valkey.statefulsetName" . }}-$POD_INDEX.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
 
-    # Ask the Sentinels that are already running which node is the master.
-    # Without this, a pod that lost its volume would fall back to the pod index
-    # and pod-0 would come back as a second writable master after a failover.
-    # Each Sentinel by name rather than through the headless service, which
+    # Ask the Sentinels that are already running about the master set. Without
+    # this, a pod that lost its volume would fall back to the pod index and
+    # pod-0 would come back as a second writable master after a failover. Each
+    # Sentinel by name rather than through the headless service, which
     # resolves to every Sentinel pod, ready or not, of which the client only
     # tries the first: one that is down would read as no Sentinel at all.
-    master_from_sentinels() {
-      sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
+    # Leaves the answers in
+    #   SENTINEL_MASTER    "host port" from the first Sentinel that names one
+    #   SENTINEL_REPLICAS  "yes" when any Sentinel knows of a replica
+    #   SENTINEL_NONE      how many Sentinels confirm they know of none
+    # Sentinel keeps every replica it has seen, reachable or not, until
+    # SENTINEL RESET, so num-slaves 0 means none ever replicated, as on a fresh
+    # install. A Sentinel that does not answer, or answers without a number,
+    # counts neither way.
+    ask_sentinels() {
+      SENTINEL_MASTER=""
+      SENTINEL_REPLICAS=""
+      SENTINEL_NONE=0
+      sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 0
       i=0
       while [ "$i" -lt "{{ int .Values.sentinel.replicas }}" ]; do
         peer="{{ include "valkey.sentinel.fullname" . }}-${i}.{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
         i=$((i + 1))
-        addr=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+        reply=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
           -t 2 -h "$peer" -p {{ .Values.sentinel.port }} \
-          sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }} 2>/dev/null | tr -d '\r' || true)
-        host=$(echo "$addr" | sed -n 1p)
-        port=$(echo "$addr" | sed -n 2p)
+          sentinel master {{ .Values.sentinel.masterSet }} 2>/dev/null | tr -d '\r' || true)
+        host=$(reply_field ip)
+        port=$(reply_field port)
+        known=$(reply_field num-slaves)
         # Reject anything that is not a complete host/port pair, an error reply
         # would otherwise be turned into a bogus replication target.
-        if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
-          printf '%s %s\n' "$host" "$port"
-          return 0
+        if [ -z "$SENTINEL_MASTER" ] && [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
+          SENTINEL_MASTER="$host $port"
         fi
+        case "$known" in
+          ""|*[!0-9]*) ;;
+          0) SENTINEL_NONE=$((SENTINEL_NONE + 1)) ;;
+          *) SENTINEL_REPLICAS="yes" ;;
+        esac
       done
-      return 1
+    }
+
+    # Prints the value that follows field $1 in $reply, the flat list of field
+    # and value lines that SENTINEL MASTER answers with.
+    reply_field() {
+      printf '%s\n' "$reply" | sed -n "/^$1\$/{n;p;}"
     }
 
     # Ask the Valkey nodes that are already running which of them is the master.
@@ -462,53 +467,55 @@ data:
       return 1
     }
 
-    # Succeeds unless a quorum of Sentinels confirms that no replica of the
-    # master set is known. Sentinel keeps every replica it has seen, reachable
-    # or not, until SENTINEL RESET, so that answer means none ever replicated,
-    # as on a fresh install. A peer that does not answer this pod's PING is
-    # not proof that no data survives: its connection may be what failed. So
-    # one Sentinel listing a replica is enough to refuse, while a Sentinel that
-    # does not answer, or answers with an error, does not count towards the
-    # confirmation.
-    sentinel_knows_replicas() {
-      sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 0
-      confirmed=0
-      i=0
-      while [ "$i" -lt "{{ int .Values.sentinel.replicas }}" ]; do
-        sentinel="{{ include "valkey.sentinel.fullname" . }}-${i}.{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-        i=$((i + 1))
-        replicas=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
-          -t 2 -h "$sentinel" -p {{ .Values.sentinel.port }} \
-          sentinel replicas {{ .Values.sentinel.masterSet }} 2>/dev/null) || continue
-        case "$replicas" in
-          *[![:space:]]*)
-            # A replica, or an error reply, which proves nothing either way.
-            case "$replicas" in
-              *ERR*|*NOAUTH*|*NOPERM*|*WRONGPASS*) continue ;;
-            esac
-            return 0
-            ;;
-        esac
-        confirmed=$((confirmed + 1))
-      done
-      [ "$confirmed" -lt "{{ int .Values.sentinel.quorum }}" ]
+    # Succeeds when this pod must not take the master role Sentinel names it
+    # for, judged from the last ask_sentinels. A pod that restarts on an empty
+    # volume before Sentinel noticed it was down is still named as master;
+    # valkey-start.sh makes a server that restarted in place look the same by
+    # removing the record. Starting would make it a master with no data, or old
+    # data, that every replica then resyncs from, wiping theirs. Only when a
+    # quorum of Sentinels knows of no replica and no other node is up, as on a
+    # fresh install or after the Sentinels were reset, is there nothing to
+    # promote, and this pod has to bootstrap. A peer that does not answer this
+    # pod's PING is no proof on its own: its connection may be what failed.
+    empty_master_refused() {
+      [ ! -f "$MASTER_MARKER" ] &&
+        { [ -n "$SENTINEL_REPLICAS" ] || [ "$SENTINEL_NONE" -lt "{{ int .Values.sentinel.quorum }}" ] || peer_up; }
     }
 
-    # Succeeds when this pod must not take the master role Sentinel names it
-    # for. A pod that restarts on an empty volume, or whose server restarted
-    # in place, before Sentinel noticed it was down is still named as master.
-    # Starting would make it a master with no data, or old data, that every
-    # replica then resyncs from, wiping theirs. Only when no replica can hold
-    # data: on a fresh install, or after the Sentinels were reset, there is
-    # nothing to promote and this pod has to bootstrap.
-    empty_master_refused() {
-      { [ ! -f "$MASTER_MARKER" ] || [ -n "$SERVER_RESTARTED" ]; } &&
-        { sentinel_knows_replicas || peer_up; }
+    # Prints the master this pod last followed, from its record on the data
+    # volume, or nothing when there is no complete record.
+    recorded_master() {
+      [ -f "$MASTER_MARKER" ] || return 0
+      # read fails on a line with no closing newline, which is what a record
+      # interrupted mid write looks like. Taking it would mean replicating
+      # from a truncated port such as "6", which no node is listening on.
+      IFS= read -r marked < "$MASTER_MARKER" || return 0
+      marked=$(printf '%s' "$marked" | tr -d '\r')
+      host=${marked%% *}
+      port=${marked##* }
+      if [ -n "$host" ] && [ "$host" != "$port" ] &&
+         echo "$port" | grep -qE "^[0-9]+$" &&
+         [ "$port" -ge 1 ] && [ "$port" -le 65535 ]; then
+        printf '%s %s\n' "$host" "$port"
+      fi
+    }
+
+    # Takes "host port" and where that answer came from, and sets this pod up
+    # to follow that master, or to lead when it is this pod.
+    follow_master() {
+      host=${1% *}
+      port=${1#* }
+      if [ "$host" = "$SELF_HOST" ]; then
+        log "$2 this pod as the master, starting as MASTER"
+      else
+        log "$2 $host:$port as the master, starting as REPLICA"
+        REPLICATION_TARGET="replicaof $host $port"
+      fi
     }
 
     # Waits for a Sentinel, or a running node, to name a master this pod may
-    # take, and leaves it in DISCOVERED. A Sentinel naming this pod while it
-    # must not start as master counts as no answer: Sentinel fails over within
+    # take, and follows it. A Sentinel naming this pod while it must not start
+    # as master counts as no answer: Sentinel fails over within
     # down-after-milliseconds, and a later answer names the new master. On a
     # fresh install it is also what holds the first pod until a quorum of
     # Sentinels is up to confirm there is no replica. Waiting here rather than
@@ -516,21 +523,23 @@ data:
     # retry happens to land after the answer.
     wait_for_topology() {
       WAITED=0
-      REFUSED=""
       while [ "$WAITED" -lt "$TOPOLOGY_WAIT" ]; do
         sleep 5
         WAITED=$((WAITED + 5))
-        DISCOVERED=$(master_from_sentinels || true)
-        if [ -z "$DISCOVERED" ]; then
-          DISCOVERED=$(master_from_running_nodes || true)
-        fi
-        if [ -n "$DISCOVERED" ]; then
-          if [ "${DISCOVERED% *}" != "$SELF_HOST" ] || ! empty_master_refused; then
+        ask_sentinels
+        if [ -n "$SENTINEL_MASTER" ]; then
+          if [ "${SENTINEL_MASTER% *}" != "$SELF_HOST" ] || ! empty_master_refused; then
+            follow_master "$SENTINEL_MASTER" "Sentinel reports"
             return 0
           fi
           REFUSED="yes"
           log "Sentinel still names this pod as master, but this pod has no data it can vouch for and a replica may hold data, waiting for Sentinel to fail over"
-          DISCOVERED=""
+        else
+          RUNNING=$(master_from_running_nodes || true)
+          if [ -n "$RUNNING" ]; then
+            follow_master "$RUNNING" "A running node reports"
+            return 0
+          fi
         fi
         log "Waiting for a Sentinel or a running node to report the topology, ${WAITED}s of ${TOPOLOGY_WAIT}s"
       done
@@ -540,8 +549,8 @@ data:
         # every pod lost its data. The pod then keeps exiting until an
         # operator steps in. SENTINEL FAILOVER only skips the agreement between
         # Sentinels, it still refuses a replica that does not qualify.
-        log "Sentinel still names this pod as master; it cannot fail over, check the Sentinel logs"
-        log "Without quorum, SENTINEL FAILOVER {{ .Values.sentinel.masterSet }} forces it; if that answers NOGOODSLAVE, no replica qualifies and one has to be promoted by hand; if every Valkey pod lost its data, SENTINEL RESET {{ .Values.sentinel.masterSet }} on every Sentinel lets this pod start empty. See the chart README"
+        log "Sentinel still names this pod as master after ${WAITED}s, exiting; the next attempt checks again"
+        log "If this repeats, Sentinel cannot fail over; check the Sentinel logs. Without quorum, SENTINEL FAILOVER {{ .Values.sentinel.masterSet }} forces it; if that answers NOGOODSLAVE, no replica qualifies and one has to be promoted by hand; if every Valkey pod lost its data, SENTINEL RESET {{ .Values.sentinel.masterSet }} on every Sentinel lets this pod start empty. See the chart README"
       else
         log "No Sentinel named another master and there is no recorded topology; refusing to start without a confirmed replication role"
       fi
@@ -552,94 +561,39 @@ data:
     # Determine the replication target for this pod.
     REPLICATION_TARGET=""
     {{- if .Values.sentinel.enabled }}
-    # Persisted topology may be stale if this pod was offline during failover,
-    # so prefer the current master reported by Sentinel.
-    DISCOVERED=$(master_from_sentinels || true)
-    if [ -n "$DISCOVERED" ]; then
-      FOUND_HOST=${DISCOVERED% *}
-      FOUND_PORT=${DISCOVERED#* }
-      if [ "$FOUND_HOST" = "$SELF_HOST" ] && empty_master_refused; then
-        log "Sentinel still names this pod as master, but this pod has no data it can vouch for and a replica may hold data, waiting for Sentinel to fail over"
-        wait_for_topology
-        FOUND_HOST=${DISCOVERED% *}
-        FOUND_PORT=${DISCOVERED#* }
-      fi
-      if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
-        log "Sentinel reports this pod as the master, starting as MASTER"
-      else
-        log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
-        REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
-      fi
-    else
-      # Nothing answered. On a whole cluster cold start every Sentinel is also
-      # starting, and a Sentinel cannot name a master until a Valkey node is
-      # up, so waiting for one here deadlocks until Sentinel gives up and
-      # assumes pod-0, which discards the writes of the node that really was
-      # the master. Come up in the last role recorded on the data volume
-      # instead: the Sentinels are still scanning and will find the master.
-      # A node that is already up outranks the record, whichever way the record
-      # points: it settles a stale record that names this pod, and it avoids
-      # attaching to a node that has itself been demoted since.
+    # In order of authority:
+    # - Sentinel. Persisted topology may be stale if this pod was offline
+    #   during a failover.
+    # - A node that is already up as the master. It outranks the record,
+    #   whichever way the record points: it settles a stale record that names
+    #   this pod, and it avoids attaching to a node that has been demoted since.
+    # - The last role recorded on the data volume. On a whole cluster cold
+    #   start every Sentinel is also starting and cannot name a master until a
+    #   Valkey node is up, so waiting here deadlocks until Sentinel assumes
+    #   pod-0, which discards the writes of the node that really was the
+    #   master. The Sentinels are still scanning and will find it.
+    # - Nothing anywhere: a fresh install, or a pod that lost its volume. The
+    #   Sentinels bootstrap a master once sentinel.startupTimeoutSeconds
+    #   expires, and this pod only has to be around to be told.
+    REFUSED=""
+    RUNNING=""
+    ask_sentinels
+    if [ -z "$SENTINEL_MASTER" ]; then
       RUNNING=$(master_from_running_nodes || true)
-      if [ -n "$RUNNING" ]; then
-        RUNNING_HOST=${RUNNING%% *}
-        RUNNING_PORT=${RUNNING##* }
-        log "No Sentinel answered, but $RUNNING_HOST:$RUNNING_PORT is already up as the master, starting as REPLICA"
-        REPLICATION_TARGET="replicaof $RUNNING_HOST $RUNNING_PORT"
-      else
-      MARKED=""
-      if [ -f "$MASTER_MARKER" ]; then
-        # read fails on a line with no closing newline, which is what a record
-        # interrupted mid write looks like. Taking it would mean replicating
-        # from a truncated port such as "6", which no node is listening on.
-        IFS= read -r MARKED < "$MASTER_MARKER" || MARKED=""
-        MARKED=$(printf '%s' "$MARKED" | tr -d '\r')
-      fi
-      MARKED_HOST=${MARKED%% *}
-      MARKED_PORT=${MARKED##* }
-      if [ -n "$MARKED_HOST" ] && [ "$MARKED_HOST" != "$MARKED_PORT" ] &&
-         echo "$MARKED_PORT" | grep -qE "^[0-9]+$" &&
-         [ "$MARKED_PORT" -ge 1 ] && [ "$MARKED_PORT" -le 65535 ]; then
-        if [ "$MARKED_HOST" = "$SELF_HOST" ] && [ -n "$SERVER_RESTARTED" ]; then
-          # The record names this pod, but the server restarted in place, so
-          # it is no evidence that the data on disk is current. Wait for a
-          # Sentinel to settle the role, under the same check as above.
-          log "No Sentinel answered; last recorded master is this pod, but the server restarted in place"
-          wait_for_topology
-          FOUND_HOST=${DISCOVERED% *}
-          FOUND_PORT=${DISCOVERED#* }
-          if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
-            log "Sentinel reports this pod as the master, starting as MASTER"
-          else
-            log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
-            REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
-          fi
-        elif [ "$MARKED_HOST" = "$SELF_HOST" ]; then
-          log "No Sentinel answered; last recorded master is this pod, starting as MASTER"
-        else
-          log "No Sentinel answered; last recorded master is $MARKED_HOST:$MARKED_PORT, starting as REPLICA"
-          REPLICATION_TARGET="replicaof $MARKED_HOST $MARKED_PORT"
-        fi
-      else
-        # Nothing anywhere: a fresh install, or a pod that lost its volume. The
-        # Sentinels are still running their own discovery and bootstrap a master
-        # once sentinel.startupTimeoutSeconds expires, and this pod only
-        # has to be around to be told. Exiting here instead leaves the init
-        # container crash looping until a retry happens to land after that, so
-        # wait for the answer rather than for the next backoff. The volume is
-        # empty on this path, so a Sentinel that answers late is held to the
-        # same check as one that answered at once.
-        wait_for_topology
-        FOUND_HOST=${DISCOVERED% *}
-        FOUND_PORT=${DISCOVERED#* }
-        if [ "$FOUND_HOST" = "$SELF_HOST" ]; then
-          log "Sentinel reports this pod as the master, starting as MASTER"
-        else
-          log "Sentinel reports $FOUND_HOST:$FOUND_PORT as the master, starting as REPLICA"
-          REPLICATION_TARGET="replicaof $FOUND_HOST $FOUND_PORT"
-        fi
-      fi
-      fi
+    fi
+    RECORDED=$(recorded_master)
+    if [ -n "$SENTINEL_MASTER" ] && [ "${SENTINEL_MASTER% *}" = "$SELF_HOST" ] && empty_master_refused; then
+      REFUSED="yes"
+      log "Sentinel still names this pod as master, but this pod has no data it can vouch for and a replica may hold data, waiting for Sentinel to fail over"
+      wait_for_topology
+    elif [ -n "$SENTINEL_MASTER" ]; then
+      follow_master "$SENTINEL_MASTER" "Sentinel reports"
+    elif [ -n "$RUNNING" ]; then
+      follow_master "$RUNNING" "No Sentinel answered, but a running node reports"
+    elif [ -n "$RECORDED" ]; then
+      follow_master "$RECORDED" "No Sentinel answered; the last record names"
+    else
+      wait_for_topology
     fi
 
     # Record the master this pod is about to follow. Host and port only, never
