@@ -4,6 +4,17 @@
 {{- if and .Values.auth.enabled (hasKey .Values.auth.aclUsers $initMonitorUser) }}
 {{- $initMonitorKey = (index .Values.auth.aclUsers $initMonitorUser).passwordKey | default $initMonitorUser }}
 {{- end }}
+{{- /* A rerun of init.sh after an in-place restart happens in the Valkey
+       container, where the startup probe is already counting. Keep its wait
+       inside the probe's budget, so it ends with its own message and a clean
+       exit rather than being killed halfway; the next attempt checks again. */}}
+{{- $restartWait := int .Values.sentinel.initialTopologyWaitSeconds }}
+{{- with .Values.startupProbe }}
+{{- if and .enabled (not .customProbe) }}
+{{- $budget := add (int (.initialDelaySeconds | default 0)) (mul (int (.periodSeconds | default 10)) (int (.failureThreshold | default 3))) }}
+{{- $restartWait = min $restartWait (max 5 (sub $budget 15)) }}
+{{- end }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -145,7 +156,7 @@ data:
     STARTED="/valkey-conf/.server-started"
     if [ -f "$STARTED" ]; then
       echo "$(date) The server restarted inside a running pod, checking the replication role again" >&2
-      VALKEY_SERVER_RESTARTED=yes /scripts/init.sh &
+      VALKEY_SERVER_RESTARTED=yes VALKEY_TOPOLOGY_WAIT_SECONDS={{ $restartWait }} /scripts/init.sh &
       init_pid=$!
       trap 'kill "$init_pid" 2>/dev/null; exit 1' TERM INT
       wait "$init_pid" || exit 1
@@ -185,6 +196,8 @@ data:
     # is on disk may be older than what the replicas hold, or missing. That
     # run gives the record no say in whether this pod may lead.
     SERVER_RESTARTED="${VALKEY_SERVER_RESTARTED:-}"
+    # That rerun also passes a shorter wait, one that fits the startup probe.
+    TOPOLOGY_WAIT="${VALKEY_TOPOLOGY_WAIT_SECONDS:-{{ .Values.sentinel.initialTopologyWaitSeconds }}}"
     {{- end }}
     DATA_DIR="$(dirname "$VALKEY_CONFIG")"
 
@@ -504,7 +517,7 @@ data:
     wait_for_topology() {
       WAITED=0
       REFUSED=""
-      while [ "$WAITED" -lt "{{ .Values.sentinel.initialTopologyWaitSeconds }}" ]; do
+      while [ "$WAITED" -lt "$TOPOLOGY_WAIT" ]; do
         sleep 5
         WAITED=$((WAITED + 5))
         DISCOVERED=$(master_from_sentinels || true)
@@ -519,7 +532,7 @@ data:
           log "Sentinel still names this pod as master, but this pod has no data it can vouch for and a replica may hold data, waiting for Sentinel to fail over"
           DISCOVERED=""
         fi
-        log "Waiting for a Sentinel or a running node to report the topology, ${WAITED}s of {{ .Values.sentinel.initialTopologyWaitSeconds }}s"
+        log "Waiting for a Sentinel or a running node to report the topology, ${WAITED}s of ${TOPOLOGY_WAIT}s"
       done
       if [ -n "$REFUSED" ]; then
         # Sentinel may be unable to fail over, e.g. without quorum, when every
