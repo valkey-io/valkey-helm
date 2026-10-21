@@ -335,9 +335,13 @@ When more than one is set, `existingClaim` wins over `size`, which wins over `ho
 
 Without Sentinel, persistent storage is **mandatory** in replication mode. Without it, the primary might come up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
 
-With Sentinel (`sentinel.enabled: true`), persistence is optional and each pod gets an `emptyDir`.
+With Sentinel (`sentinel.enabled: true`), persistence is optional; without it each pod gets an `emptyDir`.
 A master pod that restarts on an empty volume while Sentinel still names it as master and another Valkey pod is up refuses to start, so Sentinel fails over to a replica that still has the data, and the pod then joins the new master.
-If Sentinel cannot fail over, because it has no quorum or no replica qualifies (for example one that was cut off from the master for too long), the pod keeps restarting until a replica is promoted, e.g. with `SENTINEL FAILOVER <masterSet>`.
+If Sentinel cannot fail over, the pod keeps restarting until a replica is promoted:
+
+- Without quorum, `SENTINEL FAILOVER <masterSet>` on one Sentinel forces the failover without the agreement of the others.
+- If that answers `NOGOODSLAVE`, no replica qualifies, for example because every one was cut off from the master for too long. `SENTINEL FAILOVER` cannot override that: promote a replica by hand with `REPLICAOF NO ONE`, then point each Sentinel at it with `SENTINEL REMOVE <masterSet>`, `SENTINEL MONITOR` and the `SENTINEL SET` options the chart configures.
+
 Losing every pod at once still loses the data.
 
 ```yaml

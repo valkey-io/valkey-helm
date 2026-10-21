@@ -442,7 +442,9 @@ data:
           # every replica was cut off from this pod for too long to qualify.
           # The pod then keeps exiting until an operator steps in.
           log "Empty volume but Sentinel still names this pod as master, exiting so Sentinel can fail over"
-          log "If this repeats, Sentinel cannot promote a replica (no quorum, or no replica qualifies); check the Sentinel logs, or promote one with SENTINEL FAILOVER {{ .Values.sentinel.masterSet }}"
+          # SENTINEL FAILOVER only skips the agreement between Sentinels, it
+          # still refuses a replica that does not qualify (NOGOODSLAVE).
+          log "If this repeats, Sentinel cannot fail over; check the Sentinel logs. Without quorum, SENTINEL FAILOVER {{ .Values.sentinel.masterSet }} forces it; if that answers NOGOODSLAVE, no replica qualifies and one has to be promoted by hand, see the chart README"
           exit 1
         fi
         log "Sentinel reports this pod as the master, starting as MASTER"
