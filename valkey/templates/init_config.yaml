@@ -139,17 +139,16 @@ data:
     # kill, a failed liveness probe) from a new pod. Kubernetes does not rerun
     # the init container then, and starting on the config it left would make
     # this pod the master again on whatever is on disk, which every replica
-    # would then resync from. Rerun it instead, without the record: the
-    # data volume then looks like an empty one to it, which holds this pod
-    # back from leading while a replica may hold data. With no wait it exits
-    # rather than waits, so the startup probe never cuts it short, and the
-    # kubelet starts the next attempt after its back-off; by then Sentinel
-    # has usually failed over, and this pod joins the new master.
+    # would then resync from. Rerun it instead, telling it that a record
+    # naming this pod is no evidence the data is current; a record naming
+    # another master still serves a replica when no Sentinel answers. With no
+    # wait it exits rather than waits, so the startup probe never cuts it
+    # short, and the kubelet starts the next attempt after its back-off; by
+    # then Sentinel has usually failed over, and this pod joins the new master.
     STARTED="/valkey-conf/.server-started"
     if [ -f "$STARTED" ]; then
       echo "$(date) The server restarted inside a running pod, checking the replication role again" >&2
-      rm -f "$MARKER"
-      VALKEY_TOPOLOGY_WAIT_SECONDS=0 /scripts/init.sh || exit 1
+      VALKEY_SERVER_RESTARTED=yes VALKEY_TOPOLOGY_WAIT_SECONDS=0 /scripts/init.sh || exit 1
     fi
     : > "$STARTED"
 
@@ -179,8 +178,12 @@ data:
     # only durable topology left once the config moved to a memory backed
     # volume, and it is what breaks the cold start deadlock below.
     MASTER_MARKER="/data/conf/last-master"
-    # valkey-start.sh passes 0 when it reruns this script after the server
-    # restarted inside a running pod: it exits rather than waits there.
+    # Set by valkey-start.sh when it reruns this script after the server
+    # restarted inside a running pod. The record survives that restart, but
+    # the dataset in memory does not, so a record naming this pod no longer
+    # shows that it may lead. It passes no wait either: it exits rather than
+    # waits there.
+    SERVER_RESTARTED="${VALKEY_SERVER_RESTARTED:-}"
     TOPOLOGY_WAIT="${VALKEY_TOPOLOGY_WAIT_SECONDS:-{{ .Values.sentinel.initialTopologyWaitSeconds }}}"
     {{- end }}
     DATA_DIR="$(dirname "$VALKEY_CONFIG")"
@@ -469,21 +472,22 @@ data:
 
     # Succeeds when this pod must not take the master role Sentinel names it
     # for, judged from the last ask_sentinels. A pod that restarts on an empty
-    # volume before Sentinel noticed it was down is still named as master;
-    # valkey-start.sh makes a server that restarted in place look the same by
-    # removing the record. Starting would make it a master with no data, or old
-    # data, that every replica then resyncs from, wiping theirs. Only when a
+    # volume, or whose server restarted in place, before Sentinel noticed it
+    # was down is still named as master. Starting would make it a master with
+    # no data, or old data, that every replica then resyncs from, wiping
+    # theirs. Only when a
     # quorum of Sentinels knows of no replica and no other node is up, as on a
     # fresh install or after the Sentinels were reset, is there nothing to
     # promote, and this pod has to bootstrap. A peer that does not answer this
     # pod's PING is no proof on its own: its connection may be what failed.
     empty_master_refused() {
-      [ ! -f "$MASTER_MARKER" ] &&
+      { [ ! -f "$MASTER_MARKER" ] || [ -n "$SERVER_RESTARTED" ]; } &&
         { [ -n "$SENTINEL_REPLICAS" ] || [ "$SENTINEL_NONE" -lt "{{ int .Values.sentinel.quorum }}" ] || peer_up; }
     }
 
     # Prints the master this pod last followed, from its record on the data
-    # volume, or nothing when there is no complete record.
+    # volume, or nothing when there is no complete record, or when it names
+    # this pod and the server restarted in place.
     recorded_master() {
       [ -f "$MASTER_MARKER" ] || return 0
       # read fails on a line with no closing newline, which is what a record
@@ -493,6 +497,9 @@ data:
       marked=$(printf '%s' "$marked" | tr -d '\r')
       host=${marked%% *}
       port=${marked##* }
+      if [ "$host" = "$SELF_HOST" ] && [ -n "$SERVER_RESTARTED" ]; then
+        return 0
+      fi
       if [ -n "$host" ] && [ "$host" != "$port" ] &&
          echo "$port" | grep -qE "^[0-9]+$" &&
          [ "$port" -ge 1 ] && [ "$port" -le 65535 ]; then
