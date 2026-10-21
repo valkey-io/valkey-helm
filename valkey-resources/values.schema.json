@@ -7,6 +7,9 @@
     "nameOverride": { "type": "string" },
     "fullnameOverride": { "type": "string" },
     "commonLabels": { "type": "object" },
+    "extraResources": {
+      "type": "array"
+    },
     "extraValues": {
       "type": "object",
       "additionalProperties": true,

@@ -1,0 +1,16 @@
+{{- if .Values.extraResources }}
+{{-   range .Values.extraResources }}
+---
+{{-     $resource := . | deepCopy }}
+
+{{-     $objectLabels := include "valkey-resources.labels" $ | fromYaml }}
+
+{{-     if $resource.metadata.labels }}
+{{-       $objectLabels = merge $objectLabels $resource.metadata.labels }}
+{{-     end }}
+
+{{      $_ := set $resource.metadata "labels" $objectLabels -}}
+
+{{      toYaml $resource | nindent 0 }}
+{{-   end }}
+{{- end }}
