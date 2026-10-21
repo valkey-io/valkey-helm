@@ -139,16 +139,22 @@ data:
     # kill, a failed liveness probe) from a new pod. Kubernetes does not rerun
     # the init container then, and starting on the config it left would make
     # this pod the master again on whatever is on disk, which every replica
-    # would then resync from. Rerun it instead, telling it that a record
-    # naming this pod is no evidence the data is current; a record naming
-    # another master still serves a replica when no Sentinel answers. With no
-    # wait it exits rather than waits, so the startup probe never cuts it
-    # short, and the kubelet starts the next attempt after its back-off; by
-    # then Sentinel has usually failed over, and this pod joins the new master.
+    # would then resync from. Rerun it instead, with a flag on the data
+    # volume that tells it a record naming this pod is no evidence the data
+    # is current; a record naming another master still serves a replica when
+    # no Sentinel answers. The flag stays until init.sh settles a role, also
+    # for a pod that replaces this one with the same volume. With no wait it
+    # exits rather than waits, and the kubelet starts the next attempt after
+    # its back-off; by then Sentinel has usually failed over, and this pod
+    # joins the new master.
     STARTED="/valkey-conf/.server-started"
     if [ -f "$STARTED" ]; then
       echo "$(date) The server restarted inside a running pod, checking the replication role again" >&2
-      VALKEY_SERVER_RESTARTED=yes VALKEY_TOPOLOGY_WAIT_SECONDS=0 /scripts/init.sh || exit 1
+      if ! { mkdir -p /data/conf && : > /data/conf/restarted; }; then
+        echo "$(date) ERROR: cannot flag the restart on the data volume, not starting" >&2
+        exit 1
+      fi
+      VALKEY_TOPOLOGY_WAIT_SECONDS=0 /scripts/init.sh || exit 1
     fi
     : > "$STARTED"
 
@@ -178,12 +184,20 @@ data:
     # only durable topology left once the config moved to a memory backed
     # volume, and it is what breaks the cold start deadlock below.
     MASTER_MARKER="/data/conf/last-master"
-    # Set by valkey-start.sh when it reruns this script after the server
-    # restarted inside a running pod. The record survives that restart, but
-    # the dataset in memory does not, so a record naming this pod no longer
-    # shows that it may lead. It passes no wait either: it exits rather than
-    # waits there.
-    SERVER_RESTARTED="${VALKEY_SERVER_RESTARTED:-}"
+    # Left by valkey-start.sh when the server restarted inside a running pod,
+    # and removed once this script has settled a role. The record survives
+    # such a restart, but the dataset in memory does not, so while this is
+    # here a record naming this pod no longer shows that it may lead. It is
+    # kept on the data volume rather than passed along, so that a pod that
+    # replaces a stuck one keeps the volume, the record and the old data, and
+    # is held to the same check.
+    RESTART_FLAG="/data/conf/restarted"
+    SERVER_RESTARTED=""
+    if [ -f "$RESTART_FLAG" ]; then
+      SERVER_RESTARTED="yes"
+    fi
+    # valkey-start.sh passes 0 when it reruns this script: it exits rather
+    # than waits there, so the startup probe never cuts it short.
     TOPOLOGY_WAIT="${VALKEY_TOPOLOGY_WAIT_SECONDS:-{{ .Values.sentinel.initialTopologyWaitSeconds }}}"
     {{- end }}
     DATA_DIR="$(dirname "$VALKEY_CONFIG")"
@@ -617,6 +631,9 @@ data:
     # leaves the previous record rather than an empty or half written one.
     printf '%s %s\n' "$MARKER_HOST" "$MARKER_PORT" > "$MASTER_MARKER.tmp"
     mv "$MASTER_MARKER.tmp" "$MASTER_MARKER"
+    # The role is settled, and the record now says so, so the data on this
+    # volume is no longer in question.
+    rm -f "$RESTART_FLAG"
     {{- else }}
     if [ "$POD_INDEX" = "0" ]; then
       log "This pod (index $POD_INDEX) is configured as MASTER"

@@ -268,13 +268,18 @@ tests:
       # record stays: a replica still needs it when no Sentinel answers.
       - matchRegex:
           path: data["valkey-start.sh"]
-          pattern: 'if \[ -f "\$STARTED" \]; then\n.*\n\s+VALKEY_SERVER_RESTARTED=yes VALKEY_TOPOLOGY_WAIT_SECONDS=0 /scripts/init.sh \|\| exit 1\n'
+          pattern: 'if \[ -f "\$STARTED" \]; then\n(.*\n)*?\s+if ! \{ mkdir -p /data/conf && : > /data/conf/restarted; \}; then\n(.*\n){3}\s+VALKEY_TOPOLOGY_WAIT_SECONDS=0 /scripts/init.sh \|\| exit 1\n'
       - notMatchRegex:
           path: data["valkey-start.sh"]
           pattern: 'rm -f "\$MARKER"'
+      # On the data volume, so a pod that replaces a stuck one with the same
+      # volume is held to the same check, and cleared once a role is settled.
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'SERVER_RESTARTED="\$\{VALKEY_SERVER_RESTARTED:-\}"'
+          pattern: 'RESTART_FLAG="/data/conf/restarted"\n\s*SERVER_RESTARTED=""\n\s*if \[ -f "\$RESTART_FLAG" \]; then\n\s+SERVER_RESTARTED="yes"'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'mv "\$MASTER_MARKER.tmp" "\$MASTER_MARKER"\n(.*\n){2}\s*rm -f "\$RESTART_FLAG"'
       - matchRegex:
           path: data["valkey-start.sh"]
           pattern: ': > "\$STARTED"\n\n\s*track_master &\n\s*exec valkey-server'
