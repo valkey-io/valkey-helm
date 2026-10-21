@@ -335,7 +335,8 @@ When more than one is set, `existingClaim` wins over `size`, which wins over `ho
 
 Without Sentinel, persistent storage is **mandatory** in replication mode. Without it, the primary might come up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
 
-With Sentinel (`sentinel.enabled: true`), persistence is optional; without it each pod gets an `emptyDir`.
+With Sentinel (`sentinel.enabled: true`), persistence is optional.
+Without persistence each pod gets an `emptyDir`. With persistence, the StatefulSet creates PVCs instead of emptyDir data volumes.
 A master pod that restarts on an empty volume while Sentinel still names it as master does not start as master when a Sentinel knows of a replica or another Valkey pod is up. It waits until Sentinel fails over to a replica that still has the data, and then joins the new master.
 Sentinel remembers every replica it has seen, so a replica that is unreachable at that moment still counts.
 The pod only starts as an empty master once a quorum of Sentinels reports no replica at all, as on a fresh install.
