@@ -233,7 +233,13 @@ tests:
     asserts:
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'if \[ ! -f "\$MASTER_MARKER" \] && peer_up; then'
+          pattern: '\[ ! -f "\$MASTER_MARKER" \] && peer_up'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '\s+if empty_master_refused; then\n'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'if \[ "\$\{DISCOVERED% \*\}" = "\$SELF_HOST" \] && empty_master_refused; then'
       - matchRegex:
           path: data["init.sh"]
           pattern: 'valkey-cli\s+-t 2 -h "\$node" -p 6379 ping'
@@ -710,7 +716,7 @@ tests:
           pattern: 'No Sentinel answered; last recorded master is'
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'No Sentinel answered and no recorded topology; refusing to start'
+          pattern: 'No Sentinel named another master and there is no recorded topology; refusing to start'
 
   - it: should record the master without writing a credential
     template: templates/init_config.yaml
