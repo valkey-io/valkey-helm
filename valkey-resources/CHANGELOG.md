@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+### Changed
+
+- `appVersion` defaults to operator **v0.8.0** (up from v0.7.1). Upgrade the `valkey-operator` chart and apply both v0.8.0 CRDs first. See the [v0.8.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.8.0).
+
+### Notes
+
+- No breaking ValkeyCluster API changes. The new fields can be set through the `cluster.spec` drop-in:
+  - `serviceAccountName` for the ServiceAccount the Valkey pods run as. It must already exist in the release namespace.
+  - `podMetadata.labels` and `podMetadata.annotations` for labels and annotations on every Valkey pod.
+- The operator now rejects a ValkeyCluster name longer than its StatefulSets can carry: 41 characters with `workloadType: StatefulSet` and single-digit indexes. The chart names the ValkeyCluster `fullnameOverride` if set, else `<release>-valkey-resources` (just `<release>` when the release name already contains `valkey-resources`). The suffix takes 17 characters, so with the default naming a release name of up to 24 characters fits.
+- Upgrading the operator does not roll pods.
+
 ## 0.3.0
 
 ### Changed
