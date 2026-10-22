@@ -1,5 +1,26 @@
 # Upgrade
 
+## From 0.7.x to 0.8.0
+
+This version updates the CRDs to match the valkey-operator release bundled in this chart.
+Helm does not upgrade CRDs during `helm upgrade`, so you must apply them manually before upgrading.
+The v0.8 operator copies the new `podMetadata` and `serviceAccountName` fields from each ValkeyCluster to its ValkeyNodes. The v0.7 ValkeyNode CRD does not have them, so the API server drops them: the cluster reports `Ready`, but the labels and annotations never reach the pods and the pods keep the namespace's default ServiceAccount.
+
+Run these commands to update the CRDs before applying the upgrade. `--force-conflicts` is needed because Helm owns the CRD fields it installed:
+
+```console
+kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/valkey-io/valkey-operator/v0.8.0/config/crd/bases/valkey.io_valkeyclusters.yaml
+kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/valkey-io/valkey-operator/v0.8.0/config/crd/bases/valkey.io_valkeynodes.yaml
+```
+
+Then upgrade the chart:
+
+```console
+helm upgrade <release-name> valkey/valkey-operator --version 0.8.0
+```
+
+The upgrade does not roll Valkey pods. A ValkeyCluster created before v0.8.0 whose name is longer than the new limit (41 characters for `workloadType: StatefulSet`) can no longer be updated. See the [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.8.0) for details.
+
 ## From 0.6.x to 0.7.0
 
 This version updates the CRDs to match the valkey-operator release bundled in this chart.
