@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+- Valkey Operator version defaults to v0.8.0. See the [v0.8.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.8.0) for the upstream changes.
+- The ClusterRole grants `get` on `serviceaccounts`. The operator uses it to check that the ServiceAccount named in a ValkeyCluster's `spec.serviceAccountName` exists.
+
+> **Note:** CRDs are not upgraded automatically by Helm. Apply both v0.8.0 CRDs before upgrading the chart. With the old ValkeyNode CRD, `podMetadata` and `serviceAccountName` are dropped from each ValkeyNode and never reach the pods. See [UPGRADE.md](UPGRADE.md).
+
 ## 0.7.0
 
 - Valkey Operator version defaults to v0.7.1. See the [v0.7.0](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.0) and [v0.7.1](https://github.com/valkey-io/valkey-operator/releases/tag/v0.7.1) release notes for the upstream changes.
