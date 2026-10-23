@@ -646,21 +646,85 @@ Validate haproxy configuration
 {{- end -}}
 
 {{/*
+Whether any of the Valkey container probes uses the default ping handler, that
+is, is enabled without a customProbe. Returns "true" or "false".
+*/}}
+{{- define "valkey.usesDefaultProbe" -}}
+{{- $uses := false -}}
+{{- range $name := (list "startupProbe" "livenessProbe" "readinessProbe") -}}
+{{- $probe := index $.Values $name -}}
+{{- if and $probe $probe.enabled (not $probe.customProbe) -}}
+{{- $uses = true -}}
+{{- end -}}
+{{- end -}}
+{{- $uses -}}
+{{- end -}}
+
+{{/*
+Environment for the default health probes to authenticate as the default user.
+The password is resolved the way init.sh resolves it: the usersExistingSecret
+key first, then the inline password. Kubernetes cannot fall back from one
+secretKeyRef to another, so both are passed (the first optional when the
+inline one can stand in) and the probe takes the first one set. The names are
+chart specific rather than VALKEYCLI_AUTH, so other valkey-cli calls in the
+container keep their own credentials. Empty unless auth is enabled, the
+default user is in auth.aclUsers and a default probe is rendered.
+*/}}
+{{- define "valkey.probeAuthEnv" -}}
+{{- $default := index (.Values.auth.aclUsers | default dict) "default" -}}
+{{- if and .Values.auth.enabled $default (include "valkey.usesDefaultProbe" . | eq "true") -}}
+{{- if .Values.auth.usersExistingSecret }}
+- name: VALKEY_PROBE_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ tpl .Values.auth.usersExistingSecret . }}
+      key: {{ $default.passwordKey | default "default" }}
+      {{- if $default.password }}
+      optional: true
+      {{- end }}
+{{- end }}
+{{- if $default.password }}
+- name: VALKEY_PROBE_PASSWORD_INLINE
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "valkey.fullname" . }}-auth
+      key: default-password
+{{- end }}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Render the Valkey server container health probes (startupProbe, livenessProbe,
 readinessProbe). Each probe is gated on its own `enabled` flag. When a probe's
 `customProbe` map is set it replaces the default handler and timing entirely;
-otherwise the default valkey-cli ping exec handler (TLS-aware) is emitted with
-whichever timing fields are set on that probe. The command is built as an
-argument list and invokes valkey-cli directly (no shell), with the TLS flags
-appended only when `tls.enabled` is set. Returns nothing when no probe is
-enabled, so callers should guard with `with`.
+otherwise the default handler is emitted with whichever timing fields are set
+on that probe.
+
+The default handler pings the server on service.port (TLS-aware) and checks
+the reply, not the exit code: valkey-cli exits 0 on error replies such as
+NOAUTH. Readiness passes only on PONG. Startup and liveness also accept
+LOADING, so loading a large dataset does not restart the pod. With auth
+enabled the probe authenticates as the default user (valkey.probeAuthEnv).
+When the default user is only defined in auth.aclConfig the chart cannot know
+its password, so the probe runs unauthenticated and accepts NOAUTH as a sign
+of life. Returns nothing when no probe is enabled, so callers should guard
+with `with`.
 */}}
 {{- define "valkey.healthProbes" -}}
-{{- $cmd := list "valkey-cli" -}}
+{{- $cli := list "valkey-cli" "-p" (toString $.Values.service.port) -}}
 {{- if $.Values.tls.enabled -}}
-{{- $cmd = concat $cmd (list "--cacert" (printf "/tls/%s" $.Values.tls.caPublicKey) "--cert" (printf "/tls/%s" $.Values.tls.serverPublicKey) "--key" (printf "/tls/%s" $.Values.tls.serverKey) "--tls") -}}
+{{- $cli = concat $cli (list "--cacert" (printf "/tls/%s" $.Values.tls.caPublicKey) "--cert" (printf "/tls/%s" $.Values.tls.serverPublicKey) "--key" (printf "/tls/%s" $.Values.tls.serverKey) "--tls") -}}
 {{- end -}}
-{{- $cmd = append $cmd "ping" -}}
+{{- $cli = append $cli "ping" -}}
+{{- $quoted := list -}}
+{{- range $cli -}}{{- $quoted = append $quoted (squote .) -}}{{- end -}}
+{{- $auth := "" -}}
+{{- $unauthenticated := false -}}
+{{- if include "valkey.probeAuthEnv" . -}}
+{{- $auth = "VALKEYCLI_AUTH=\"${VALKEY_PROBE_PASSWORD:-${VALKEY_PROBE_PASSWORD_INLINE:-}}\"; export VALKEYCLI_AUTH; " -}}
+{{- else if $.Values.auth.enabled -}}
+{{- $unauthenticated = true -}}
+{{- end -}}
 {{- $probes := dict -}}
 {{- range $name := (list "startupProbe" "livenessProbe" "readinessProbe") -}}
 {{- $probe := index $.Values $name -}}
@@ -669,7 +733,11 @@ enabled, so callers should guard with `with`.
 {{- if $probe.customProbe -}}
 {{- $probes = set $probes $name $probe.customProbe -}}
 {{- else -}}
-{{- $rendered := dict "exec" (dict "command" $cmd) -}}
+{{- $accept := list "PONG" -}}
+{{- if ne $name "readinessProbe" -}}{{- $accept = append $accept "LOADING*" -}}{{- end -}}
+{{- if $unauthenticated -}}{{- $accept = append $accept "NOAUTH*" -}}{{- end -}}
+{{- $script := printf "%sr=$(%s 2>&1); case \"$r\" in %s) exit 0;; esac; echo \"$r\"; exit 1" $auth (join " " $quoted) (join "|" $accept) -}}
+{{- $rendered := dict "exec" (dict "command" (list "sh" "-c" $script)) -}}
 {{- range $field := (list "initialDelaySeconds" "periodSeconds" "timeoutSeconds" "failureThreshold" "successThreshold") -}}
 {{- if hasKey $probe $field -}}{{- $rendered = set $rendered $field (index $probe $field) -}}{{- end -}}
 {{- end -}}

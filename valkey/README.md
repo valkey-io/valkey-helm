@@ -217,6 +217,7 @@ There is no separate read endpoint, `valkey-read` already load balances across e
 It only drops a pod based on the pod's own probes, though, and the readiness probe is off by default.
 A pod that stops answering therefore keeps receiving reads until the liveness probe restarts it, which takes up to `livenessProbe.periodSeconds` times `livenessProbe.failureThreshold`, 30 seconds by default.
 If reads need to move off a failing pod faster than that, enable `readinessProbe` with a shorter period or a lower failure threshold.
+The readiness probe passes only on `PONG`, so a replica that is still loading its dataset stays out of `valkey-read` until it can answer.
 
 **Labels:**
 

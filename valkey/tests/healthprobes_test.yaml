@@ -16,7 +16,10 @@ tests:
           path: spec.template.spec.containers[0].readinessProbe
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command
-          value: [ "valkey-cli", "ping" ]
+          value:
+            - sh
+            - -c
+            - r=$('valkey-cli' '-p' '6379' 'ping' 2>&1); case "$r" in PONG|LOADING*) exit 0;; esac; echo "$r"; exit 1
       - equal:
           path: spec.template.spec.containers[0].startupProbe.periodSeconds
           value: 10
@@ -50,7 +53,10 @@ tests:
           value: 1
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.exec.command
-          value: [ "valkey-cli", "ping" ]
+          value:
+            - sh
+            - -c
+            - r=$('valkey-cli' '-p' '6379' 'ping' 2>&1); case "$r" in PONG) exit 0;; esac; echo "$r"; exit 1
 
   - it: omits a probe when it is disabled
     template: templates/deploy_valkey.yaml
@@ -92,5 +98,165 @@ tests:
       # valkey-cli with "Invalid private key", which fails every probe and
       # leaves the pod unready for as long as TLS is enabled.
       - equal:
-          path: spec.template.spec.containers[0].startupProbe.exec.command
-          value: [ "valkey-cli", "--cacert", "/tls/probe-ca.pem", "--cert", "/tls/probe-cert.pem", "--key", "/tls/probe-key.pem", "--tls", "ping" ]
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          value: r=$('valkey-cli' '-p' '6379' '--cacert' '/tls/probe-ca.pem' '--cert' '/tls/probe-cert.pem' '--key' '/tls/probe-key.pem' '--tls' 'ping' 2>&1); case "$r" in PONG|LOADING*) exit 0;; esac; echo "$r"; exit 1
+
+  - it: pings the configured service port
+    template: templates/deploy_valkey.yaml
+    set:
+      service.port: 6380
+    asserts:
+      # Without -p the probe pings 6379, gets connection refused and the pod
+      # restarts until the startup probe gives up.
+      - matchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: "'valkey-cli' '-p' '6380' 'ping'"
+      - matchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: "'valkey-cli' '-p' '6380' 'ping'"
+
+  - it: does not authenticate or set probe credentials when auth is disabled
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: VALKEYCLI_AUTH
+      - isNullOrEmpty:
+          path: spec.template.spec.containers[0].env
+
+  - it: authenticates with the inline default user password
+    template: templates/deploy_valkey.yaml
+    set:
+      auth.enabled: true
+      auth.aclUsers.default.permissions: "~* &* +@all"
+      auth.aclUsers.default.password: "secret"
+      readinessProbe.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_PROBE_PASSWORD_INLINE
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-valkey-auth
+                key: default-password
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_PROBE_PASSWORD
+          any: true
+      # valkey-cli exits 0 on NOAUTH, so the reply has to be checked: NOAUTH
+      # must not be accepted once the probe can authenticate.
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          value: VALKEYCLI_AUTH="${VALKEY_PROBE_PASSWORD:-${VALKEY_PROBE_PASSWORD_INLINE:-}}"; export VALKEYCLI_AUTH; r=$('valkey-cli' '-p' '6379' 'ping' 2>&1); case "$r" in PONG|LOADING*) exit 0;; esac; echo "$r"; exit 1
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          value: VALKEYCLI_AUTH="${VALKEY_PROBE_PASSWORD:-${VALKEY_PROBE_PASSWORD_INLINE:-}}"; export VALKEYCLI_AUTH; r=$('valkey-cli' '-p' '6379' 'ping' 2>&1); case "$r" in PONG) exit 0;; esac; echo "$r"; exit 1
+
+  - it: reads the default user password from usersExistingSecret with its passwordKey
+    template: templates/deploy_valkey.yaml
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: "users-{{ .Release.Name }}"
+      auth.aclUsers.default.permissions: "~* &* +@all"
+      auth.aclUsers.default.passwordKey: admin-pwd
+    asserts:
+      # Required, as nothing else can stand in for it.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_PROBE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: users-RELEASE-NAME
+                key: admin-pwd
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_PROBE_PASSWORD_INLINE
+          any: true
+
+  - it: falls back from usersExistingSecret to the inline password like init.sh
+    template: templates/deploy_valkey.yaml
+    set:
+      auth.enabled: true
+      auth.usersExistingSecret: users
+      auth.aclUsers.default.permissions: "~* &* +@all"
+      auth.aclUsers.default.password: "fallback"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_PROBE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: users
+                key: default
+                optional: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_PROBE_PASSWORD_INLINE
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-valkey-auth
+                key: default-password
+
+  - it: accepts NOAUTH when the default user is only in aclConfig
+    template: templates/deploy_valkey.yaml
+    set:
+      auth.enabled: true
+      auth.aclConfig: "user default on >pw ~* &* +@all"
+      readinessProbe.enabled: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: VALKEYCLI_AUTH
+      - matchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          pattern: 'case "\$r" in PONG\|LOADING\*\|NOAUTH\*\)'
+      - matchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: 'case "\$r" in PONG\|NOAUTH\*\)'
+
+  - it: sets no probe credentials when every probe is custom
+    template: templates/deploy_valkey.yaml
+    set:
+      auth.enabled: true
+      auth.aclUsers.default.permissions: "~* &* +@all"
+      auth.aclUsers.default.password: "secret"
+      startupProbe.customProbe:
+        tcpSocket:
+          port: 6379
+      livenessProbe.customProbe:
+        tcpSocket:
+          port: 6379
+    asserts:
+      - isNullOrEmpty:
+          path: spec.template.spec.containers[0].env
+
+  - it: authenticates the probes on the StatefulSet in replication mode
+    template: templates/statefulset.yaml
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: "5Gi"
+      auth.enabled: true
+      auth.aclUsers.default.permissions: "~* &* +@all"
+      auth.aclUsers.default.password: "secret"
+      auth.aclUsers.repl.permissions: "+psync +replconf +ping"
+      auth.aclUsers.repl.password: "replpass"
+      replica.replicationUser: repl
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALKEY_PROBE_PASSWORD_INLINE
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-valkey-auth
+                key: default-password
+      - matchRegex:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          pattern: ^VALKEYCLI_AUTH=
