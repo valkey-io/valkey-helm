@@ -12,7 +12,7 @@ tests:
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "Replication requires persistent storage.*"
+          errorPattern: "persistence.enabled in replication mode needs persistence.size.*"
 
   - it: should succeed when replica enabled with size provided
     set:
