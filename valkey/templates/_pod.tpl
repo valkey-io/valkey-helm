@@ -273,7 +273,10 @@ spec:
         {{- end }}
         {{- end }}
         {{- end }}
-        {{- if .Values.auth.enabled }}
+        {{- /* The default user's password is only known when that user is in
+               auth.aclUsers. With auth.aclConfig alone there is no secret key
+               to point at, so REDIS_PASSWORD is left to metrics.exporter.extraEnv */}}
+        {{- if and .Values.auth.enabled (hasKey .Values.auth.aclUsers "default") (not (hasKey $exporterEnvs "REDIS_PASSWORD")) }}
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:

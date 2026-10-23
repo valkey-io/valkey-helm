@@ -142,6 +142,65 @@ tests:
             name: REDIS_ADDR
             value: redis://localhost:6379
 
+  - it: should take REDIS_PASSWORD from the default user's generated secret key
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "supersecret"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-valkey-auth
+                key: default-password
+
+  - it: should not point REDIS_PASSWORD at a missing key when auth.aclConfig defines the default user
+    set:
+      auth.enabled: true
+      auth.aclConfig: "user default on >password ~* &* +@all"
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[1].env[?(@.name == "REDIS_PASSWORD")]
+
+  - it: should leave REDIS_PASSWORD to metrics.exporter.extraEnv instead of setting it twice
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "supersecret"
+      metrics.exporter.extraEnv:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-exporter-secret
+              key: password
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-valkey-auth
+                key: default-password
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-exporter-secret
+                key: password
+
   - it: should leave TLS settings to metrics.exporter.extraEnv instead of setting them twice
     set:
       replica.enabled: true
