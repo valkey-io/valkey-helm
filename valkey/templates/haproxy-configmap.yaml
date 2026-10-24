@@ -82,8 +82,12 @@ data:
       {{- if .Values.auth.enabled }}
       # AUTH goes out as a RESP array with each argument's length, so the
       # password is sent as is whatever it contains. As an inline command a
-      # space in the password would split it into extra arguments.
-      tcp-check send-lf "*3\r\n\$4\r\nAUTH\r\n\${{ len $checkUser }}\r\n{{ $checkUser }}\r\n\$%[env(VALKEY_CHECK_PASSWORD),length]\r\n%[env(VALKEY_CHECK_PASSWORD)]\r\n"
+      # space in the password would split it into extra arguments. The check
+      # user's length comes from the raw value: send-lf is a log-format
+      # string, where a literal % would otherwise start a sample fetch, so
+      # the user is written with % doubled to %% but the length is unaffected
+      # since HAProxy collapses that back to one % before sending.
+      tcp-check send-lf "*3\r\n\$4\r\nAUTH\r\n\${{ len $checkUser }}\r\n{{ $checkUser | replace "%" "%%" }}\r\n\$%[env(VALKEY_CHECK_PASSWORD),length]\r\n%[env(VALKEY_CHECK_PASSWORD)]\r\n"
       tcp-check expect string +OK
       {{- end }}
       # QUIT is sent before the expect so that the node closes the connection as

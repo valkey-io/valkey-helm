@@ -132,6 +132,23 @@ tests:
           path: data["haproxy.cfg"]
           pattern: 'pass word'
 
+  - it: should escape a percent sign in haproxy.checkUser without changing its RESP length
+    set:
+      auth.enabled: true
+      haproxy.checkUser: check%user
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "supersecret"
+        check%user:
+          permissions: "-@all +info +ping"
+          password: "checkpass"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'AUTH\\r\\n\\\$10\\r\\ncheck%%user\\r\\n'
+
   - it: should read the health check password from the generated auth secret
     set:
       auth.enabled: true
