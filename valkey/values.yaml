@@ -153,8 +153,10 @@ initResources: {}
 # probe cannot authenticate and accepts NOAUTH instead. Set `customProbe` to a
 # full probe spec to replace the default handler and timing entirely (e.g. an
 # httpGet or tcpSocket probe).
-# The defaults below match the previous hardcoded behavior (Kubernetes probe
-# defaults); readinessProbe is opt-in since the container had none before.
+# Startup and liveness keep the Kubernetes probe defaults. Readiness is on by
+# default, so a pod that cannot answer PONG (still loading its dataset, or
+# hung) is taken out of the non-headless Services and stops receiving requests
+# through them. The headless Services still publish not-ready pods in DNS.
 startupProbe:
   enabled: true
   initialDelaySeconds: 0
@@ -170,7 +172,7 @@ livenessProbe:
   failureThreshold: 3
   customProbe: {}
 readinessProbe:
-  enabled: false
+  enabled: true
   initialDelaySeconds: 0
   periodSeconds: 10
   timeoutSeconds: 1

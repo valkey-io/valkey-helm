@@ -214,9 +214,8 @@ The health checks are the failover mechanism, so no sidecar, no runtime package 
 * `valkey-haproxy:6379`: reads and writes, always routed to the current master
 
 There is no separate read endpoint, `valkey-read` already load balances across every pod.
-It only drops a pod based on the pod's own probes, though, and the readiness probe is off by default.
-A pod that stops answering therefore keeps receiving reads until the liveness probe restarts it, which takes up to `livenessProbe.periodSeconds` times `livenessProbe.failureThreshold`, 30 seconds by default.
-If reads need to move off a failing pod faster than that, enable `readinessProbe` with a shorter period or a lower failure threshold.
+It drops a pod once the pod's readiness probe fails. The probe notices a pod that stopped answering after about `readinessProbe.periodSeconds` times `readinessProbe.failureThreshold`, 30 seconds by default, and the Service stops routing to it shortly after, once the endpoints are updated.
+If reads need to move off a failing pod faster than that, lower either of the two.
 The readiness probe passes only on `PONG`, so a replica that is still loading its dataset stays out of `valkey-read` until it can answer.
 
 **Labels:**
@@ -698,7 +697,7 @@ TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on a
 | priorityClassName | string | `""` |  |
 | runtimeClassName | string | `""` | RuntimeClassName for the pods (e.g. `gvisor`, `kata-containers`); empty uses the cluster default runtime |
 | readinessProbe.customProbe | object | `{}` | Full probe spec to replace the default valkey-cli ping handler and timing |
-| readinessProbe.enabled | bool | `false` | Opt-in; the Valkey container had no readiness probe before |
+| readinessProbe.enabled | bool | `true` | Takes the pod out of the non-headless Services while Valkey does not answer `PONG` |
 | readinessProbe.failureThreshold | int | `3` |  |
 | readinessProbe.initialDelaySeconds | int | `0` |  |
 | readinessProbe.periodSeconds | int | `10` |  |
