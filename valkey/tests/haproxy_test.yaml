@@ -149,6 +149,23 @@ tests:
           path: data["haproxy.cfg"]
           pattern: 'AUTH\\r\\n\\\$10\\r\\ncheck%%user\\r\\n'
 
+  - it: should escape a backslash, dollar sign and double quote in haproxy.checkUser without changing its RESP length
+    set:
+      auth.enabled: true
+      haproxy.checkUser: 'che$ck"us\er%'
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "supersecret"
+        'che$ck"us\er%':
+          permissions: "-@all +info +ping"
+          password: "checkpass"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'AUTH\\r\\n\\\$13\\r\\nche\\\$ck\\"us\\\\er%%\\r\\n'
+
   - it: should read the health check password from the generated auth secret
     set:
       auth.enabled: true
