@@ -144,6 +144,16 @@ Replication, from `replica.persistence`: move the block to the top level as `per
 
 ---
 
+### Readiness probe enabled by default
+
+**What changed:** the Valkey container has a readiness probe by default (`readinessProbe.enabled: true`). A pod receives traffic through the Services only once Valkey answers `PONG`, so a replica that is still loading its dataset, or a pod that stops answering, is taken out of the Services instead of receiving requests. The headless Services still publish not-ready pods, so replication and Sentinel are unaffected. The pods restart once on upgrade.
+
+**Who is affected:** clients and tools that expect every running pod behind `valkey` and `valkey-read`, e.g. readiness waits with a short timeout on a large dataset.
+
+**How to configure:** no action needed. Set `readinessProbe.enabled: false` to keep the previous behavior.
+
+---
+
 ### Fixed container names in the Valkey pods
 
 **What changed:** the Valkey pods' containers are named `valkey`, `init` and `metrics` instead of `<fullname>` and `<fullname>-init`. The pods and their workload are also labelled `app.kubernetes.io/component: valkey` (not part of the selectors). The pods restart once on upgrade.
