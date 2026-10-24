@@ -80,7 +80,17 @@ data:
       # none and verifyhost validates the certificate it gets back.
       tcp-check connect port {{ $port }}{{ if .Values.tls.enabled }} ssl{{ end }}
       {{- if .Values.auth.enabled }}
-      tcp-check send AUTH\ {{ $checkUser }}\ "${VALKEY_CHECK_PASSWORD}"\r\n
+      # AUTH goes out as a RESP array with each argument's length, so the
+      # password is sent as is whatever it contains. As an inline command a
+      # space in the password would split it into extra arguments. The check
+      # user's length comes from the raw value: send-lf is a quoted
+      # log-format string, where a literal \, $ or " would otherwise be read
+      # by HAProxy's own config parser (escape it, start an env var, or close
+      # the string early), so those are backslash or double escaped in the
+      # order below. The length is unaffected since HAProxy collapses each
+      # escape back to the one original byte before sending. Backslash is
+      # escaped first so the escapes added after it aren't escaped again.
+      tcp-check send-lf "*3\r\n\$4\r\nAUTH\r\n\${{ len $checkUser }}\r\n{{ $checkUser | replace "\\" "\\\\" | replace "$" "\\$" | replace "\"" "\\\"" | replace "%" "%%" }}\r\n\$%[env(VALKEY_CHECK_PASSWORD),length]\r\n%[env(VALKEY_CHECK_PASSWORD)]\r\n"
       tcp-check expect string +OK
       {{- end }}
       # QUIT is sent before the expect so that the node closes the connection as
@@ -110,7 +120,7 @@ data:
     backend sentinel_master_{{ $i }}
       option tcp-check
       tcp-check connect{{ if $.Values.tls.enabled }} ssl{{ end }}
-      tcp-check send AUTH\ sentinel\ "${SENTINEL_CHECK_PASSWORD}"\r\n
+      tcp-check send-lf "*3\r\n\$4\r\nAUTH\r\n\$8\r\nsentinel\r\n\$%[env(SENTINEL_CHECK_PASSWORD),length]\r\n%[env(SENTINEL_CHECK_PASSWORD)]\r\n"
       tcp-check expect string +OK
       tcp-check send SENTINEL\ get-master-addr-by-name\ {{ $.Values.sentinel.masterSet }}\r\n
       # Sentinel has no QUIT and keeps the connection open, and an expect that
