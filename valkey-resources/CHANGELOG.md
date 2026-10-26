@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `extraObjects` map renders extra Kubernetes objects with the release. Each entry is an object or a multi-line string, rendered through `tpl`. Set an entry to `null` to drop it.
+
 ## 0.4.0
 
 ### Changed

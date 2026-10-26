@@ -67,3 +67,20 @@ cluster:
   spec:
     shards: 3
     replicas: 1
+
+# Extra Kubernetes objects rendered with the release (for example a ConfigMap
+# or Secret the ValkeyCluster references). A map, so each key can be overridden
+# per environment; set a key to null to drop an inherited entry. Each value is
+# either an object or a multi-line string, and is rendered through tpl, so it
+# may use Helm templates. No namespace is injected: set metadata.namespace if
+# the object must not use the release namespace. Entries render in key order.
+# Example:
+#   extraObjects:
+#     settings:
+#       apiVersion: v1
+#       kind: ConfigMap
+#       metadata:
+#         name: '{{ include "valkey-resources.fullname" . }}-settings'
+#       data:
+#         release: '{{ .Release.Name }}'
+extraObjects: {}

@@ -30,6 +30,7 @@ helm install my-cluster valkey/valkey-resources -n valkey \
 | [persistence.yaml](persistence.yaml) | PVC size on StatefulSet |
 | [metrics-podmonitor.yaml](metrics-podmonitor.yaml) | PodMonitor for exporter sidecars |
 | [users-acl.yaml](users-acl.yaml) | ACL users with password Secret refs |
+| [extra-objects.yaml](extra-objects.yaml) | `extraObjects` ConfigMap, as an object and as a templated string |
 
 ## Notes
 

@@ -103,6 +103,23 @@ Use PodMonitor (not ServiceMonitor): node metrics are on pods, not a dedicated S
 
 **Release model:** one logical workload per Helm release. v0.1 only renders `ValkeyCluster`. When more kinds land, the chart will keep that model (enable the kinds you need for that one workload; multiple independent clusters remain multiple releases).
 
+### Extra objects
+
+`extraObjects` renders additional Kubernetes objects with the release, for example a ConfigMap or Secret that `cluster.spec` references. It is a map so each key can be overridden or removed per environment. Each value is an object or a multi-line string, and is rendered through Helm `tpl` with the root context. Set a key to `null` to drop an entry inherited from another values file. Entries render in key order. No namespace is injected, so set `metadata.namespace` when the object must live elsewhere.
+
+```yaml
+extraObjects:
+  settings:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: '{{ include "valkey-resources.fullname" . }}-settings'
+    data:
+      release: '{{ .Release.Name }}'
+```
+
+See [`examples/extra-objects.yaml`](examples/extra-objects.yaml).
+
 ## Uninstall
 
 ```bash

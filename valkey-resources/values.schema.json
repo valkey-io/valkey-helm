@@ -51,6 +51,7 @@
           }
         }
       }
-    }
+    },
+    "extraObjects": { "type": "object" }
   }
 }

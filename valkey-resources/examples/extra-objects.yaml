@@ -1,0 +1,24 @@
+# Extra objects rendered with the release. Values go through tpl, so release
+# metadata and chart helpers are available. Set a key to null to drop it.
+cluster:
+  spec:
+    shards: 3
+    replicas: 1
+
+extraObjects:
+  # Object form.
+  settings:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: '{{ include "valkey-resources.fullname" . }}-settings'
+    data:
+      release: '{{ .Release.Name }}'
+  # String form.
+  notes: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: {{ .Release.Name }}-notes
+    data:
+      namespace: {{ .Release.Namespace }}
