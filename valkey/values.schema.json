@@ -53,6 +53,9 @@
         "extraVolumes": {
             "type": "array"
         },
+        "extraResources": {
+            "type": "array"
+        },
         "fullnameOverride": {
             "type": "string"
         },
