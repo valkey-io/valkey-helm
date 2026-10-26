@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Optional `NetworkPolicy` (`networkPolicy.enabled`) that admits the cluster's own pods, the operator and configured `clients`, with optional egress and DNS rules. Off by default.
+
 ## 0.4.0
 
 ### Changed

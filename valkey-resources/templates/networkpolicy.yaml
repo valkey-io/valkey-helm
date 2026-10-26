@@ -1,0 +1,91 @@
+{{- $np := .Values.networkPolicy }}
+{{- if $np.enabled }}
+{{- $fullname := include "valkey-resources.fullname" . }}
+{{- $egress := default dict $np.egress }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "valkey-resources.labels" . | nindent 4 }}
+    app.kubernetes.io/component: networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      valkey.io/cluster: {{ $fullname | quote }}
+  policyTypes:
+    - Ingress
+    {{- if $egress.enabled }}
+    - Egress
+    {{- end }}
+  ingress:
+    # The cluster's own pods: client port and cluster bus.
+    - from:
+        - podSelector:
+            matchLabels:
+              valkey.io/cluster: {{ $fullname | quote }}
+      ports:
+        - port: 6379
+          protocol: TCP
+        - port: 16379
+          protocol: TCP
+    {{- with $np.operator }}
+    # The operator, for reconciliation.
+    - from:
+        - {{ toYaml . | nindent 10 | trim }}
+      ports:
+        - port: 6379
+          protocol: TCP
+    {{- end }}
+    {{- $clients := list }}
+    {{- range $name, $peer := $np.clients }}
+    {{- if $peer }}
+    {{- $clients = append $clients $peer }}
+    {{- end }}
+    {{- end }}
+    {{- if $clients }}
+    # Client peers on the Valkey port.
+    - from:
+        {{- toYaml $clients | nindent 8 }}
+      ports:
+        - port: 6379
+          protocol: TCP
+    {{- end }}
+    {{- range $name, $rule := $np.extraIngress }}
+    {{- if $rule }}
+    - {{ toYaml $rule | nindent 6 | trim }}
+    {{- end }}
+    {{- end }}
+  {{- if $egress.enabled }}
+  egress:
+    # The cluster's own pods: replication and cluster bus.
+    - to:
+        - podSelector:
+            matchLabels:
+              valkey.io/cluster: {{ $fullname | quote }}
+      ports:
+        - port: 6379
+          protocol: TCP
+        - port: 16379
+          protocol: TCP
+    {{- if $egress.allowDNS }}
+    # Cluster DNS.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- end }}
+    {{- range $name, $rule := $egress.extra }}
+    {{- if $rule }}
+    - {{ toYaml $rule | nindent 6 | trim }}
+    {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}

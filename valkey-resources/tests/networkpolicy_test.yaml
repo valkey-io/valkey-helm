@@ -1,0 +1,282 @@
+suite: networkpolicy
+templates:
+  - templates/networkpolicy.yaml
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: admits the cluster and the operator with no clients
+    set:
+      fullnameOverride: mt
+      networkPolicy.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: metadata.name
+          value: mt
+      - equal:
+          path: spec.podSelector.matchLabels["valkey.io/cluster"]
+          value: mt
+      - equal:
+          path: spec.policyTypes
+          value: [Ingress]
+      - lengthEqual:
+          path: spec.ingress
+          count: 2
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchLabels["valkey.io/cluster"]
+          value: mt
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - port: 6379
+              protocol: TCP
+            - port: 16379
+              protocol: TCP
+      - equal:
+          path: spec.ingress[1].from
+          value:
+            - namespaceSelector: {}
+              podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: valkey-operator
+      - equal:
+          path: spec.ingress[1].ports
+          value:
+            - port: 6379
+              protocol: TCP
+      - notExists:
+          path: spec.egress
+
+  - it: drops the operator rule when operator is null
+    set:
+      networkPolicy:
+        enabled: true
+        operator: null
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 1
+
+  - it: drops the operator rule when both default selectors are nulled
+    set:
+      networkPolicy:
+        enabled: true
+        operator:
+          namespaceSelector: null
+          podSelector: null
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 1
+
+  - it: renders a custom operator peer as given
+    set:
+      networkPolicy:
+        enabled: true
+        operator:
+          namespaceSelector:
+            matchLabels:
+              team: ops
+          podSelector: null
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 2
+      - equal:
+          path: spec.ingress[1].from
+          value:
+            - namespaceSelector:
+                matchLabels:
+                  team: ops
+
+  - it: quotes the cluster label value
+    set:
+      fullnameOverride: "123"
+      networkPolicy:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels["valkey.io/cluster"]
+          value: "123"
+
+  - it: adds client peers on 6379
+    set:
+      fullnameOverride: mt
+      networkPolicy:
+        enabled: true
+        clients:
+          client-b:
+            namespaceSelector:
+              matchLabels:
+                team: b
+          client-a:
+            namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: app-a
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 3
+      - equal:
+          path: spec.ingress[2].from
+          value:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: app-a
+            - namespaceSelector:
+                matchLabels:
+                  team: b
+      - equal:
+          path: spec.ingress[2].ports
+          value:
+            - port: 6379
+              protocol: TCP
+
+  - it: skips null clients
+    set:
+      networkPolicy:
+        enabled: true
+        clients:
+          a:
+            podSelector:
+              matchLabels:
+                app: a
+          b: null
+    asserts:
+      - lengthEqual:
+          path: spec.ingress[2].from
+          count: 1
+
+  - it: omits the client rule when every client is null
+    set:
+      networkPolicy:
+        enabled: true
+        clients:
+          a: null
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 2
+
+  - it: appends extra ingress rules and skips nulls
+    set:
+      networkPolicy:
+        enabled: true
+        extraIngress:
+          b-metrics:
+            from:
+              - namespaceSelector:
+                  matchLabels:
+                    app: monitoring
+            ports:
+              - port: 9121
+                protocol: TCP
+          a-skipped: null
+          c-other:
+            from:
+              - ipBlock:
+                  cidr: 10.0.0.0/8
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 4
+      - equal:
+          path: spec.ingress[2].ports[0].port
+          value: 9121
+      - equal:
+          path: spec.ingress[3].from[0].ipBlock.cidr
+          value: 10.0.0.0/8
+
+  - it: adds egress when enabled
+    set:
+      fullnameOverride: mt
+      networkPolicy:
+        enabled: true
+        egress:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value: [Ingress, Egress]
+      - lengthEqual:
+          path: spec.egress
+          count: 2
+      - equal:
+          path: spec.egress[0]
+          value:
+            to:
+              - podSelector:
+                  matchLabels:
+                    valkey.io/cluster: mt
+            ports:
+              - port: 6379
+                protocol: TCP
+              - port: 16379
+                protocol: TCP
+      - equal:
+          path: spec.egress[1]
+          value:
+            to:
+              - namespaceSelector: {}
+                podSelector:
+                  matchLabels:
+                    k8s-app: kube-dns
+            ports:
+              - port: 53
+                protocol: UDP
+              - port: 53
+                protocol: TCP
+
+  - it: omits DNS when allowDNS is false
+    set:
+      networkPolicy:
+        enabled: true
+        egress:
+          enabled: true
+          allowDNS: false
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 1
+
+  - it: appends extra egress rules and skips nulls
+    set:
+      networkPolicy:
+        enabled: true
+        egress:
+          enabled: true
+          allowDNS: false
+          extra:
+            a-skipped: null
+            b-s3:
+              to:
+                - ipBlock:
+                    cidr: 192.168.0.0/16
+              ports:
+                - port: 443
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 2
+      - equal:
+          path: spec.egress[1].to[0].ipBlock.cidr
+          value: 192.168.0.0/16
+
+  - it: ignores egress settings while egress is disabled
+    set:
+      networkPolicy:
+        enabled: true
+        egress:
+          extra:
+            x:
+              ports:
+                - port: 443
+    asserts:
+      - notExists:
+          path: spec.egress

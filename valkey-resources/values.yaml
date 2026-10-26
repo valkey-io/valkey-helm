@@ -67,3 +67,30 @@ cluster:
   spec:
     shards: 3
     replicas: 1
+
+# NetworkPolicy for the Valkey pods (selected by valkey.io/cluster=<ValkeyCluster name>).
+# Off by default. When enabled the policy always admits the cluster's own pods
+# (6379, 16379) and the operator (6379), so the cluster can form and reconcile.
+# Map values render in key order; set a key to null to drop an inherited entry.
+networkPolicy:
+  enabled: false
+  # Peer allowed to reach 6379 for reconciliation (a NetworkPolicyPeer). The
+  # rule is dropped when this is null or empty. Helm merges overrides into this
+  # default, so to replace the peer set its namespaceSelector or podSelector
+  # key to null.
+  operator:
+    namespaceSelector: {}
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: valkey-operator
+  # name -> NetworkPolicyPeer allowed to reach 6379
+  clients: {}
+  # name -> full NetworkPolicyIngressRule
+  extraIngress: {}
+  egress:
+    # Adds Egress to policyTypes. Once set, only the rules below are allowed out.
+    enabled: false
+    # Allow UDP/TCP 53 to pods labelled k8s-app=kube-dns in any namespace
+    allowDNS: true
+    # name -> full NetworkPolicyEgressRule
+    extra: {}

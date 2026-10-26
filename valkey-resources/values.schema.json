@@ -51,6 +51,25 @@
           }
         }
       }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "operator": { "type": "object", "additionalProperties": true },
+        "clients": { "type": "object", "additionalProperties": true },
+        "extraIngress": { "type": "object", "additionalProperties": true },
+        "egress": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "allowDNS": { "type": "boolean" },
+            "extra": { "type": "object", "additionalProperties": true }
+          }
+        }
+      }
     }
   }
 }
