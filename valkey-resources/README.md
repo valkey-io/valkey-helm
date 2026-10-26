@@ -103,6 +103,26 @@ Use PodMonitor (not ServiceMonitor): node metrics are on pods, not a dedicated S
 
 **Release model:** one logical workload per Helm release. v0.1 only renders `ValkeyCluster`. When more kinds land, the chart will keep that model (enable the kinds you need for that one workload; multiple independent clusters remain multiple releases).
 
+### ServiceAccount
+
+Set `serviceAccount.create: true` to render a ServiceAccount (named `serviceAccount.name`, default the chart fullname) and run the Valkey pods as it. The operator reads `spec.serviceAccountName` (operator v0.8.0+) and the ServiceAccount must exist in the release namespace before the pods start. Helm installs it first.
+
+```yaml
+serviceAccount:
+  create: true
+  annotations:
+    example.com/role: reader
+```
+
+| Value | Description | Default |
+|-------|-------------|---------|
+| `serviceAccount.create` | Render the ServiceAccount | `false` |
+| `serviceAccount.name` | ServiceAccount name | chart fullname |
+| `serviceAccount.annotations` | Annotations on the ServiceAccount | `{}` |
+| `serviceAccount.automountServiceAccountToken` | Mount the API token into pods | `false` |
+
+Wiring: when `serviceAccount.create` is true or `serviceAccount.name` is set, and `cluster.spec` has no `serviceAccountName`, the chart sets `spec.serviceAccountName` to the ServiceAccount name. An explicit `cluster.spec.serviceAccountName` always wins, and the chart still creates its ServiceAccount when `create` is true. Set only `serviceAccount.name` (with `create: false`) to use a ServiceAccount that already exists.
+
 ## Uninstall
 
 ```bash

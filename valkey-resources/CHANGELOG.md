@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Optional `serviceAccount` values render a ServiceAccount and set `spec.serviceAccountName` on the ValkeyCluster. An explicit `cluster.spec.serviceAccountName` wins.
+
 ## 0.4.0
 
 ### Changed

@@ -67,3 +67,14 @@ cluster:
   spec:
     shards: 3
     replicas: 1
+
+# ServiceAccount for the Valkey pods (operator v0.8.0+ spec.serviceAccountName).
+# When create is true or name is set, and cluster.spec has no serviceAccountName,
+# the chart sets spec.serviceAccountName. An explicit cluster.spec value always wins.
+# A named ServiceAccount that this chart does not create must already exist.
+serviceAccount:
+  create: false
+  # Defaults to the chart fullname
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false

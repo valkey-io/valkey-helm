@@ -12,5 +12,9 @@ metadata:
   annotations:
     {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
+{{- $spec := deepCopy .Values.cluster.spec }}
+{{- if and (or .Values.serviceAccount.create .Values.serviceAccount.name) (not (hasKey $spec "serviceAccountName")) }}
+{{- $_ := set $spec "serviceAccountName" (include "valkey-resources.serviceAccountName" .) }}
+{{- end }}
 spec:
-  {{- tpl (toYaml .Values.cluster.spec) . | nindent 2 }}
+  {{- tpl (toYaml $spec) . | nindent 2 }}

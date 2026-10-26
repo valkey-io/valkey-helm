@@ -52,3 +52,10 @@ Selector labels
 app.kubernetes.io/name: {{ include "valkey-resources.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+ServiceAccount name: serviceAccount.name if set, else the fullname.
+*/}}
+{{- define "valkey-resources.serviceAccountName" -}}
+{{- default (include "valkey-resources.fullname" .) .Values.serviceAccount.name }}
+{{- end }}
