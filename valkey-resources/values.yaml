@@ -67,3 +67,18 @@ cluster:
   spec:
     shards: 3
     replicas: 1
+
+# Secret holding ACL user passwords, in the form the operator reads by default.
+# The operator looks for Secret "<ValkeyCluster name>-users" unless
+# cluster.spec.users[].passwordSecret.name is set; the data key defaults to the
+# username. To use a Secret you manage yourself, leave create: false and set
+# cluster.spec.users[].passwordSecret.name (see examples/users-acl.yaml).
+usersSecret:
+  create: false
+  # Defaults to "<fullname>-users". If you change it, set
+  # cluster.spec.users[].passwordSecret.name to match.
+  name: ""
+  annotations: {}
+  # username -> password. Each key becomes a Secret data key; values are
+  # rendered as strings. Keep real passwords out of committed values files.
+  passwords: {}

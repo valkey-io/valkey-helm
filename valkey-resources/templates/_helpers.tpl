@@ -52,3 +52,11 @@ Selector labels
 app.kubernetes.io/name: {{ include "valkey-resources.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Users Secret name. Defaults to <fullname>-users, the Secret the operator reads
+ACL user passwords from unless spec.users[].passwordSecret.name is set.
+*/}}
+{{- define "valkey-resources.usersSecretName" -}}
+{{- default (printf "%s-users" (include "valkey-resources.fullname" .)) .Values.usersSecret.name }}
+{{- end }}

@@ -101,6 +101,28 @@ metrics:
 
 Use PodMonitor (not ServiceMonitor): node metrics are on pods, not a dedicated Service. Operator controller metrics stay on the `valkey-operator` chart ServiceMonitor.
 
+### Users Secret
+
+The operator reads ACL user passwords from the Secret `<ValkeyCluster name>-users` unless `cluster.spec.users[].passwordSecret.name` is set. The data key defaults to the username. The chart can render that Secret:
+
+```yaml
+usersSecret:
+  create: true
+  passwords:
+    alice: change-me
+```
+
+| Value | Description | Default |
+|---|---|---|
+| `usersSecret.create` | Render the Secret | `false` |
+| `usersSecret.name` | Secret name. If you change it, set `cluster.spec.users[].passwordSecret.name` to match | `<fullname>-users` |
+| `usersSecret.annotations` | Annotations on the Secret | `{}` |
+| `usersSecret.passwords` | Map of username to password. Each key becomes a data key. Numbers and booleans render as strings | `{}` |
+
+Quote numeric-looking passwords such as `"007"`, `"0x1F"`, `"1e3"` or very long numbers: YAML parses them as numbers before the chart sees them and the original text is lost. The render fails when `passwords` is empty or a password is an empty string. Passwords in values files are stored in plain text in the release, so supply them from a secrets tool rather than committing them. See [examples/users-secret.yaml](examples/users-secret.yaml).
+
+To use a Secret you manage yourself, leave `usersSecret.create: false` and set `cluster.spec.users[].passwordSecret.name` (see [examples/users-acl.yaml](examples/users-acl.yaml)).
+
 **Release model:** one logical workload per Helm release. v0.1 only renders `ValkeyCluster`. When more kinds land, the chart will keep that model (enable the kinds you need for that one workload; multiple independent clusters remain multiple releases).
 
 ## Uninstall

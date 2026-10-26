@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `usersSecret` values render the Secret `<fullname>-users` that the operator reads ACL user passwords from. Off by default.
+
 ## 0.4.0
 
 ### Changed
