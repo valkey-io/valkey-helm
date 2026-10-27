@@ -265,3 +265,70 @@ tests:
       - equal:
           path: spec.egress[1].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
           value: "123"
+
+  - it: admits the exporter port when the PodMonitor is enabled
+    set:
+      networkPolicy.enabled: true
+      metrics.podMonitor.enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 3
+      - equal:
+          path: spec.ingress[2]
+          value:
+            ports:
+              - port: metrics
+                protocol: TCP
+
+  - it: uses the PodMonitor's port for the exporter rule
+    set:
+      networkPolicy.enabled: true
+      metrics.podMonitor:
+        enabled: true
+        port: exporter
+    asserts:
+      - equal:
+          path: spec.ingress[2].ports[0].port
+          value: exporter
+
+  - it: does not admit the exporter port without the PodMonitor
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - notContains:
+          path: spec.ingress
+          content:
+            ports:
+              - port: metrics
+                protocol: TCP
+
+  - it: keeps the operator rule when operator is an empty map
+    set:
+      networkPolicy:
+        enabled: true
+        operator: {}
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 2
+      - equal:
+          path: spec.ingress[1].from[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey-operator
+
+  - it: admits a NodeLocal DNSCache address through extraEgress
+    set:
+      networkPolicy:
+        enabled: true
+        allowExternalEgress: false
+        extraEgress:
+          - to:
+              - ipBlock:
+                  cidr: 169.254.20.10/32
+            ports:
+              - port: 53
+                protocol: UDP
+    asserts:
+      - equal:
+          path: spec.egress[2].to[0].ipBlock.cidr
+          value: 169.254.20.10/32

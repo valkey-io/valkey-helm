@@ -46,6 +46,12 @@ spec:
         - port: client
           protocol: TCP
     {{- end }}
+    {{- if .Values.metrics.podMonitor.enabled }}
+    # The exporter, for the PodMonitor's scrapes.
+    - ports:
+        - port: {{ .Values.metrics.podMonitor.port }}
+          protocol: TCP
+    {{- end }}
     {{- with $np.extraIngress }}
     {{- tpl (toYaml .) $ | nindent 4 }}
     {{- end }}

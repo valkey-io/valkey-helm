@@ -79,22 +79,26 @@ cluster:
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
 networkPolicy:
   enabled: false
-  # Peer allowed to reach the client port for reconciliation (a NetworkPolicyPeer). The
-  # rule is dropped when this is null or empty. Helm merges overrides into this
-  # default, so to replace the peer set its namespaceSelector or podSelector
-  # key to null.
+  # Peer allowed to reach the client port for reconciliation (a NetworkPolicyPeer).
+  # Set it to null to drop the rule; {} does not, because Helm merges it into
+  # this default. To replace the peer, set the default's namespaceSelector or
+  # podSelector key to null alongside your own.
   operator:
     namespaceSelector: {}
     podSelector:
       matchLabels:
         app.kubernetes.io/name: valkey-operator
+  # With metrics.podMonitor.enabled, the exporter port is also admitted from any
+  # source so Prometheus can scrape it.
   # Admit clients on the client port from any source. When false, only the
   # cluster's own pods, the operator and extraIngress are admitted.
   allowExternal: false
   # Allow all egress. When false, egress is limited to the cluster's own pods
   # (client, cluster-bus) and DNS in dnsNamespace, plus extraEgress.
   allowExternalEgress: true
-  # Namespace running kube-dns / CoreDNS, used when allowExternalEgress is false
+  # Namespace running kube-dns / CoreDNS, used when allowExternalEgress is false.
+  # With NodeLocal DNSCache, also admit the node-local address (commonly
+  # 169.254.20.10) through extraEgress; see README.
   dnsNamespace: kube-system
   # Additional ingress rules appended verbatim to the policy (templated with tpl)
   extraIngress: []
