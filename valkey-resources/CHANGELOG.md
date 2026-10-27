@@ -4,7 +4,7 @@
 
 ### Added
 
-- `usersSecret` values render the Secret `<fullname>-users` that the operator reads ACL user passwords from. Off by default.
+- `usersSecret` values render the Secret `<fullname>-users` that the operator reads ACL user passwords from. Off by default. The render fails when a user in `cluster.spec.users` has no password in it, and a renamed Secret (`usersSecret.name`) is set as `passwordSecret.name` on users that do not set one.
 
 ## 0.4.0
 

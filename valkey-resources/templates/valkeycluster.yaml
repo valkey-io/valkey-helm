@@ -12,5 +12,32 @@ metadata:
   annotations:
     {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
+{{- $spec := deepCopy .Values.cluster.spec }}
+{{- if .Values.usersSecret.create }}
+{{- $secretName := include "valkey-resources.usersSecretName" . }}
+{{- $users := list }}
+{{- range $user := ($spec.users | default list) }}
+{{- $user = deepCopy $user }}
+{{- if not $user.nopass }}
+{{- $ref := deepCopy (default dict $user.passwordSecret) }}
+{{- $refName := tpl (toString (default "" $ref.name)) $ }}
+{{- if or (eq $refName "") (eq $refName $secretName) }}
+{{- if and $.Values.usersSecret.name (eq $refName "") }}
+{{- $_ := set $ref "name" $secretName }}
+{{- $_ := set $user "passwordSecret" $ref }}
+{{- end }}
+{{- range $key := (default (list $user.name) $ref.keys) }}
+{{- if not (hasKey $.Values.usersSecret.passwords (toString $key)) }}
+{{- fail (printf "cluster.spec.users %q reads password key %q, but usersSecret.passwords has no entry for it" (toString $user.name) (toString $key)) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $users = append $users $user }}
+{{- end }}
+{{- if $spec.users }}
+{{- $_ := set $spec "users" $users }}
+{{- end }}
+{{- end }}
 spec:
-  {{- tpl (toYaml .Values.cluster.spec) . | nindent 2 }}
+  {{- tpl (toYaml $spec) . | nindent 2 }}

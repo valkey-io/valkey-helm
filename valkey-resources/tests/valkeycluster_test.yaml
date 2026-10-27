@@ -144,3 +144,114 @@ tests:
       - equal:
           path: spec.networking.tls.certificates.server.secretName
           value: shared-valkey-tls
+
+  - it: fails when a user has no password
+    set:
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+        - name: bob
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.users "bob" reads password key "bob", but usersSecret.passwords has no entry for it'
+
+  - it: checks every key a user lists
+    set:
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+          passwordSecret:
+            keys: [alice, alice-next]
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.users "alice" reads password key "alice-next", but usersSecret.passwords has no entry for it'
+
+  - it: skips nopass users and users of another Secret
+    set:
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+        - name: guest
+          nopass: true
+        - name: ops
+          passwordSecret:
+            name: ops-passwords
+    asserts:
+      - lengthEqual:
+          path: spec.users
+          count: 3
+      - notExists:
+          path: spec.users[1].passwordSecret
+      - equal:
+          path: spec.users[2].passwordSecret.name
+          value: ops-passwords
+
+  - it: does not check users when the chart does not create the Secret
+    set:
+      cluster.spec.users:
+        - name: bob
+    asserts:
+      - equal:
+          path: spec.users[0].name
+          value: bob
+
+  - it: points users at a renamed Secret
+    set:
+      usersSecret:
+        create: true
+        name: app-passwords
+        passwords:
+          alice: pw
+          bob: pw2
+      cluster.spec.users:
+        - name: alice
+        - name: bob
+          passwordSecret:
+            keys: [bob]
+    asserts:
+      - equal:
+          path: spec.users[0].passwordSecret
+          value:
+            name: app-passwords
+      - equal:
+          path: spec.users[1].passwordSecret
+          value:
+            name: app-passwords
+            keys: [bob]
+
+  - it: leaves passwordSecret unset when the Secret keeps the default name
+    set:
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+    asserts:
+      - notExists:
+          path: spec.users[0].passwordSecret
+
+  - it: keeps an explicit passwordSecret.name that matches the chart Secret
+    set:
+      fullnameOverride: mt
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+          passwordSecret:
+            name: '{{ include "valkey-resources.fullname" . }}-users'
+    asserts:
+      - equal:
+          path: spec.users[0].passwordSecret.name
+          value: mt-users

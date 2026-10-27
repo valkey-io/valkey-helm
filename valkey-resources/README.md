@@ -115,11 +115,11 @@ usersSecret:
 | Value | Description | Default |
 |---|---|---|
 | `usersSecret.create` | Render the Secret | `false` |
-| `usersSecret.name` | Secret name. If you change it, set `cluster.spec.users[].passwordSecret.name` to match | `<fullname>-users` |
+| `usersSecret.name` | Secret name. Users without `passwordSecret.name` are pointed at it | `<fullname>-users` |
 | `usersSecret.annotations` | Annotations on the Secret | `{}` |
 | `usersSecret.passwords` | Map of username to password. Each key becomes a data key. Numbers and booleans render as strings | `{}` |
 
-Quote numeric-looking passwords such as `"007"`, `"0x1F"`, `"1e3"` or very long numbers: YAML parses them as numbers before the chart sees them and the original text is lost. The render fails when `passwords` is empty or a password is an empty string. Passwords in values files are stored in plain text in the release, so supply them from a secrets tool rather than committing them. See [examples/users-secret.yaml](examples/users-secret.yaml).
+Quote numeric-looking passwords such as `"007"`, `"0x1F"`, `"1e3"` or very long numbers: YAML parses them as numbers before the chart sees them and the original text is lost. The render fails when `passwords` is empty, when a password is an empty string, or when a user in `cluster.spec.users` reads a key that `passwords` does not have. A user reads the key named after it, or each key in its `passwordSecret.keys`. Users with `nopass: true`, or whose `passwordSecret.name` names another Secret, are not checked. When `usersSecret.name` is set, the chart sets `passwordSecret.name` on every other user that does not set it. Passwords in values files are stored in plain text in the release, so supply them from a secrets tool rather than committing them. See [examples/users-secret.yaml](examples/users-secret.yaml).
 
 To use a Secret you manage yourself, leave `usersSecret.create: false` and set `cluster.spec.users[].passwordSecret.name` (see [examples/users-acl.yaml](examples/users-acl.yaml)).
 
