@@ -1,7 +1,6 @@
 {{- $np := .Values.networkPolicy }}
 {{- if $np.enabled }}
 {{- $fullname := include "valkey-resources.fullname" . }}
-{{- $egress := default dict $np.egress }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -21,11 +20,9 @@ spec:
       valkey.io/cluster: {{ $fullname | quote }}
   policyTypes:
     - Ingress
-    {{- if $egress.enabled }}
     - Egress
-    {{- end }}
   ingress:
-    # The cluster's own pods: client port and cluster bus.
+    # The cluster's own pods: replication and cluster bus.
     - from:
         - podSelector:
             matchLabels:
@@ -43,24 +40,9 @@ spec:
         - port: client
           protocol: TCP
     {{- end }}
-    {{- $clients := list }}
-    {{- range $name, $peer := $np.clients }}
-    {{- if $peer }}
-    {{- $clients = append $clients $peer }}
-    {{- end }}
-    {{- end }}
-    {{- if $clients }}
-    # Client peers on the Valkey port.
-    - from:
-        {{- toYaml $clients | nindent 8 }}
-      ports:
-        - port: client
-          protocol: TCP
-    {{- end }}
     {{- with $np.extraIngress }}
     {{- tpl (toYaml .) $ | nindent 4 }}
     {{- end }}
-  {{- if $egress.enabled }}
   egress:
     # The cluster's own pods: replication and cluster bus.
     - to:
@@ -72,7 +54,6 @@ spec:
           protocol: TCP
         - port: cluster-bus
           protocol: TCP
-    {{- if $egress.allowDNS }}
     # Cluster DNS (kube-dns / CoreDNS).
     - to:
         - namespaceSelector:
@@ -83,9 +64,7 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-    {{- end }}
     {{- with $np.extraEgress }}
     {{- tpl (toYaml .) $ | nindent 4 }}
     {{- end }}
-  {{- end }}
 {{- end }}

@@ -1,24 +1,19 @@
-# NetworkPolicy for the Valkey pods. The policy always admits the cluster's own
-# pods (client and cluster-bus ports) and the operator (client port); list the
-# workloads that may connect.
+# NetworkPolicy for the Valkey pods. The policy admits only the cluster's own
+# pods, the operator and cluster DNS; add your clients and scrapers below.
 # Needs a CNI that enforces NetworkPolicy.
 networkPolicy:
   enabled: true
-  # Peers allowed on the client port (6379). Keys are labels for your own bookkeeping; they render in key order.
-  clients:
-    app:
-      namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: my-app
-    batch:
-      namespaceSelector:
-        matchLabels:
-          team: batch
-      podSelector:
-        matchLabels:
-          role: worker
-  # Extra ingress rule, e.g. a Prometheus scraping the exporter's metrics port (9121)
   extraIngress:
+    # Applications in the release namespace and in my-app, on the client port (6379)
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: my-app
+      ports:
+        - port: client
+          protocol: TCP
+    # A Prometheus scraping the exporter's metrics port (9121)
     - from:
         - namespaceSelector:
             matchLabels:
@@ -26,10 +21,6 @@ networkPolicy:
       ports:
         - port: metrics
           protocol: TCP
-  # Restrict egress too: only the cluster's own pods and DNS stay reachable.
-  egress:
-    enabled: true
-    allowDNS: true
 
 cluster:
   spec:

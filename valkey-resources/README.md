@@ -103,36 +103,33 @@ Use PodMonitor (not ServiceMonitor): node metrics are on pods, not a dedicated S
 
 ### NetworkPolicy
 
-Set `networkPolicy.enabled: true` to render a NetworkPolicy named after the ValkeyCluster. It selects pods with `valkey.io/cluster=<ValkeyCluster name>` and always allows:
+Set `networkPolicy.enabled: true` to render a NetworkPolicy named after the ValkeyCluster. It selects pods with `valkey.io/cluster=<ValkeyCluster name>`, restricts both ingress and egress, and allows only what the cluster needs to run:
 
-- the cluster's own pods on the `client` (6379) and `cluster-bus` (16379) ports
-- the operator on the `client` port, so it can reconcile (`networkPolicy.operator`, default: pods labelled `app.kubernetes.io/name: valkey-operator` in any namespace)
+- ingress and egress between the cluster's own pods on the `client` (6379) and `cluster-bus` (16379) ports
+- ingress from the operator on the `client` port, so it can reconcile (`networkPolicy.operator`, default: pods labelled `app.kubernetes.io/name: valkey-operator` in any namespace)
+- egress to cluster DNS on UDP and TCP 53 in `networkPolicy.dnsNamespace` (default `kube-system`)
 
-The operator rule is dropped when `networkPolicy.operator` is null or empty. Helm merges overrides into the default peer, so to replace it set the default's `namespaceSelector` or `podSelector` key to null alongside your own.
-
-Rules use the operator's named container ports, `client` and `cluster-bus`, so they follow the pods if the port numbers change. The CNI must support named ports in NetworkPolicy (Calico and Cilium do).
-
-Enabling the policy blocks Prometheus scraping of the exporter (`metrics`, 9121) unless you add that source through `extraIngress`.
-
-Everything else on ingress is denied unless you add it:
+Everything else, including your clients and a Prometheus scraping the exporter (`metrics`, 9121), goes in `extraIngress` and `extraEgress`. Both are lists of NetworkPolicy rules appended as they are and templated with `tpl`:
 
 ```yaml
 networkPolicy:
   enabled: true
-  clients:            # name -> NetworkPolicyPeer, allowed on the client port
-    app:
-      namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: my-app
-  extraIngress: []    # full NetworkPolicyIngressRules, templated with tpl
+  extraIngress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "{{ .Release.Namespace }}"
+      ports:
+        - port: client
+          protocol: TCP
+  extraEgress: []
 ```
 
-Egress is not restricted by default (`policyTypes` is `[Ingress]`). With `networkPolicy.egress.enabled: true` the policy also allows egress to the cluster's own pods on the `client` and `cluster-bus` ports and denies all other egress from the Valkey pods. Two things follow:
+Rules use the operator's named container ports, `client`, `cluster-bus` and `metrics`, so they follow the pods if the port numbers change. The CNI must support named ports in NetworkPolicy (Calico and Cilium do).
 
-- `egress.allowDNS` (default `true`) adds UDP and TCP 53 to the `networkPolicy.dnsNamespace` namespace (default `kube-system`). Turn it off only if DNS is allowed by another policy.
-- Anything else the pods need to reach, such as backup storage or external services, goes in `extraEgress` (full NetworkPolicyEgressRules, templated with `tpl`).
+The operator rule is dropped when `networkPolicy.operator` is null or empty. Helm merges overrides into the default peer, so to replace it set the default's `namespaceSelector` or `podSelector` key to null alongside your own.
 
-`clients` entries render in key order; set one to `null` in a later values file to remove it. `extraIngress` and `extraEgress` are lists, so a later values file replaces them whole. `networkPolicy.labels` and `networkPolicy.annotations` go on the policy object. The policy only has an effect when the CNI enforces NetworkPolicy. See [examples/network-policy.yaml](examples/network-policy.yaml).
+`extraIngress` and `extraEgress` are lists, so a later values file replaces them whole. `networkPolicy.labels` and `networkPolicy.annotations` go on the policy object. The policy only has an effect when the CNI enforces NetworkPolicy. See [examples/network-policy.yaml](examples/network-policy.yaml).
 
 **Release model:** one logical workload per Helm release. v0.1 only renders `ValkeyCluster`. When more kinds land, the chart will keep that model (enable the kinds you need for that one workload; multiple independent clusters remain multiple releases).
 

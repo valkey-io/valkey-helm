@@ -30,7 +30,7 @@ helm install my-cluster valkey/valkey-resources -n valkey \
 | [persistence.yaml](persistence.yaml) | PVC size on StatefulSet |
 | [metrics-podmonitor.yaml](metrics-podmonitor.yaml) | PodMonitor for exporter sidecars |
 | [users-acl.yaml](users-acl.yaml) | ACL users with password Secret refs |
-| [network-policy.yaml](network-policy.yaml) | NetworkPolicy with client peers, an extra ingress rule and egress |
+| [network-policy.yaml](network-policy.yaml) | NetworkPolicy with client and Prometheus rules in `extraIngress` |
 
 ## Notes
 

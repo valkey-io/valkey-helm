@@ -58,17 +58,8 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "operator": { "type": "object", "additionalProperties": true },
-        "clients": { "type": "object", "additionalProperties": true },
-        "extraIngress": { "type": "array" },
-        "egress": {
-          "type": "object",
-          "additionalProperties": true,
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "allowDNS": { "type": "boolean" }
-          }
-        },
         "dnsNamespace": { "type": "string" },
+        "extraIngress": { "type": "array" },
         "extraEgress": { "type": "array" },
         "labels": { "type": "object", "additionalProperties": true },
         "annotations": { "type": "object", "additionalProperties": true }

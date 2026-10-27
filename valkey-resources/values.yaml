@@ -69,10 +69,13 @@ cluster:
     replicas: 1
 
 # NetworkPolicy for the Valkey pods (selected by valkey.io/cluster=<ValkeyCluster name>).
-# Off by default. When enabled the policy always admits the cluster's own pods
-# (client, cluster-bus) and the operator (client), so the cluster can form and
-# reconcile. Rules use the operator's named container ports: client (6379) and
-# cluster-bus (16379).
+# Off by default. When enabled, ingress and egress are limited to what the
+# cluster needs to run, plus extraIngress and extraEgress:
+#   - ingress and egress between the cluster's own pods on the client (6379)
+#     and cluster-bus (16379) ports
+#   - ingress from the operator on the client port
+#   - egress to cluster DNS
+# Clients, metrics scrapers and anything else go in extraIngress/extraEgress.
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
 networkPolicy:
   enabled: false
@@ -85,30 +88,20 @@ networkPolicy:
     podSelector:
       matchLabels:
         app.kubernetes.io/name: valkey-operator
-  # name -> NetworkPolicyPeer allowed to reach the client port. Entries render
-  # in key order; set a key to null to drop an inherited entry.
-  clients: {}
+  # Namespace running kube-dns / CoreDNS
+  dnsNamespace: kube-system
   # Additional ingress rules appended verbatim to the policy (templated with tpl)
   extraIngress: []
-  # Example (allow Prometheus to scrape the exporter):
+  # Example (allow an application namespace on the client port):
   #   extraIngress:
   #     - from:
   #         - namespaceSelector:
   #             matchLabels:
-  #               kubernetes.io/metadata.name: monitoring
+  #               kubernetes.io/metadata.name: my-app
   #       ports:
   #         - protocol: TCP
-  #           port: metrics
-  egress:
-    # Adds Egress to policyTypes. Once set, only the cluster's own pods, DNS
-    # and extraEgress are allowed out.
-    enabled: false
-    # Allow UDP/TCP 53 to the dnsNamespace
-    allowDNS: true
-  # Namespace running kube-dns / CoreDNS
-  dnsNamespace: kube-system
-  # Additional egress rules appended verbatim to the policy while egress.enabled
-  # is true (templated with tpl)
+  #           port: client
+  # Additional egress rules appended verbatim to the policy (templated with tpl)
   extraEgress: []
   # Extra labels to add to the NetworkPolicy
   labels: {}

@@ -4,7 +4,7 @@
 
 ### Added
 
-- Optional `NetworkPolicy` (`networkPolicy.enabled`) that admits the cluster's own pods, the operator and configured `clients`, with optional egress and DNS rules. Rules use the operator's named ports `client` and `cluster-bus`. `extraIngress`, `extraEgress`, `dnsNamespace`, `labels` and `annotations` follow the valkey and valkey-operator charts. Off by default.
+- Optional `NetworkPolicy` (`networkPolicy.enabled`). It restricts ingress and egress to what the cluster needs (its own pods, the operator, cluster DNS) on the operator's named ports `client` and `cluster-bus`; everything else goes in `extraIngress` and `extraEgress`, templated with `tpl`. `extraIngress`, `extraEgress`, `dnsNamespace`, `labels` and `annotations` follow the valkey and valkey-operator charts. Off by default.
 
 ## 0.4.0
 
