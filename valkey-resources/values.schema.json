@@ -27,6 +27,17 @@
         }
       }
     },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": true },
+        "labels": { "type": "object", "additionalProperties": true },
+        "automount": { "type": "boolean" }
+      }
+    },
     "cluster": {
       "type": "object",
       "required": ["spec"],
@@ -51,6 +62,38 @@
           }
         }
       }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "operator": { "type": "object", "additionalProperties": true },
+        "allowExternal": { "type": "boolean" },
+        "allowExternalEgress": { "type": "boolean" },
+        "dnsNamespace": { "type": "string" },
+        "extraIngress": { "type": "array" },
+        "extraEgress": { "type": "array" },
+        "labels": { "type": "object", "additionalProperties": true },
+        "annotations": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "usersSecret": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object" },
+        "passwords": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "extraObjects": {
+      "type": "object",
+      "additionalProperties": { "type": ["object", "string", "null"] }
     }
   }
 }

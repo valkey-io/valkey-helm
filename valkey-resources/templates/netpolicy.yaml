@@ -1,0 +1,86 @@
+{{- $np := .Values.networkPolicy }}
+{{- if $np.enabled }}
+{{- $fullname := include "valkey-resources.fullname" . }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels := include "valkey-resources.labels" . | fromYaml }}
+    {{- $_ := set $labels "app.kubernetes.io/component" "networkpolicy" }}
+    {{- mustMergeOverwrite $labels ($np.labels | default dict) | toYaml | nindent 4 }}
+  {{- with $np.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      valkey.io/cluster: {{ $fullname | quote }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # The cluster's own pods: replication and cluster bus.
+    - from:
+        - podSelector:
+            matchLabels:
+              valkey.io/cluster: {{ $fullname | quote }}
+      ports:
+        - port: client
+          protocol: TCP
+        - port: cluster-bus
+          protocol: TCP
+    {{- with $np.operator }}
+    # The operator, for reconciliation.
+    - from:
+        - {{ toYaml . | nindent 10 | trim }}
+      ports:
+        - port: client
+          protocol: TCP
+    {{- end }}
+    {{- if $np.allowExternal }}
+    # Clients on the Valkey port from any source.
+    - ports:
+        - port: client
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.metrics.podMonitor.enabled }}
+    # The exporter, for the PodMonitor's scrapes.
+    - ports:
+        - port: {{ .Values.metrics.podMonitor.port }}
+          protocol: TCP
+    {{- end }}
+    {{- with $np.extraIngress }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
+    {{- end }}
+  egress:
+    {{- if $np.allowExternalEgress }}
+    - {}
+    {{- else }}
+    # The cluster's own pods: replication and cluster bus.
+    - to:
+        - podSelector:
+            matchLabels:
+              valkey.io/cluster: {{ $fullname | quote }}
+      ports:
+        - port: client
+          protocol: TCP
+        - port: cluster-bus
+          protocol: TCP
+    # Cluster DNS (kube-dns / CoreDNS).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.dnsNamespace | default "kube-system" | quote }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- end }}
+    {{- with $np.extraEgress }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
+    {{- end }}
+{{- end }}
