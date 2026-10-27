@@ -62,6 +62,23 @@
           }
         }
       }
+    },
+    "usersSecret": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object" },
+        "passwords": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "extraObjects": {
+      "type": "object",
+      "additionalProperties": { "type": ["object", "string", "null"] }
     }
   }
 }

@@ -203,3 +203,219 @@ tests:
       - equal:
           path: spec.serviceAccountName
           value: shared
+  - it: fails when a user has no password
+    set:
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+        - name: bob
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.users "bob" reads password key "bob", but usersSecret.passwords has no entry for it'
+
+  - it: checks every key a user lists
+    set:
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+          passwordSecret:
+            keys: [alice, alice-next]
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.users "alice" reads password key "alice-next", but usersSecret.passwords has no entry for it'
+
+  - it: skips nopass, resetpass and disabled users, and users of another Secret
+    set:
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+        - name: guest
+          nopass: true
+        - name: rotating
+          resetpass: true
+        - name: parked
+          enabled: false
+        - name: ops
+          passwordSecret:
+            name: ops-passwords
+    asserts:
+      - lengthEqual:
+          path: spec.users
+          count: 5
+      - notExists:
+          path: spec.users[1].passwordSecret
+      - equal:
+          path: spec.users[4].passwordSecret.name
+          value: ops-passwords
+
+  - it: does not check users when the chart does not create the Secret
+    set:
+      cluster.spec.users:
+        - name: bob
+    asserts:
+      - equal:
+          path: spec.users[0].name
+          value: bob
+
+  - it: points users at a renamed Secret
+    set:
+      usersSecret:
+        create: true
+        name: app-passwords
+        passwords:
+          alice: pw
+          bob: pw2
+      cluster.spec.users:
+        - name: alice
+        - name: bob
+          passwordSecret:
+            keys: [bob]
+    asserts:
+      - equal:
+          path: spec.users[0].passwordSecret
+          value:
+            name: app-passwords
+      - equal:
+          path: spec.users[1].passwordSecret
+          value:
+            name: app-passwords
+            keys: [bob]
+
+  - it: leaves passwordSecret unset when the Secret keeps the default name
+    set:
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+    asserts:
+      - notExists:
+          path: spec.users[0].passwordSecret
+
+  - it: keeps an explicit passwordSecret.name that matches the chart Secret
+    set:
+      fullnameOverride: mt
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+          passwordSecret:
+            name: '{{ include "valkey-resources.fullname" . }}-users'
+    asserts:
+      - equal:
+          path: spec.users[0].passwordSecret.name
+          value: mt-users
+
+  - it: checks templated user names and keys after rendering them
+    set:
+      extraValues:
+        user: alice
+        key: alice-next
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+          alice-next: pw2
+      cluster.spec.users:
+        - name: '{{ .Values.extraValues.user }}'
+        - name: '{{ .Values.extraValues.user }}'
+          passwordSecret:
+            keys: ['{{ .Values.extraValues.key }}']
+    asserts:
+      - equal:
+          path: spec.users[0].name
+          value: alice
+      - equal:
+          path: spec.users[1].passwordSecret.keys[0]
+          value: alice-next
+
+  - it: names the rendered user in the error
+    set:
+      extraValues:
+        user: bob
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: '{{ .Values.extraValues.user }}'
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.users "bob" reads password key "bob", but usersSecret.passwords has no entry for it'
+
+  - it: treats enabled null as enabled
+    set:
+      usersSecret:
+        create: true
+        name: app-passwords
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+          enabled: null
+        - name: bob
+          enabled: null
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.users "bob" reads password key "bob", but usersSecret.passwords has no entry for it'
+
+  - it: wires a user with enabled null to the renamed Secret
+    set:
+      usersSecret:
+        create: true
+        name: app-passwords
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+          enabled: null
+    asserts:
+      - equal:
+          path: spec.users[0].passwordSecret.name
+          value: app-passwords
+
+  - it: points users at a templated usersSecret.name and checks their keys
+    release:
+      name: rel
+    set:
+      usersSecret:
+        create: true
+        name: "{{ .Release.Name }}-pw"
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+        - name: bob
+          passwordSecret:
+            name: "{{ .Release.Name }}-pw"
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.users "bob" reads password key "bob", but usersSecret.passwords has no entry for it'
+
+  - it: wires users to the rendered usersSecret.name
+    release:
+      name: rel
+    set:
+      usersSecret:
+        create: true
+        name: "{{ .Release.Name }}-pw"
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+    asserts:
+      - equal:
+          path: spec.users[0].passwordSecret.name
+          value: rel-pw

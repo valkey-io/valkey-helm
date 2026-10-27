@@ -83,3 +83,38 @@ serviceAccount:
   labels: {}
   # Whether to automount the service account token
   automount: false
+# Secret holding ACL user passwords, in the form the operator reads by default.
+# The operator looks for Secret "<ValkeyCluster name>-users" unless
+# cluster.spec.users[].passwordSecret.name is set; the data key defaults to the
+# username. To use a Secret you manage yourself, leave create: false and set
+# cluster.spec.users[].passwordSecret.name (see examples/users-acl.yaml).
+usersSecret:
+  create: false
+  # Defaults to "<fullname>-users" and may use templates. When set, users in cluster.spec.users
+  # without passwordSecret.name are pointed at this Secret.
+  name: ""
+  annotations: {}
+  # username -> password. Each key becomes a Secret data key. Values must be
+  # strings: quote anything YAML would read as a number or boolean. Every user in cluster.spec.users that reads this
+  # Secret must have an entry (or one per passwordSecret.keys entry); the
+  # render fails otherwise. Keep real passwords out of committed values files.
+  passwords: {}
+# Extra Kubernetes objects rendered with the release (for example a ConfigMap
+# or Secret the ValkeyCluster references). A map, so each key can be overridden
+# per environment; set a key to null to drop an inherited entry. Each value is
+# either an object or a multi-line string, and is rendered through tpl, so it
+# may use Helm templates. No namespace is injected: set metadata.namespace if
+# the object must not use the release namespace. Entries render in key order.
+# Object entries are converted to YAML before tpl runs, so a value substituted
+# inside quotes must not contain that quote character; for such values use the
+# string form and `| quote` (see README).
+# Example:
+#   extraObjects:
+#     settings:
+#       apiVersion: v1
+#       kind: ConfigMap
+#       metadata:
+#         name: '{{ include "valkey-resources.fullname" . }}-settings'
+#       data:
+#         release: '{{ .Release.Name }}'
+extraObjects: {}

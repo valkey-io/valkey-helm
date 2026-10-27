@@ -59,3 +59,10 @@ ServiceAccount name: serviceAccount.name if set, else the fullname.
 {{- define "valkey-resources.serviceAccountName" -}}
 {{- default (include "valkey-resources.fullname" .) .Values.serviceAccount.name }}
 {{- end }}
+{{/*
+Users Secret name. Defaults to <fullname>-users, the Secret the operator reads
+ACL user passwords from unless spec.users[].passwordSecret.name is set.
+*/}}
+{{- define "valkey-resources.usersSecretName" -}}
+{{- tpl (default (printf "%s-users" (include "valkey-resources.fullname" .)) .Values.usersSecret.name) . }}
+{{- end }}
