@@ -74,6 +74,9 @@ cluster:
 # either an object or a multi-line string, and is rendered through tpl, so it
 # may use Helm templates. No namespace is injected: set metadata.namespace if
 # the object must not use the release namespace. Entries render in key order.
+# Object entries are converted to YAML before tpl runs, so a value substituted
+# inside quotes must not contain that quote character; for such values use the
+# string form and `| quote` (see README).
 # Example:
 #   extraObjects:
 #     settings:

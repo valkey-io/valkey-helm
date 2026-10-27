@@ -101,3 +101,20 @@ tests:
           path: metadata.name
           value: second
         documentIndex: 1
+
+  - it: renders a value containing a quote through the string form
+    set:
+      extraValues:
+        owner: "o'neil"
+      extraObjects:
+        owner: |
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: owner
+          data:
+            owner: {{ .Values.extraValues.owner | quote }}
+    asserts:
+      - equal:
+          path: data.owner
+          value: "o'neil"

@@ -118,6 +118,19 @@ extraObjects:
       release: '{{ .Release.Name }}'
 ```
 
+An object entry is converted to YAML first and then rendered, so a template inside a quoted value is substituted inside those quotes. If the value can contain a quote character, as in `o'neil`, the result is invalid YAML. Use the string form for such values and quote them in the template with `quote` or `squote`:
+
+```yaml
+extraObjects:
+  owner: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: '{{ include "valkey-resources.fullname" . }}-owner'
+    data:
+      owner: {{ .Values.extraValues.owner | quote }}
+```
+
 See [`examples/extra-objects.yaml`](examples/extra-objects.yaml).
 
 ## Uninstall
