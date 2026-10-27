@@ -15,6 +15,8 @@ metadata:
 {{- $spec := deepCopy .Values.cluster.spec }}
 {{- if and (or .Values.serviceAccount.create .Values.serviceAccount.name) (not (hasKey $spec "serviceAccountName")) }}
 {{- $_ := set $spec "serviceAccountName" (include "valkey-resources.serviceAccountName" .) }}
+{{- else if and .Values.serviceAccount.create (ne (tpl (toString $spec.serviceAccountName) .) (include "valkey-resources.serviceAccountName" .)) }}
+{{- fail (printf "cluster.spec.serviceAccountName is %q, so the ServiceAccount %q that serviceAccount.create renders would go unused: remove one of them, or set serviceAccount.name to match" (tpl (toString $spec.serviceAccountName) .) (include "valkey-resources.serviceAccountName" .)) }}
 {{- end }}
 spec:
   {{- tpl (toYaml $spec) . | nindent 2 }}

@@ -173,7 +173,7 @@ tests:
   - it: keeps an explicit cluster.spec.serviceAccountName
     set:
       serviceAccount:
-        create: true
+        name: mine
       cluster:
         spec:
           shards: 3
@@ -182,3 +182,24 @@ tests:
       - equal:
           path: spec.serviceAccountName
           value: other
+
+  - it: fails when a created ServiceAccount would go unused
+    set:
+      fullnameOverride: mt
+      serviceAccount:
+        create: true
+      cluster.spec.serviceAccountName: other
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.serviceAccountName is "other", so the ServiceAccount "mt" that serviceAccount.create renders would go unused: remove one of them, or set serviceAccount.name to match'
+
+  - it: accepts an explicit serviceAccountName that names the created ServiceAccount
+    set:
+      serviceAccount:
+        create: true
+        name: shared
+      cluster.spec.serviceAccountName: '{{ "shared" }}'
+    asserts:
+      - equal:
+          path: spec.serviceAccountName
+          value: shared
