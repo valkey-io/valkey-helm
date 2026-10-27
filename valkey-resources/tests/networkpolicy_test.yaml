@@ -34,9 +34,9 @@ tests:
       - equal:
           path: spec.ingress[0].ports
           value:
-            - port: 6379
+            - port: client
               protocol: TCP
-            - port: 16379
+            - port: cluster-bus
               protocol: TCP
       - equal:
           path: spec.ingress[1].from
@@ -48,7 +48,7 @@ tests:
       - equal:
           path: spec.ingress[1].ports
           value:
-            - port: 6379
+            - port: client
               protocol: TCP
       - notExists:
           path: spec.egress
@@ -105,7 +105,7 @@ tests:
           path: spec.podSelector.matchLabels["valkey.io/cluster"]
           value: "123"
 
-  - it: adds client peers on 6379
+  - it: adds client peers on the client port
     set:
       fullnameOverride: mt
       networkPolicy:
@@ -135,7 +135,7 @@ tests:
       - equal:
           path: spec.ingress[2].ports
           value:
-            - port: 6379
+            - port: client
               protocol: TCP
 
   - it: skips null clients
@@ -215,9 +215,9 @@ tests:
                   matchLabels:
                     valkey.io/cluster: mt
             ports:
-              - port: 6379
+              - port: client
                 protocol: TCP
-              - port: 16379
+              - port: cluster-bus
                 protocol: TCP
       - equal:
           path: spec.egress[1]

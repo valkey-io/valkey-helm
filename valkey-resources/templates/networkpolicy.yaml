@@ -26,16 +26,16 @@ spec:
             matchLabels:
               valkey.io/cluster: {{ $fullname | quote }}
       ports:
-        - port: 6379
+        - port: client
           protocol: TCP
-        - port: 16379
+        - port: cluster-bus
           protocol: TCP
     {{- with $np.operator }}
     # The operator, for reconciliation.
     - from:
         - {{ toYaml . | nindent 10 | trim }}
       ports:
-        - port: 6379
+        - port: client
           protocol: TCP
     {{- end }}
     {{- $clients := list }}
@@ -49,7 +49,7 @@ spec:
     - from:
         {{- toYaml $clients | nindent 8 }}
       ports:
-        - port: 6379
+        - port: client
           protocol: TCP
     {{- end }}
     {{- range $name, $rule := $np.extraIngress }}
@@ -65,9 +65,9 @@ spec:
             matchLabels:
               valkey.io/cluster: {{ $fullname | quote }}
       ports:
-        - port: 6379
+        - port: client
           protocol: TCP
-        - port: 16379
+        - port: cluster-bus
           protocol: TCP
     {{- if $egress.allowDNS }}
     # Cluster DNS.

@@ -1,9 +1,10 @@
 # NetworkPolicy for the Valkey pods. The policy always admits the cluster's own
-# pods (6379, 16379) and the operator (6379); list the workloads that may connect.
+# pods (client and cluster-bus ports) and the operator (client port); list the
+# workloads that may connect.
 # Needs a CNI that enforces NetworkPolicy.
 networkPolicy:
   enabled: true
-  # Peers allowed on 6379. Keys are labels for your own bookkeeping; they render in key order.
+  # Peers allowed on the client port (6379). Keys are labels for your own bookkeeping; they render in key order.
   clients:
     app:
       namespaceSelector:

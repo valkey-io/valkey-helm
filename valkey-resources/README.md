@@ -105,19 +105,21 @@ Use PodMonitor (not ServiceMonitor): node metrics are on pods, not a dedicated S
 
 Set `networkPolicy.enabled: true` to render a NetworkPolicy named after the ValkeyCluster. It selects pods with `valkey.io/cluster=<ValkeyCluster name>` and always allows:
 
-- the cluster's own pods on 6379 and 16379 (replication and cluster bus)
-- the operator on 6379, so it can reconcile (`networkPolicy.operator`, default: pods labelled `app.kubernetes.io/name: valkey-operator` in any namespace)
+- the cluster's own pods on the `client` (6379) and `cluster-bus` (16379) ports
+- the operator on the `client` port, so it can reconcile (`networkPolicy.operator`, default: pods labelled `app.kubernetes.io/name: valkey-operator` in any namespace)
 
 The operator rule is dropped when `networkPolicy.operator` is null or empty. Helm merges overrides into the default peer, so to replace it set the default's `namespaceSelector` or `podSelector` key to null alongside your own.
 
-Enabling the policy blocks Prometheus scraping of the exporter (port 9121) unless you add that source through `extraIngress`.
+Rules use the operator's named container ports, `client` and `cluster-bus`, so they follow the pods if the port numbers change. The CNI must support named ports in NetworkPolicy (Calico and Cilium do).
+
+Enabling the policy blocks Prometheus scraping of the exporter (`metrics`, 9121) unless you add that source through `extraIngress`.
 
 Everything else on ingress is denied unless you add it:
 
 ```yaml
 networkPolicy:
   enabled: true
-  clients:            # name -> NetworkPolicyPeer, allowed on 6379
+  clients:            # name -> NetworkPolicyPeer, allowed on the client port
     app:
       namespaceSelector:
         matchLabels:
@@ -125,7 +127,7 @@ networkPolicy:
   extraIngress: {}    # name -> full NetworkPolicyIngressRule
 ```
 
-Egress is not restricted by default (`policyTypes` is `[Ingress]`). With `networkPolicy.egress.enabled: true` the policy also allows egress to the cluster's own pods on 6379 and 16379 and denies all other egress from the Valkey pods. Two things follow:
+Egress is not restricted by default (`policyTypes` is `[Ingress]`). With `networkPolicy.egress.enabled: true` the policy also allows egress to the cluster's own pods on the `client` and `cluster-bus` ports and denies all other egress from the Valkey pods. Two things follow:
 
 - `egress.allowDNS` (default `true`) adds UDP and TCP 53 to pods labelled `k8s-app: kube-dns` in any namespace. Turn it off only if DNS is allowed by another policy.
 - Anything else the pods need to reach, such as backup storage or external services, goes in `egress.extra` (name -> full NetworkPolicyEgressRule).
