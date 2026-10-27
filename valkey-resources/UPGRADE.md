@@ -14,4 +14,4 @@
 fullnameOverride: <release>-valkey-resources
 ```
 
-Without it, the upgrade replaces the ValkeyCluster with a new, empty one under the new name and the old cluster's pods stop. With persistence and the default `reclaimPolicy: Retain`, the old PersistentVolumeClaims stay behind, but the new cluster does not use them. To move to the shorter name, create a new release and migrate the data to it.
+Without it, the upgrade replaces the ValkeyCluster with a new, empty one under the new name and the old cluster's pods stop. With persistence and the default `reclaimPolicy: Retain`, the old PersistentVolumeClaims stay behind, but the new cluster does not use them. With `cluster.spec.persistence.reclaimPolicy: Delete`, removing the old ValkeyCluster also deletes its PersistentVolumeClaims, and the volumes behind them unless their StorageClass retains them: the data is gone. Check the policy, and take a backup, before upgrading a release without `fullnameOverride`. To move to the shorter name, create a new release and migrate the data to it.

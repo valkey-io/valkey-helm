@@ -94,7 +94,7 @@ The ValkeyCluster is named after the release, or `fullnameOverride` when set. Th
 
 The operator's CRD rejects names its workloads cannot carry: with StatefulSets and single-digit shard and replica indexes, 41 characters. When this chart is a subchart, the release name is the parent's, so set `fullnameOverride` to keep the names apart from the parent's objects.
 
-Releases installed before this change are named `<release>-valkey-resources`; see [UPGRADE.md](UPGRADE.md) before upgrading them.
+Releases installed before this change usually have a ValkeyCluster named `<release>-valkey-resources`; check the current name with `kubectl get valkeycluster -n <namespace>` and see [UPGRADE.md](UPGRADE.md) before upgrading them.
 
 ### Metrics (PodMonitor)
 
