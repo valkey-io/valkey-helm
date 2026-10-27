@@ -172,7 +172,7 @@ tests:
       - failedTemplate:
           errorMessage: 'cluster.spec.users "alice" reads password key "alice-next", but usersSecret.passwords has no entry for it'
 
-  - it: skips nopass users and users of another Secret
+  - it: skips nopass, resetpass and disabled users, and users of another Secret
     set:
       usersSecret:
         create: true
@@ -182,17 +182,21 @@ tests:
         - name: alice
         - name: guest
           nopass: true
+        - name: rotating
+          resetpass: true
+        - name: parked
+          enabled: false
         - name: ops
           passwordSecret:
             name: ops-passwords
     asserts:
       - lengthEqual:
           path: spec.users
-          count: 3
+          count: 5
       - notExists:
           path: spec.users[1].passwordSecret
       - equal:
-          path: spec.users[2].passwordSecret.name
+          path: spec.users[4].passwordSecret.name
           value: ops-passwords
 
   - it: does not check users when the chart does not create the Secret

@@ -18,7 +18,8 @@ metadata:
 {{- $users := list }}
 {{- range $user := ($spec.users | default list) }}
 {{- $user = deepCopy $user }}
-{{- if not $user.nopass }}
+{{- /* The operator reads no password for these users */}}
+{{- if not (or $user.nopass $user.resetpass (and (hasKey $user "enabled") (not $user.enabled))) }}
 {{- $ref := deepCopy (default dict $user.passwordSecret) }}
 {{- $refName := tpl (toString (default "" $ref.name)) $ }}
 {{- if or (eq $refName "") (eq $refName $secretName) }}
