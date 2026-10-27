@@ -76,17 +76,22 @@ jobs:
 
       - name: Push charts to GHCR
         run: |
-          shopt -s nullglob
           repo=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          echo "${GITHUB_TOKEN}" | helm registry login ghcr.io/${repo} --username ${GITHUB_ACTOR} --password-stdin
-          for pkg in .cr-release-packages/*; do
-            if [ -z "${pkg:-}" ]; then
-              break
-            fi
-            chart_name=$(helm show chart "${pkg}" | grep '^name:' | awk '{print $2}')
-            chart_version=$(helm show chart "${pkg}" | grep '^version:' | awk '{print $2}')
+          # Helm 4 only accepts a registry hostname here, not a repository path
+          echo "${GITHUB_TOKEN}" | helm registry login ghcr.io --username ${GITHUB_ACTOR} --password-stdin
+          mkdir -p .cr-release-packages
+          for chart_name in valkey valkey-operator valkey-resources; do
+            chart_version=$(grep '^version:' ${chart_name}/Chart.yaml | awk '{print $2}')
             if helm show chart "oci://ghcr.io/${repo}/${chart_name}" --version "${chart_version}" &>/dev/null; then
               echo "Skipping ${chart_name}:${chart_version} — already exists in GHCR"
+              continue
+            fi
+            pkg=".cr-release-packages/${chart_name}-${chart_version}.tgz"
+            # chart-releaser only packages charts changed in this run, so a re-run
+            # after a failed push falls back to the asset already on the release
+            if [ ! -f "${pkg}" ] && ! gh release download "${chart_name}-${chart_version}" \
+                --pattern "${chart_name}-${chart_version}.tgz" --dir .cr-release-packages; then
+              echo "Skipping ${chart_name}:${chart_version} — no package or release to push"
               continue
             fi
             echo "Pushing ${chart_name}:${chart_version} to ghcr.io/${repo}"
