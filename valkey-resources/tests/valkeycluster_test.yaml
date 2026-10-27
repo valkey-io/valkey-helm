@@ -327,3 +327,37 @@ tests:
       - equal:
           path: spec.users[0].passwordSecret.name
           value: app-passwords
+
+  - it: points users at a templated usersSecret.name and checks their keys
+    release:
+      name: rel
+    set:
+      usersSecret:
+        create: true
+        name: "{{ .Release.Name }}-pw"
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+        - name: bob
+          passwordSecret:
+            name: "{{ .Release.Name }}-pw"
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.users "bob" reads password key "bob", but usersSecret.passwords has no entry for it'
+
+  - it: wires users to the rendered usersSecret.name
+    release:
+      name: rel
+    set:
+      usersSecret:
+        create: true
+        name: "{{ .Release.Name }}-pw"
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+    asserts:
+      - equal:
+          path: spec.users[0].passwordSecret.name
+          value: rel-pw

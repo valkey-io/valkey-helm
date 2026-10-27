@@ -58,5 +58,5 @@ Users Secret name. Defaults to <fullname>-users, the Secret the operator reads
 ACL user passwords from unless spec.users[].passwordSecret.name is set.
 */}}
 {{- define "valkey-resources.usersSecretName" -}}
-{{- default (printf "%s-users" (include "valkey-resources.fullname" .)) .Values.usersSecret.name }}
+{{- tpl (default (printf "%s-users" (include "valkey-resources.fullname" .)) .Values.usersSecret.name) . }}
 {{- end }}

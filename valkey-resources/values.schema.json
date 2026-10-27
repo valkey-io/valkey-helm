@@ -61,7 +61,7 @@
         "annotations": { "type": "object" },
         "passwords": {
           "type": "object",
-          "additionalProperties": { "type": ["string", "number", "boolean"] }
+          "additionalProperties": { "type": "string" }
         }
       }
     }
