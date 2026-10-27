@@ -69,13 +69,12 @@ cluster:
     replicas: 1
 
 # NetworkPolicy for the Valkey pods (selected by valkey.io/cluster=<ValkeyCluster name>).
-# Off by default. When enabled, ingress and egress are limited to what the
-# cluster needs to run, plus extraIngress and extraEgress:
-#   - ingress and egress between the cluster's own pods on the client (6379)
-#     and cluster-bus (16379) ports
-#   - ingress from the operator on the client port
-#   - egress to cluster DNS
-# Clients, metrics scrapers and anything else go in extraIngress/extraEgress.
+# Off by default. When enabled, ingress is limited to what the cluster needs to
+# run, plus extraIngress:
+#   - the cluster's own pods on the client (6379) and cluster-bus (16379) ports
+#   - the operator on the client port
+# Clients, metrics scrapers and anything else go in extraIngress. Egress is
+# open unless allowExternalEgress is false.
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
 networkPolicy:
   enabled: false
@@ -88,7 +87,10 @@ networkPolicy:
     podSelector:
       matchLabels:
         app.kubernetes.io/name: valkey-operator
-  # Namespace running kube-dns / CoreDNS
+  # Allow all egress. When false, egress is limited to the cluster's own pods
+  # (client, cluster-bus) and DNS in dnsNamespace, plus extraEgress.
+  allowExternalEgress: true
+  # Namespace running kube-dns / CoreDNS, used when allowExternalEgress is false
   dnsNamespace: kube-system
   # Additional ingress rules appended verbatim to the policy (templated with tpl)
   extraIngress: []

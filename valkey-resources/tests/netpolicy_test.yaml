@@ -7,7 +7,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: allows only the cluster, the operator and DNS when enabled
+  - it: admits only the cluster and the operator, and allows all egress, by default
     set:
       fullnameOverride: mt
       networkPolicy.enabled: true
@@ -45,6 +45,18 @@ tests:
               ports:
                 - port: client
                   protocol: TCP
+      - equal:
+          path: spec.egress
+          value:
+            - {}
+
+  - it: limits egress to the cluster and DNS when allowExternalEgress is false
+    set:
+      fullnameOverride: mt
+      networkPolicy:
+        enabled: true
+        allowExternalEgress: false
+    asserts:
       - equal:
           path: spec.egress
           value:
@@ -120,6 +132,7 @@ tests:
     set:
       networkPolicy:
         enabled: true
+        allowExternalEgress: false
         dnsNamespace: dns
     asserts:
       - equal:
@@ -152,10 +165,11 @@ tests:
           path: spec.ingress[3].from[0].ipBlock.cidr
           value: 10.0.0.0/8
 
-  - it: appends extra egress rules in order
+  - it: appends extra egress rules after the restricted egress
     set:
       networkPolicy:
         enabled: true
+        allowExternalEgress: false
         extraEgress:
           - to:
               - ipBlock:
@@ -192,7 +206,7 @@ tests:
           path: spec.ingress[2].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
           value: ns1
       - equal:
-          path: spec.egress[2].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          path: spec.egress[1].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
           value: rel-backup
 
   - it: labels the policy as a networkpolicy component by default

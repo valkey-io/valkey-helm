@@ -103,11 +103,12 @@ Use PodMonitor (not ServiceMonitor): node metrics are on pods, not a dedicated S
 
 ### NetworkPolicy
 
-Set `networkPolicy.enabled: true` to render a NetworkPolicy named after the ValkeyCluster. It selects pods with `valkey.io/cluster=<ValkeyCluster name>`, restricts both ingress and egress, and allows only what the cluster needs to run:
+Set `networkPolicy.enabled: true` to render a NetworkPolicy named after the ValkeyCluster. It selects pods with `valkey.io/cluster=<ValkeyCluster name>` and admits only what the cluster needs to run:
 
-- ingress and egress between the cluster's own pods on the `client` (6379) and `cluster-bus` (16379) ports
-- ingress from the operator on the `client` port, so it can reconcile (`networkPolicy.operator`, default: pods labelled `app.kubernetes.io/name: valkey-operator` in any namespace)
-- egress to cluster DNS on UDP and TCP 53 in `networkPolicy.dnsNamespace` (default `kube-system`)
+- the cluster's own pods on the `client` (6379) and `cluster-bus` (16379) ports
+- the operator on the `client` port, so it can reconcile (`networkPolicy.operator`, default: pods labelled `app.kubernetes.io/name: valkey-operator` in any namespace)
+
+Egress is open by default (`networkPolicy.allowExternalEgress: true`, as in the valkey chart). With `allowExternalEgress: false` egress is limited to the cluster's own pods on `client` and `cluster-bus` and to UDP and TCP 53 in `networkPolicy.dnsNamespace` (default `kube-system`).
 
 Everything else, including your clients and a Prometheus scraping the exporter (`metrics`, 9121), goes in `extraIngress` and `extraEgress`. Both are lists of NetworkPolicy rules appended as they are and templated with `tpl`:
 
@@ -129,7 +130,7 @@ Rules use the operator's named container ports, `client`, `cluster-bus` and `met
 
 The operator rule is dropped when `networkPolicy.operator` is null or empty. Helm merges overrides into the default peer, so to replace it set the default's `namespaceSelector` or `podSelector` key to null alongside your own.
 
-`extraIngress` and `extraEgress` are lists, so a later values file replaces them whole. `networkPolicy.labels` and `networkPolicy.annotations` go on the policy object. The policy only has an effect when the CNI enforces NetworkPolicy. See [examples/network-policy.yaml](examples/network-policy.yaml).
+`extraIngress` and `extraEgress` add rules on top; Kubernetes admits a connection if any rule matches, so they can only widen what the policy allows. They are lists, so a later values file replaces them whole. `networkPolicy.labels` and `networkPolicy.annotations` go on the policy object. The policy only has an effect when the CNI enforces NetworkPolicy. See [examples/network-policy.yaml](examples/network-policy.yaml).
 
 **Release model:** one logical workload per Helm release. v0.1 only renders `ValkeyCluster`. When more kinds land, the chart will keep that model (enable the kinds you need for that one workload; multiple independent clusters remain multiple releases).
 

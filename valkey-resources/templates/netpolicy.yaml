@@ -44,6 +44,9 @@ spec:
     {{- tpl (toYaml .) $ | nindent 4 }}
     {{- end }}
   egress:
+    {{- if $np.allowExternalEgress }}
+    - {}
+    {{- else }}
     # The cluster's own pods: replication and cluster bus.
     - to:
         - podSelector:
@@ -64,6 +67,7 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
+    {{- end }}
     {{- with $np.extraEgress }}
     {{- tpl (toYaml .) $ | nindent 4 }}
     {{- end }}

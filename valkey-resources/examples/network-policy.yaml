@@ -1,8 +1,10 @@
 # NetworkPolicy for the Valkey pods. The policy admits only the cluster's own
-# pods, the operator and cluster DNS; add your clients and scrapers below.
+# pods and the operator; add your clients and scrapers below.
 # Needs a CNI that enforces NetworkPolicy.
 networkPolicy:
   enabled: true
+  # Limit egress to the cluster's own pods and DNS
+  allowExternalEgress: false
   extraIngress:
     # Applications in the release namespace and in my-app, on the client port (6379)
     - from:

@@ -58,6 +58,7 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "operator": { "type": "object", "additionalProperties": true },
+        "allowExternalEgress": { "type": "boolean" },
         "dnsNamespace": { "type": "string" },
         "extraIngress": { "type": "array" },
         "extraEgress": { "type": "array" },
