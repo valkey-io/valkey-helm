@@ -255,3 +255,40 @@ tests:
       - equal:
           path: spec.users[0].passwordSecret.name
           value: mt-users
+
+  - it: checks templated user names and keys after rendering them
+    set:
+      extraValues:
+        user: alice
+        key: alice-next
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+          alice-next: pw2
+      cluster.spec.users:
+        - name: '{{ .Values.extraValues.user }}'
+        - name: '{{ .Values.extraValues.user }}'
+          passwordSecret:
+            keys: ['{{ .Values.extraValues.key }}']
+    asserts:
+      - equal:
+          path: spec.users[0].name
+          value: alice
+      - equal:
+          path: spec.users[1].passwordSecret.keys[0]
+          value: alice-next
+
+  - it: names the rendered user in the error
+    set:
+      extraValues:
+        user: bob
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: '{{ .Values.extraValues.user }}'
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.users "bob" reads password key "bob", but usersSecret.passwords has no entry for it'

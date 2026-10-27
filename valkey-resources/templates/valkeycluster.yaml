@@ -26,9 +26,11 @@ metadata:
 {{- $_ := set $ref "name" $secretName }}
 {{- $_ := set $user "passwordSecret" $ref }}
 {{- end }}
-{{- range $key := (default (list $user.name) $ref.keys) }}
-{{- if not (hasKey $.Values.usersSecret.passwords (toString $key)) }}
-{{- fail (printf "cluster.spec.users %q reads password key %q, but usersSecret.passwords has no entry for it" (toString $user.name) (toString $key)) }}
+{{- $userName := tpl (toString $user.name) $ }}
+{{- range $key := (default (list $userName) $ref.keys) }}
+{{- $key = tpl (toString $key) $ }}
+{{- if not (hasKey $.Values.usersSecret.passwords $key) }}
+{{- fail (printf "cluster.spec.users %q reads password key %q, but usersSecret.passwords has no entry for it" $userName $key) }}
 {{- end }}
 {{- end }}
 {{- end }}
