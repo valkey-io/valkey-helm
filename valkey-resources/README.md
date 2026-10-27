@@ -212,7 +212,7 @@ extraObjects:
       release: '{{ .Release.Name }}'
 ```
 
-An object entry is converted to YAML first and then rendered, so a template inside a quoted value is substituted inside those quotes. If the value can contain a quote character, as in `o'neil`, the result is invalid YAML. Use the string form for such values and quote them in the template with `quote` or `squote`:
+An object entry is converted to YAML first and then rendered, so a template inside a quoted value is substituted inside those quotes. If the value can contain a quote character, as in `o'neil`, the result is invalid YAML. Use the string form for such values and quote them in the template with `quote`, which escapes quote characters (`squote` does not):
 
 ```yaml
 extraObjects:
