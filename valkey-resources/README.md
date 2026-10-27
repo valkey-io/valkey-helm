@@ -119,7 +119,8 @@ serviceAccount:
 | `serviceAccount.create` | Render the ServiceAccount | `false` |
 | `serviceAccount.name` | ServiceAccount name | chart fullname |
 | `serviceAccount.annotations` | Annotations on the ServiceAccount | `{}` |
-| `serviceAccount.automountServiceAccountToken` | Mount the API token into pods | `false` |
+| `serviceAccount.labels` | Labels on the ServiceAccount, merged over the chart labels | `{}` |
+| `serviceAccount.automount` | Mount the API token into pods | `false` |
 
 Wiring: when `serviceAccount.create` is true or `serviceAccount.name` is set, and `cluster.spec` has no `serviceAccountName`, the chart sets `spec.serviceAccountName` to the ServiceAccount name. An explicit `cluster.spec.serviceAccountName` always wins, and the chart still creates its ServiceAccount when `create` is true. Set only `serviceAccount.name` (with `create: false`) to use a ServiceAccount that already exists.
 

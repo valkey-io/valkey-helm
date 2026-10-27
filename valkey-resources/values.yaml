@@ -76,5 +76,9 @@ serviceAccount:
   create: false
   # Defaults to the chart fullname
   name: ""
+  # Annotations to add to the service account
   annotations: {}
-  automountServiceAccountToken: false
+  # Labels to add to the service account
+  labels: {}
+  # Whether to automount the service account token
+  automount: false

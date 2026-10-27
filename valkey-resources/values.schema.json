@@ -34,7 +34,8 @@
         "create": { "type": "boolean" },
         "name": { "type": "string" },
         "annotations": { "type": "object", "additionalProperties": true },
-        "automountServiceAccountToken": { "type": "boolean" }
+        "labels": { "type": "object", "additionalProperties": true },
+        "automount": { "type": "boolean" }
       }
     },
     "cluster": {
