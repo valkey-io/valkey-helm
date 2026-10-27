@@ -124,6 +124,8 @@ serviceAccount:
 
 Wiring: when `serviceAccount.create` is true or `serviceAccount.name` is set, and `cluster.spec` has no `serviceAccountName`, the chart sets `spec.serviceAccountName` to the ServiceAccount name. An explicit `cluster.spec.serviceAccountName` always wins, and the chart still creates its ServiceAccount when `create` is true. Set only `serviceAccount.name` (with `create: false`) to use a ServiceAccount that already exists.
 
+Kubernetes decides whether to mount the API token when a pod is created, so a change to `serviceAccount.automount` reaches the Valkey pods only once they are recreated. The operator does not roll them for it.
+
 ## Uninstall
 
 ```bash
