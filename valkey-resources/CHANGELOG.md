@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Breaking:** the ValkeyCluster and the other rendered objects are named after the release (`<release>`) instead of `<release>-valkey-resources`. `fullnameOverride` still takes precedence. Upgrading a release whose ValkeyCluster is named `<release>-valkey-resources` (or `<release>-<nameOverride>`) renames it: Helm replaces it with a new, empty cluster that does not reuse the old volumes. Releases whose name already contained the chart name kept their release name and are not affected. Aliased subchart copies are named `<release>-<alias>`, as in 0.4.x, so two aliases in one release do not collide. Before upgrading, set `fullnameOverride` to the current name from `kubectl get valkeycluster -n <namespace>`; see [UPGRADE.md](UPGRADE.md).
+- **Breaking:** the ValkeyCluster and the other rendered objects are named after the release (`<release>`) instead of `<release>-valkey-resources`. `fullnameOverride` still takes precedence. Upgrading a release whose ValkeyCluster is named `<release>-valkey-resources` (or `<release>-<nameOverride>`) renames it: Helm replaces it with a new, empty cluster that does not reuse the old volumes. Releases whose name already contained the chart name kept their release name and are not affected. Aliased subchart copies keep their 0.4.x names (`<release>-<alias>`, or `<release>` when the release name contains the alias) and are not renamed. Before upgrading, set `fullnameOverride` to the current name from `kubectl get valkeycluster -n <namespace>`; see [UPGRADE.md](UPGRADE.md).
 
 ### Added
 
