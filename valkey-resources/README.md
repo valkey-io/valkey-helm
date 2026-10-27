@@ -123,6 +123,8 @@ Passwords must be strings. YAML reads unquoted values such as `0123`, `1.10`, `o
 
 To use a Secret you manage yourself, leave `usersSecret.create: false` and set `cluster.spec.users[].passwordSecret.name` (see [examples/users-acl.yaml](examples/users-acl.yaml)).
 
+Setting `usersSecret.create` back to `false` makes Helm delete the Secret on the next upgrade, and the operator then fails to reconcile users until the Secret exists again. To take the Secret over, add `helm.sh/resource-policy: keep` to `usersSecret.annotations` and upgrade once before turning `create` off. To move to a different Secret, create it and point `passwordSecret.name` at it first.
+
 **Release model:** one logical workload per Helm release. v0.1 only renders `ValkeyCluster`. When more kinds land, the chart will keep that model (enable the kinds you need for that one workload; multiple independent clusters remain multiple releases).
 
 ### Extra objects
