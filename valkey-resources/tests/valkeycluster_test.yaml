@@ -439,3 +439,28 @@ tests:
       - equal:
           path: spec.users[0].passwordSecret.name
           value: app-passwords
+
+  - it: wires a templated ServiceAccount name
+    release:
+      name: t
+    set:
+      serviceAccount:
+        create: true
+        name: "{{ .Release.Name }}-sa"
+    asserts:
+      - equal:
+          path: spec.serviceAccountName
+          value: t-sa
+
+  - it: accepts an explicit serviceAccountName matching a templated ServiceAccount name
+    release:
+      name: t
+    set:
+      serviceAccount:
+        create: true
+        name: "{{ .Release.Name }}-sa"
+      cluster.spec.serviceAccountName: t-sa
+    asserts:
+      - equal:
+          path: spec.serviceAccountName
+          value: t-sa

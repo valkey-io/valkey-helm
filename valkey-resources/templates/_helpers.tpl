@@ -57,7 +57,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 ServiceAccount name: serviceAccount.name if set, else the fullname.
 */}}
 {{- define "valkey-resources.serviceAccountName" -}}
-{{- default (include "valkey-resources.fullname" .) .Values.serviceAccount.name }}
+{{- tpl (default (include "valkey-resources.fullname" .) .Values.serviceAccount.name) . }}
 {{- end }}
 {{/*
 Users Secret name. Defaults to <fullname>-users, the Secret the operator reads

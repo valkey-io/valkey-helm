@@ -75,7 +75,7 @@ cluster:
 # A named ServiceAccount that this chart does not create must already exist.
 serviceAccount:
   create: false
-  # Defaults to the chart fullname
+  # Defaults to the chart fullname. May use templates.
   name: ""
   # Annotations to add to the service account
   annotations: {}
