@@ -1,0 +1,11 @@
+extraObjects:
+  first:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: first
+  second:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: second

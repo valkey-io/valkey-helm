@@ -65,6 +65,17 @@ tests:
           path: metadata.name
           value: kept
 
+  - it: drops one inherited entry and keeps its siblings
+    values:
+      - values/extra-objects-base.yaml
+      - values/extra-objects-drop-first.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: second
+
   - it: renders entries in key order
     set:
       extraObjects:
