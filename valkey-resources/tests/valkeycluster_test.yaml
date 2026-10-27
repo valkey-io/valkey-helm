@@ -419,3 +419,23 @@ tests:
       - equal:
           path: spec.users[0].passwordSecret.name
           value: rel-pw
+
+  - it: applies the ServiceAccount and the renamed users Secret together
+    set:
+      fullnameOverride: mt
+      serviceAccount:
+        create: true
+      usersSecret:
+        create: true
+        name: app-passwords
+        passwords:
+          alice: pw
+      cluster.spec.users:
+        - name: alice
+    asserts:
+      - equal:
+          path: spec.serviceAccountName
+          value: mt
+      - equal:
+          path: spec.users[0].passwordSecret.name
+          value: app-passwords
