@@ -30,6 +30,8 @@ helm install my-cluster valkey/valkey-resources -n valkey \
 | [persistence.yaml](persistence.yaml) | PVC size on StatefulSet |
 | [metrics-podmonitor.yaml](metrics-podmonitor.yaml) | PodMonitor for exporter sidecars |
 | [users-acl.yaml](users-acl.yaml) | ACL users with password Secret refs |
+| [extra-objects.yaml](extra-objects.yaml) | `extraObjects` ConfigMap, as an object and as a templated string |
+| [users-secret.yaml](users-secret.yaml) | ACL users with a chart-rendered users Secret |
 | [network-policy.yaml](network-policy.yaml) | NetworkPolicy with client and Prometheus rules in `extraIngress` |
 
 ## Notes
@@ -37,7 +39,7 @@ helm install my-cluster valkey/valkey-resources -n valkey \
 - Chart defaults leave `node.spread` off (operator default `Disabled`). Production clusters should set `shard` to at least `Preferred`; see `scheduling-node-spread.yaml`.
 - Prefer `node.spread` for hostname / node anti-colocation and `zone.spread` for zone-aware placement over hand-written `topologySpreadConstraints`; the operator owns the emitted constraints. Do not enable two dimensions at the same strength on the same axis (admission rejects duplicate constraints).
 - `zone.spread` and `zone.pinning` are mutually exclusive.
-- Secrets are references only; create them out of band.
+- Secrets are references unless `usersSecret.create` is set.
 - CRDs come from the `valkey-operator` chart. Helm does not upgrade CRDs automatically.
 
 ## Follow-up
