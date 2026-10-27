@@ -190,7 +190,7 @@ serviceAccount:
 | Value | Description | Default |
 |-------|-------------|---------|
 | `serviceAccount.create` | Render the ServiceAccount | `false` |
-| `serviceAccount.name` | ServiceAccount name | chart fullname |
+| `serviceAccount.name` | ServiceAccount name; may use templates | chart fullname |
 | `serviceAccount.annotations` | Annotations on the ServiceAccount | `{}` |
 | `serviceAccount.labels` | Labels on the ServiceAccount, merged over the chart labels | `{}` |
 | `serviceAccount.automount` | Mount the API token into pods | `false` |
