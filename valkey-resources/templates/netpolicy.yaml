@@ -67,7 +67,7 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ $np.dnsNamespace | default "kube-system" }}
+              kubernetes.io/metadata.name: {{ $np.dnsNamespace | default "kube-system" | quote }}
       ports:
         - port: 53
           protocol: UDP

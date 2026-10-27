@@ -254,3 +254,14 @@ tests:
       - equal:
           path: metadata.annotations["example.com/owner"]
           value: data
+
+  - it: keeps a numeric-looking dnsNamespace a string
+    set:
+      networkPolicy:
+        enabled: true
+        allowExternalEgress: false
+        dnsNamespace: "123"
+    asserts:
+      - equal:
+          path: spec.egress[1].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: "123"
