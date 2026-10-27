@@ -139,6 +139,22 @@ tests:
           path: spec.egress[1].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
           value: dns
 
+  - it: admits clients from any source when allowExternal is true
+    set:
+      networkPolicy:
+        enabled: true
+        allowExternal: true
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 3
+      - equal:
+          path: spec.ingress[2]
+          value:
+            ports:
+              - port: client
+                protocol: TCP
+
   - it: appends extra ingress rules in order
     set:
       networkPolicy:

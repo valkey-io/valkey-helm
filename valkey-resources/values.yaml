@@ -73,8 +73,9 @@ cluster:
 # run, plus extraIngress:
 #   - the cluster's own pods on the client (6379) and cluster-bus (16379) ports
 #   - the operator on the client port
-# Clients, metrics scrapers and anything else go in extraIngress. Egress is
-# open unless allowExternalEgress is false.
+# Clients, metrics scrapers and anything else go in extraIngress, or set
+# allowExternal to admit clients from any source. Egress is open unless
+# allowExternalEgress is false.
 # More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
 networkPolicy:
   enabled: false
@@ -87,6 +88,9 @@ networkPolicy:
     podSelector:
       matchLabels:
         app.kubernetes.io/name: valkey-operator
+  # Admit clients on the client port from any source. When false, only the
+  # cluster's own pods, the operator and extraIngress are admitted.
+  allowExternal: false
   # Allow all egress. When false, egress is limited to the cluster's own pods
   # (client, cluster-bus) and DNS in dnsNamespace, plus extraEgress.
   allowExternalEgress: true

@@ -108,6 +108,8 @@ Set `networkPolicy.enabled: true` to render a NetworkPolicy named after the Valk
 - the cluster's own pods on the `client` (6379) and `cluster-bus` (16379) ports
 - the operator on the `client` port, so it can reconcile (`networkPolicy.operator`, default: pods labelled `app.kubernetes.io/name: valkey-operator` in any namespace)
 
+`networkPolicy.allowExternal: true` also admits clients on the `client` port from any source. It defaults to `false`, unlike the valkey chart, so the policy admits nothing beyond the cluster until you add rules.
+
 Egress is open by default (`networkPolicy.allowExternalEgress: true`, as in the valkey chart). With `allowExternalEgress: false` egress is limited to the cluster's own pods on `client` and `cluster-bus` and to UDP and TCP 53 in `networkPolicy.dnsNamespace` (default `kube-system`).
 
 Everything else, including your clients and a Prometheus scraping the exporter (`metrics`, 9121), goes in `extraIngress` and `extraEgress`. Both are lists of NetworkPolicy rules appended as they are and templated with `tpl`:
