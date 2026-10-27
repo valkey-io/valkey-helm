@@ -92,7 +92,7 @@ See [values.yaml](values.yaml), [CHANGELOG.md](CHANGELOG.md), and the [ValkeyClu
 
 The ValkeyCluster is named after the release, or `fullnameOverride` when set. The operator prefixes what it creates with `valkey-`, so `helm install cache ...` gives the ValkeyCluster `cache`, the headless Service `valkey-cache` and pods `valkey-cache-<shard>-<node>-0`. The other objects this chart renders use the same name.
 
-The operator's CRD rejects names its workloads cannot carry: with StatefulSets and single-digit shard and replica indexes, 41 characters. When this chart is a subchart, the release name is the parent's, so set `fullnameOverride` to keep the names apart from the parent's objects.
+The operator's CRD rejects names its workloads cannot carry: with StatefulSets and single-digit shard and replica indexes, 41 characters. When this chart is a subchart, the release name is the parent's. Under an alias the name becomes `<release>-<alias>`, so a parent can depend on the chart more than once (for example as `cache` and `sessions`). Without an alias, set `fullnameOverride` to keep the names apart from the parent's objects.
 
 Releases installed before this change usually have a ValkeyCluster named `<release>-valkey-resources`; check the current name with `kubectl get valkeycluster -n <namespace>` and see [UPGRADE.md](UPGRADE.md) before upgrading them.
 

@@ -6,7 +6,7 @@
 
 **What changed:** the ValkeyCluster and the other objects the chart renders are named `<release>` instead of `<release>-valkey-resources`. The operator already prefixes what it creates with `valkey-`, so a release `cache` now gives the headless Service `valkey-cache` instead of `valkey-cache-valkey-resources`.
 
-**Who is affected:** releases that do not set `fullnameOverride` and whose release name does not contain `valkey-resources` (or the `nameOverride` value, which 0.4.x used in place of the suffix).
+**Who is affected:** releases that do not set `fullnameOverride` and whose release name does not contain `valkey-resources` (or the `nameOverride` value, which 0.4.x used in place of the suffix). Aliased subchart copies without `nameOverride` keep `<release>-<alias>`.
 
 **How to configure:** before upgrading, set `fullnameOverride` to the current ValkeyCluster name to keep the cluster. Read it with `kubectl get valkeycluster -n <namespace>`; with default values it is `<release>-valkey-resources`:
 

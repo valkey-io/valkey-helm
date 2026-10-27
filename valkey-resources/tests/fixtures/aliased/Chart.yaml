@@ -1,0 +1,14 @@
+apiVersion: v2
+name: aliased-fixture
+description: Test fixture that depends on valkey-resources twice under two aliases.
+type: application
+version: 0.0.0
+dependencies:
+  - name: valkey-resources
+    version: ">=0.0.0-0"
+    repository: file://../../..
+    alias: cache
+  - name: valkey-resources
+    version: ">=0.0.0-0"
+    repository: file://../../..
+    alias: sessions

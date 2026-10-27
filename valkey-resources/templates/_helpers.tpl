@@ -9,10 +9,18 @@ Expand the name of the chart.
 The ValkeyCluster name, also used for the other objects the chart renders:
 fullnameOverride if set, else the release name. The operator already prefixes
 the objects it creates with "valkey-", so no chart-name suffix is added.
+As an aliased subchart, .Chart.Name is the alias: the name is then
+<release>-<alias>, so two aliased copies in one release do not collide.
 The CRD validates the length, which depends on shards, replicas and workloadType.
 */}}
 {{- define "valkey-resources.fullname" -}}
-{{- default .Release.Name .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- if .Values.fullnameOverride }}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- else if ne .Chart.Name "valkey-resources" }}
+{{- printf "%s-%s" .Release.Name .Chart.Name | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- end }}
 {{- end }}
 
 {{/*

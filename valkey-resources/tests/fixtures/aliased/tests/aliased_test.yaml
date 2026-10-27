@@ -1,0 +1,28 @@
+suite: two aliased copies of valkey-resources
+templates:
+  - charts/cache/templates/valkeycluster.yaml
+  - charts/sessions/templates/valkeycluster.yaml
+tests:
+  - it: names each copy after its alias
+    release:
+      name: rel
+    asserts:
+      - equal:
+          path: metadata.name
+          value: rel-cache
+        template: charts/cache/templates/valkeycluster.yaml
+      - equal:
+          path: metadata.name
+          value: rel-sessions
+        template: charts/sessions/templates/valkeycluster.yaml
+
+  - it: still honours fullnameOverride for an aliased copy
+    release:
+      name: rel
+    set:
+      cache.fullnameOverride: my-cache
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-cache
+        template: charts/cache/templates/valkeycluster.yaml
