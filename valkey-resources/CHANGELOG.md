@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Breaking:** the ValkeyCluster and the other rendered objects are named after the release (`<release>`) instead of `<release>-valkey-resources`. `fullnameOverride` still takes precedence. Upgrading a release that used the default naming renames its ValkeyCluster: Helm replaces it with a new, empty cluster that does not reuse the old volumes. Set `fullnameOverride: <release>-valkey-resources` first; see [UPGRADE.md](UPGRADE.md).
+
 ## 0.4.0
 
 ### Changed

@@ -85,7 +85,16 @@ See [values.yaml](values.yaml), [CHANGELOG.md](CHANGELOG.md), and the [ValkeyClu
 | `extraValues` | Free-form map for use inside `tpl` strings | `{}` |
 | `metrics.podMonitor.enabled` | Create a PodMonitor for ValkeyNode exporter sidecars (Prometheus Operator CRDs) | `false` |
 | `metrics.podMonitor.port` | Scrape port name on the exporter container | `metrics` |
-| `fullnameOverride` | ValkeyCluster name | chart fullname |
+| `fullnameOverride` | ValkeyCluster name | release name |
+| `nameOverride` | `app.kubernetes.io/name` label | chart name |
+
+### Naming
+
+The ValkeyCluster is named after the release, or `fullnameOverride` when set. The operator prefixes what it creates with `valkey-`, so `helm install cache ...` gives the ValkeyCluster `cache`, the headless Service `valkey-cache` and pods `valkey-cache-<shard>-<node>-0`. The other objects this chart renders use the same name.
+
+The operator's CRD rejects names its workloads cannot carry: with StatefulSets and single-digit shard and replica indexes, 41 characters. When this chart is a subchart, the release name is the parent's, so set `fullnameOverride` to keep the names apart from the parent's objects.
+
+Releases installed before this change are named `<release>-valkey-resources`; see [UPGRADE.md](UPGRADE.md) before upgrading them.
 
 ### Metrics (PodMonitor)
 

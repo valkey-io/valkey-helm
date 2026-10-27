@@ -1,6 +1,7 @@
-# Override the default name of resources
+# Override the app.kubernetes.io/name label (defaults to the chart name)
 nameOverride: ""
-# Override the full name of resources (ValkeyCluster metadata.name)
+# ValkeyCluster metadata.name, also used for the other rendered objects.
+# Defaults to the release name.
 fullnameOverride: ""
 
 # Labels added to all rendered resources

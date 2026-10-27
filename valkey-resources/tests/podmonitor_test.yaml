@@ -20,10 +20,10 @@ tests:
           value: monitoring.coreos.com/v1
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-valkey-resources
+          value: RELEASE-NAME
       - equal:
           path: spec.selector.matchLabels["valkey.io/cluster"]
-          value: RELEASE-NAME-valkey-resources
+          value: RELEASE-NAME
       - equal:
           path: spec.namespaceSelector.matchNames[0]
           value: NAMESPACE
@@ -99,4 +99,4 @@ tests:
           value: valkey-node
       - equal:
           path: spec.selector.matchLabels["valkey.io/cluster"]
-          value: RELEASE-NAME-valkey-resources
+          value: RELEASE-NAME

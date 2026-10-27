@@ -11,13 +11,34 @@ tests:
           value: valkey.io/v1alpha1
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-valkey-resources
+          value: RELEASE-NAME
       - equal:
           path: spec.shards
           value: 3
       - equal:
           path: spec.replicas
           value: 1
+
+  - it: names the ValkeyCluster after the release
+    release:
+      name: cache
+    asserts:
+      - equal:
+          path: metadata.name
+          value: cache
+
+  - it: does not let nameOverride change the ValkeyCluster name
+    release:
+      name: cache
+    set:
+      nameOverride: other
+    asserts:
+      - equal:
+          path: metadata.name
+          value: cache
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: other
 
   - it: uses fullnameOverride
     set:
