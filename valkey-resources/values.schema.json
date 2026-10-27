@@ -64,6 +64,10 @@
           "additionalProperties": { "type": "string" }
         }
       }
+    },
+    "extraObjects": {
+      "type": "object",
+      "additionalProperties": { "type": ["object", "string", "null"] }
     }
   }
 }
