@@ -8,8 +8,13 @@ metadata:
   name: {{ $fullname }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "valkey-resources.labels" . | nindent 4 }}
-    app.kubernetes.io/component: networkpolicy
+    {{- $labels := include "valkey-resources.labels" . | fromYaml }}
+    {{- $_ := set $labels "app.kubernetes.io/component" "networkpolicy" }}
+    {{- mustMergeOverwrite $labels ($np.labels | default dict) | toYaml | nindent 4 }}
+  {{- with $np.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   podSelector:
     matchLabels:
@@ -52,10 +57,8 @@ spec:
         - port: client
           protocol: TCP
     {{- end }}
-    {{- range $name, $rule := $np.extraIngress }}
-    {{- if $rule }}
-    - {{ toYaml $rule | nindent 6 | trim }}
-    {{- end }}
+    {{- with $np.extraIngress }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
     {{- end }}
   {{- if $egress.enabled }}
   egress:
@@ -70,22 +73,19 @@ spec:
         - port: cluster-bus
           protocol: TCP
     {{- if $egress.allowDNS }}
-    # Cluster DNS.
+    # Cluster DNS (kube-dns / CoreDNS).
     - to:
-        - namespaceSelector: {}
-          podSelector:
+        - namespaceSelector:
             matchLabels:
-              k8s-app: kube-dns
+              kubernetes.io/metadata.name: {{ $np.dnsNamespace | default "kube-system" }}
       ports:
         - port: 53
           protocol: UDP
         - port: 53
           protocol: TCP
     {{- end }}
-    {{- range $name, $rule := $egress.extra }}
-    {{- if $rule }}
-    - {{ toYaml $rule | nindent 6 | trim }}
-    {{- end }}
+    {{- with $np.extraEgress }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
     {{- end }}
   {{- end }}
 {{- end }}

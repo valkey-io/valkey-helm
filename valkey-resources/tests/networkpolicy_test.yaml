@@ -1,6 +1,6 @@
 suite: networkpolicy
 templates:
-  - templates/networkpolicy.yaml
+  - templates/netpolicy.yaml
 tests:
   - it: renders nothing by default
     asserts:
@@ -164,22 +164,19 @@ tests:
           path: spec.ingress
           count: 2
 
-  - it: appends extra ingress rules and skips nulls
+  - it: appends extra ingress rules in order
     set:
       networkPolicy:
         enabled: true
         extraIngress:
-          b-metrics:
-            from:
+          - from:
               - namespaceSelector:
                   matchLabels:
                     app: monitoring
             ports:
-              - port: 9121
+              - port: metrics
                 protocol: TCP
-          a-skipped: null
-          c-other:
-            from:
+          - from:
               - ipBlock:
                   cidr: 10.0.0.0/8
     asserts:
@@ -188,10 +185,38 @@ tests:
           count: 4
       - equal:
           path: spec.ingress[2].ports[0].port
-          value: 9121
+          value: metrics
       - equal:
           path: spec.ingress[3].from[0].ipBlock.cidr
           value: 10.0.0.0/8
+
+  - it: templates extra ingress and egress rules with tpl
+    set:
+      networkPolicy:
+        enabled: true
+        egress:
+          enabled: true
+          allowDNS: false
+        extraIngress:
+          - from:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: "{{ .Release.Namespace }}"
+        extraEgress:
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: "{{ .Release.Name }}-backup"
+    release:
+      name: rel
+      namespace: ns1
+    asserts:
+      - equal:
+          path: spec.ingress[2].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: ns1
+      - equal:
+          path: spec.egress[1].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: rel-backup
 
   - it: adds egress when enabled
     set:
@@ -223,15 +248,26 @@ tests:
           path: spec.egress[1]
           value:
             to:
-              - namespaceSelector: {}
-                podSelector:
+              - namespaceSelector:
                   matchLabels:
-                    k8s-app: kube-dns
+                    kubernetes.io/metadata.name: kube-system
             ports:
               - port: 53
                 protocol: UDP
               - port: 53
                 protocol: TCP
+
+  - it: sends DNS to dnsNamespace
+    set:
+      networkPolicy:
+        enabled: true
+        egress:
+          enabled: true
+        dnsNamespace: dns
+    asserts:
+      - equal:
+          path: spec.egress[1].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: dns
 
   - it: omits DNS when allowDNS is false
     set:
@@ -245,21 +281,19 @@ tests:
           path: spec.egress
           count: 1
 
-  - it: appends extra egress rules and skips nulls
+  - it: appends extra egress rules
     set:
       networkPolicy:
         enabled: true
         egress:
           enabled: true
           allowDNS: false
-          extra:
-            a-skipped: null
-            b-s3:
-              to:
-                - ipBlock:
-                    cidr: 192.168.0.0/16
-              ports:
-                - port: 443
+        extraEgress:
+          - to:
+              - ipBlock:
+                  cidr: 192.168.0.0/16
+            ports:
+              - port: 443
     asserts:
       - lengthEqual:
           path: spec.egress
@@ -268,15 +302,43 @@ tests:
           path: spec.egress[1].to[0].ipBlock.cidr
           value: 192.168.0.0/16
 
-  - it: ignores egress settings while egress is disabled
+  - it: ignores extraEgress while egress is disabled
     set:
       networkPolicy:
         enabled: true
-        egress:
-          extra:
-            x:
-              ports:
-                - port: 443
+        extraEgress:
+          - ports:
+              - port: 443
     asserts:
       - notExists:
           path: spec.egress
+
+  - it: merges policy labels and sets annotations
+    set:
+      networkPolicy:
+        enabled: true
+        labels:
+          team: data
+          app.kubernetes.io/component: custom
+        annotations:
+          example.com/owner: data
+    asserts:
+      - equal:
+          path: metadata.labels.team
+          value: data
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: custom
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: data
+
+  - it: labels the policy as a networkpolicy component by default
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: networkpolicy
+      - notExists:
+          path: metadata.annotations

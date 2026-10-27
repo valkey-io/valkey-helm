@@ -17,15 +17,14 @@ networkPolicy:
       podSelector:
         matchLabels:
           role: worker
-  # Extra ingress rule, e.g. a Prometheus scraping the exporter on 9121
+  # Extra ingress rule, e.g. a Prometheus scraping the exporter's metrics port (9121)
   extraIngress:
-    metrics:
-      from:
+    - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: monitoring
       ports:
-        - port: 9121
+        - port: metrics
           protocol: TCP
   # Restrict egress too: only the cluster's own pods and DNS stay reachable.
   egress:

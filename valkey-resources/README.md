@@ -124,15 +124,15 @@ networkPolicy:
       namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: my-app
-  extraIngress: {}    # name -> full NetworkPolicyIngressRule
+  extraIngress: []    # full NetworkPolicyIngressRules, templated with tpl
 ```
 
 Egress is not restricted by default (`policyTypes` is `[Ingress]`). With `networkPolicy.egress.enabled: true` the policy also allows egress to the cluster's own pods on the `client` and `cluster-bus` ports and denies all other egress from the Valkey pods. Two things follow:
 
-- `egress.allowDNS` (default `true`) adds UDP and TCP 53 to pods labelled `k8s-app: kube-dns` in any namespace. Turn it off only if DNS is allowed by another policy.
-- Anything else the pods need to reach, such as backup storage or external services, goes in `egress.extra` (name -> full NetworkPolicyEgressRule).
+- `egress.allowDNS` (default `true`) adds UDP and TCP 53 to the `networkPolicy.dnsNamespace` namespace (default `kube-system`). Turn it off only if DNS is allowed by another policy.
+- Anything else the pods need to reach, such as backup storage or external services, goes in `extraEgress` (full NetworkPolicyEgressRules, templated with `tpl`).
 
-Map entries render in key order. Set an entry to `null` in a later values file to remove it. The policy only has an effect when the CNI enforces NetworkPolicy. See [examples/network-policy.yaml](examples/network-policy.yaml).
+`clients` entries render in key order; set one to `null` in a later values file to remove it. `extraIngress` and `extraEgress` are lists, so a later values file replaces them whole. `networkPolicy.labels` and `networkPolicy.annotations` go on the policy object. The policy only has an effect when the CNI enforces NetworkPolicy. See [examples/network-policy.yaml](examples/network-policy.yaml).
 
 **Release model:** one logical workload per Helm release. v0.1 only renders `ValkeyCluster`. When more kinds land, the chart will keep that model (enable the kinds you need for that one workload; multiple independent clusters remain multiple releases).
 
