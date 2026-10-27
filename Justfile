@@ -41,6 +41,12 @@ schema:
     @echo "=== Generating valkey/values.schema.json ==="
     cd valkey && helm schema
 
+# Regenerate valkey/README.md from valkey/README.md.gotmpl with helm-docs,
+# which fills in the version badges and the values table.
+docs:
+    @echo "=== Generating valkey/README.md ==="
+    cd valkey && helm-docs
+
 # Run all validations
 validate: lint test
     @echo "=== All validations passed ==="

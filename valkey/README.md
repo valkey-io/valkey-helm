@@ -1,6 +1,6 @@
 # valkey
 
-![Version: 0.11.0](https://img.shields.io/badge/Version-0.11.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.1.1](https://img.shields.io/badge/AppVersion-9.1.1-informational?style=flat-square)
+![Version: 0.12.0](https://img.shields.io/badge/Version-0.12.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.1.3](https://img.shields.io/badge/AppVersion-9.1.3-informational?style=flat-square)
 
 A Helm chart for Kubernetes
 
@@ -8,11 +8,11 @@ A Helm chart for Kubernetes
 
 ## Maintainers
 
-| Name | Url |
-| ---- | --- |
-| raven | [https://github.com/mk-raven] |
-| sgissi | [https://github.com/sgissi] |
-| Bloodraven21 | [https://github.com/Bloodraven21] |
+| Name | Email | Url |
+| ---- | ------ | --- |
+| raven |  | <https://github.com/mk-raven> |
+| sgissi |  | <https://github.com/sgissi> |
+| Bloodraven21 |  | <https://github.com/Bloodraven21> |
 
 ## Source Code
 
@@ -587,28 +587,76 @@ TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on a
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| global.imageRegistry | string | '' |  |
-| global.imagePullSecrets | list | `[]` |  |
-| affinity | object | `{}` | Valkey pods only, see sentinel.affinity |
+| affinity | object | `{}` |  |
 | auth.aclConfig | string | `""` |  |
-| auth.aclUsers | object | `{}` | |
+| auth.aclUsers | object | `{}` |  |
 | auth.enabled | bool | `false` |  |
-| auth.usersExistingSecret | string | `""` | |
-| deploymentStrategy | string | `"Recreate"` | Standalone Deployment strategy; RollingUpdate is only safe without persistence |
-| extraConfig | string | `""` | Raw lines appended to valkey.conf; supports templating and `include` |
-| extraContainers | list | `[]` | Additional containers in the Valkey pod |
-| extraEnv | list | `[]` | Additional EnvVar entries for the Valkey container (value or valueFrom) |
-| extraInitContainers | list | `[]` | Additional init containers in the Valkey pod |
-| extraVolumes | list | `[]` | Additional volumes for the Valkey pod |
-| extraVolumeMounts | list | `[]` | Mounts of extraVolumes into the Valkey container; the chart's own paths are refused |
+| auth.usersExistingSecret | string | `""` |  |
+| clusterDomain | string | `"cluster.local"` |  |
+| commonLabels | object | `{}` |  |
+| deploymentStrategy | string | `"Recreate"` |  |
+| extraConfig | string | `""` |  |
+| extraContainers | list | `[]` |  |
+| extraEnv | list | `[]` |  |
+| extraInitContainers | list | `[]` |  |
+| extraVolumeMounts | list | `[]` |  |
+| extraVolumes | list | `[]` |  |
 | fullnameOverride | string | `""` |  |
+| global.imagePullSecrets | list | `[]` |  |
+| global.imageRegistry | string | `""` |  |
+| haproxy.affinity | object | `{}` |  |
+| haproxy.checkUser | string | `""` |  |
+| haproxy.config.checkInterval | string | `"2s"` |  |
+| haproxy.config.checkTimeout | string | `"5s"` |  |
+| haproxy.config.healthPort | int | `8404` |  |
+| haproxy.config.maxconn | int | `4096` |  |
+| haproxy.config.timeout.client | string | `"1m"` |  |
+| haproxy.config.timeout.connect | string | `"5s"` |  |
+| haproxy.config.timeout.server | string | `"1m"` |  |
+| haproxy.config.timeout.tunnel | string | `"24d"` |  |
+| haproxy.enabled | bool | `false` |  |
+| haproxy.extraInitContainers | list | `[]` |  |
+| haproxy.extraVolumeMounts | list | `[]` |  |
+| haproxy.extraVolumes | list | `[]` |  |
+| haproxy.image.pullPolicy | string | `"IfNotPresent"` |  |
+| haproxy.image.registry | string | `"docker.io"` |  |
+| haproxy.image.repository | string | `"haproxy"` |  |
+| haproxy.image.tag | string | `"3.2-alpine"` |  |
+| haproxy.nodeSelector | string | `nil` |  |
+| haproxy.podAnnotations | object | `{}` |  |
+| haproxy.podDisruptionBudget.enabled | bool | `false` |  |
+| haproxy.podDisruptionBudget.maxUnavailable | int | `1` |  |
+| haproxy.podDisruptionBudget.minAvailable | string | `nil` |  |
+| haproxy.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
+| haproxy.podLabels | object | `{}` |  |
+| haproxy.podSecurityContext.fsGroup | int | `99` |  |
+| haproxy.podSecurityContext.runAsGroup | int | `99` |  |
+| haproxy.podSecurityContext.runAsUser | int | `99` |  |
+| haproxy.podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
+| haproxy.replicas | int | `3` |  |
+| haproxy.resources | object | `{}` |  |
+| haproxy.securityContext.allowPrivilegeEscalation | bool | `false` |  |
+| haproxy.securityContext.capabilities.drop[0] | string | `"ALL"` |  |
+| haproxy.securityContext.readOnlyRootFilesystem | bool | `true` |  |
+| haproxy.securityContext.runAsNonRoot | bool | `true` |  |
+| haproxy.service.annotations | object | `{}` |  |
+| haproxy.service.clusterIP | string | `""` |  |
+| haproxy.service.loadBalancerClass | string | `""` |  |
+| haproxy.service.loadBalancerSourceRanges | list | `[]` |  |
+| haproxy.service.nodePort | int | `0` |  |
+| haproxy.service.port | int | `6379` |  |
+| haproxy.service.type | string | `"ClusterIP"` |  |
+| haproxy.tls.clientCertFile | string | `""` |  |
+| haproxy.tls.verify | string | `"required"` |  |
+| haproxy.tolerations | string | `nil` |  |
+| haproxy.topologySpreadConstraints | list | `[]` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
-| image.registry | string | `""` |  |
-| image.repository | string | `"docker.io/valkey/valkey"` |  |
-| image.tag | string | `""` | Defaults to the chart's appVersion; Valkey 9.0 or later is required |
+| image.registry | string | `"docker.io"` |  |
+| image.repository | string | `"valkey/valkey"` |  |
+| image.tag | string | `""` |  |
 | imagePullSecrets | list | `[]` |  |
 | initResources | object | `{}` |  |
-| livenessProbe.customProbe | object | `{}` | Full probe spec to replace the default valkey-cli ping handler and timing |
+| livenessProbe.customProbe | object | `{}` |  |
 | livenessProbe.enabled | bool | `true` |  |
 | livenessProbe.failureThreshold | int | `3` |  |
 | livenessProbe.initialDelaySeconds | int | `0` |  |
@@ -617,20 +665,24 @@ TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on a
 | metrics.enabled | bool | `false` |  |
 | metrics.exporter.args | list | `[]` |  |
 | metrics.exporter.command | list | `[]` |  |
-| metrics.exporter.extraEnv | list | `[]` | EnvVar entries; also overrides the REDIS_ADDR and REDIS_EXPORTER_TLS_* values the chart sets |
-| metrics.exporter.extraVolumeMounts | list | `[]` | Mounts of extraVolumes into the exporter container |
+| metrics.exporter.extraEnv | list | `[]` |  |
+| metrics.exporter.extraVolumeMounts | list | `[]` |  |
 | metrics.exporter.image.pullPolicy | string | `"IfNotPresent"` |  |
-| metrics.exporter.image.repository | string | `"ghcr.io/oliver006/redis_exporter"` |  |
+| metrics.exporter.image.registry | string | `"ghcr.io"` |  |
+| metrics.exporter.image.repository | string | `"oliver006/redis_exporter"` |  |
 | metrics.exporter.image.tag | string | `"v1.88.0"` |  |
 | metrics.exporter.port | int | `9121` |  |
-| metrics.exporter.tlsServerName | string | `""` | Server name expected in the Valkey certificate with TLS, defaults to the service name |
 | metrics.exporter.resources | object | `{}` |  |
-| metrics.exporter.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsNonRoot":true}` | Merged with user values; `null` drops them |
+| metrics.exporter.securityContext.allowPrivilegeEscalation | bool | `false` |  |
+| metrics.exporter.securityContext.capabilities.drop[0] | string | `"ALL"` |  |
+| metrics.exporter.securityContext.readOnlyRootFilesystem | bool | `true` |  |
+| metrics.exporter.securityContext.runAsNonRoot | bool | `true` |  |
+| metrics.exporter.tlsServerName | string | `""` |  |
 | metrics.podMonitor.annotations | object | `{}` |  |
 | metrics.podMonitor.enabled | bool | `false` |  |
-| metrics.podMonitor.labels | object | `{}` | Labels on the PodMonitor, e.g. for a Prometheus `podMonitorSelector` |
 | metrics.podMonitor.honorLabels | bool | `false` |  |
 | metrics.podMonitor.interval | string | `"30s"` |  |
+| metrics.podMonitor.labels | object | `{}` |  |
 | metrics.podMonitor.metricRelabelings | list | `[]` |  |
 | metrics.podMonitor.podTargetLabels | list | `[]` |  |
 | metrics.podMonitor.port | string | `"metrics"` |  |
@@ -638,11 +690,12 @@ TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on a
 | metrics.podMonitor.sampleLimit | bool | `false` |  |
 | metrics.podMonitor.scrapeTimeout | string | `""` |  |
 | metrics.podMonitor.targetLimit | bool | `false` |  |
-| metrics.prometheusRule.enabled | bool | `false` |  |
 | metrics.prometheusRule.annotations | object | `{}` |  |
+| metrics.prometheusRule.enabled | bool | `false` |  |
 | metrics.prometheusRule.labels | object | `{}` |  |
 | metrics.prometheusRule.rules | list | `[]` |  |
 | metrics.service.annotations | object | `{}` |  |
+| metrics.service.appProtocol | string | `""` |  |
 | metrics.service.clusterIP | string | `""` |  |
 | metrics.service.enabled | bool | `true` |  |
 | metrics.service.labels | object | `{}` |  |
@@ -651,12 +704,11 @@ TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on a
 | metrics.service.nodePort | int | `0` |  |
 | metrics.service.port | int | `9121` |  |
 | metrics.service.type | string | `"ClusterIP"` |  |
-| metrics.service.appProtocol | string | `""` |  |
 | metrics.serviceMonitor.annotations | object | `{}` |  |
 | metrics.serviceMonitor.enabled | bool | `false` |  |
-| metrics.serviceMonitor.labels | object | `{}` | Labels on the ServiceMonitor, e.g. for a Prometheus `serviceMonitorSelector` |
 | metrics.serviceMonitor.honorLabels | bool | `false` |  |
 | metrics.serviceMonitor.interval | string | `"30s"` |  |
+| metrics.serviceMonitor.labels | object | `{}` |  |
 | metrics.serviceMonitor.metricRelabelings | list | `[]` |  |
 | metrics.serviceMonitor.podTargetLabels | list | `[]` |  |
 | metrics.serviceMonitor.port | string | `"metrics"` |  |
@@ -665,164 +717,141 @@ TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on a
 | metrics.serviceMonitor.scrapeTimeout | string | `""` |  |
 | metrics.serviceMonitor.targetLimit | bool | `false` |  |
 | nameOverride | string | `""` |  |
-| networkPolicy.enabled | bool | `false` | Create a NetworkPolicy for the Valkey pods |
-| networkPolicy.allowExternal | bool | `true` | Admit clients from any source; when false, only labelled clients, this release's pods and ingressNSMatchLabels |
-| networkPolicy.allowExternalEgress | bool | `true` | Allow all egress; when false, only DNS and this release's Valkey and Sentinel pods |
-| networkPolicy.ingressNSMatchLabels | object | `{}` | Namespaces admitted when allowExternal is false |
-| networkPolicy.ingressNSPodMatchLabels | object | `{}` | Pods admitted within those namespaces |
-| networkPolicy.extraIngress | list | `[]` | Ingress rules added as they are |
-| networkPolicy.extraEgress | list | `[]` | Egress rules added as they are |
-| networkPolicy.labels | object | `{}` |  |
+| networkPolicy.allowExternal | bool | `true` |  |
+| networkPolicy.allowExternalEgress | bool | `true` |  |
 | networkPolicy.annotations | object | `{}` |  |
+| networkPolicy.enabled | bool | `false` |  |
+| networkPolicy.extraEgress | list | `[]` |  |
+| networkPolicy.extraIngress | list | `[]` |  |
+| networkPolicy.ingressNSMatchLabels | object | `{}` |  |
+| networkPolicy.ingressNSPodMatchLabels | object | `{}` |  |
+| networkPolicy.labels | object | `{}` |  |
 | nodeSelector | object | `{}` |  |
-| persistence.enabled | bool | `false` | Required in replication mode |
-| persistence.size | string | `""` | PVC size (one per pod in replication) |
+| persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| persistence.annotations | object | `{}` |  |
+| persistence.enabled | bool | `false` |  |
+| persistence.existingClaim | string | `""` |  |
+| persistence.hostPath | string | `""` |  |
+| persistence.keepOnUninstall | bool | `false` |  |
+| persistence.labels | object | `{}` |  |
+| persistence.size | string | `""` |  |
 | persistence.storageClass | string | `""` |  |
-| persistence.accessModes | list | `["ReadWriteOnce"]` |  |
-| persistence.subPath | string | `""` | Subpath of the volume mounted as /data |
-| persistence.labels | object | `{}` | PVC labels; replication: new installs only |
-| persistence.annotations | object | `{}` | PVC annotations; replication: new installs only |
-| persistence.existingClaim | string | `""` | Standalone only |
-| persistence.hostPath | string | `""` | Standalone only |
-| persistence.keepOnUninstall | bool | `false` | Standalone only |
-| podAnnotations | object | `{}` | Valkey pods only, see sentinel.podAnnotations and haproxy.podAnnotations |
-| podLabels | object | `{}` | Valkey pods only, see sentinel.podLabels and haproxy.podLabels |
-| commonLabels | object | `{}` |  |
+| persistence.subPath | string | `""` |  |
+| podAnnotations | object | `{}` |  |
 | podDisruptionBudget.enabled | bool | `false` |  |
-| podDisruptionBudget.minAvailable | int or string | `null` | Minimum pods available during disruptions |
-| podDisruptionBudget.maxUnavailable | int or string | `1` | Maximum pods unavailable during disruptions |
-| podDisruptionBudget.unhealthyPodEvictionPolicy | string | `null` | Policy for evicting unhealthy pods |
+| podDisruptionBudget.maxUnavailable | int | `1` |  |
+| podDisruptionBudget.minAvailable | string | `nil` |  |
+| podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
+| podLabels | object | `{}` |  |
 | podSecurityContext.fsGroup | int | `1000` |  |
 | podSecurityContext.runAsGroup | int | `1000` |  |
 | podSecurityContext.runAsUser | int | `1000` |  |
+| podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
 | priorityClassName | string | `""` |  |
-| runtimeClassName | string | `""` | RuntimeClassName for the pods (e.g. `gvisor`, `kata-containers`); empty uses the cluster default runtime |
-| readinessProbe.customProbe | object | `{}` | Full probe spec to replace the default valkey-cli ping handler and timing |
-| readinessProbe.enabled | bool | `false` | Opt-in; the Valkey container had no readiness probe before |
+| readinessProbe.customProbe | object | `{}` |  |
+| readinessProbe.enabled | bool | `false` |  |
 | readinessProbe.failureThreshold | int | `3` |  |
 | readinessProbe.initialDelaySeconds | int | `0` |  |
 | readinessProbe.periodSeconds | int | `10` |  |
 | readinessProbe.successThreshold | int | `1` |  |
 | readinessProbe.timeoutSeconds | int | `1` |  |
-| replica.enabled | bool | `false` |  |
-| replica.replicas | int | `3` | Valkey pods, the master included; at least 1 (2 with Sentinel) |
-| replica.replicationUser | string | `"default"` |  |
 | replica.disklessSync | bool | `false` |  |
-| replica.minReplicasToWrite | int | `0` |  |
+| replica.enabled | bool | `false` |  |
 | replica.minReplicasMaxLag | int | `10` |  |
-| replica.service.enabled | bool | `"true"` |  |
-| replica.service.type | string | `"ClusterIP"` |  |
-| replica.service.port | int | `6379` |  |
+| replica.minReplicasToWrite | int | `0` |  |
+| replica.persistentVolumeClaimRetentionPolicy | object | `{}` |  |
+| replica.replicas | int | `3` |  |
+| replica.replicationUser | string | `"default"` |  |
 | replica.service.annotations | object | `{}` |  |
-| replica.service.nodePort | int | `0` |  |
-| replica.service.clusterIP | string | `""` |  |
 | replica.service.appProtocol | string | `""` |  |
+| replica.service.clusterIP | string | `""` |  |
+| replica.service.enabled | bool | `true` |  |
 | replica.service.loadBalancerClass | string | `""` |  |
-| haproxy.enabled | bool | `false` | Route non Sentinel-aware clients to the current master |
-| haproxy.replicas | int | `3` |  |
-| haproxy.image.registry | string | `"docker.io"` |  |
-| haproxy.image.repository | string | `"haproxy"` |  |
-| haproxy.image.tag | string | `"3.2-alpine"` | HAProxy 3.1 or newer is required |
-| haproxy.image.pullPolicy | string | `"IfNotPresent"` |  |
-| haproxy.checkUser | string | `""` | Defaults to the 'default' user |
-| haproxy.service.type | string | `"ClusterIP"` |  |
-| haproxy.service.port | int | `6379` | Write port, follows the master |
-| haproxy.service.annotations | object | `{}` |  |
-| haproxy.config.maxconn | int | `4096` |  |
-| haproxy.config.checkInterval | string | `"2s"` | How often HAProxy checks each node and Sentinel, the time it needs to notice a new master on top of Sentinel's own detection |
-| haproxy.config.checkTimeout | string | `"5s"` |  |
-| haproxy.config.healthPort | int | `8404` | Serves /healthz for the Kubernetes probes, not published |
-| haproxy.config.timeout.connect | string | `"5s"` |  |
-| haproxy.config.timeout.client | string | `"1m"` |  |
-| haproxy.config.timeout.server | string | `"1m"` |  |
-| haproxy.config.timeout.tunnel | string | `"24d"` | Keeps idle pub/sub connections open, 0 falls back to the client timeout |
-| haproxy.tls.verify | string | `"required"` | Certificate validation towards the nodes, including each pod name |
-| haproxy.tls.clientCertFile | string | `""` | Combined cert+key, required with tls.requireClientCertificate |
-| haproxy.podDisruptionBudget.enabled | bool | `false` | Keep HAProxy replicas available across node drains |
-| haproxy.podDisruptionBudget.minAvailable | int | `null` | Takes precedence over maxUnavailable |
-| haproxy.podDisruptionBudget.maxUnavailable | int | `1` |  |
-| haproxy.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
-| haproxy.nodeSelector | object | `null` | null inherits nodeSelector; {} for none |
-| haproxy.tolerations | list | `null` | null inherits tolerations; [] for none |
-| haproxy.podLabels | object | `{}` | HAProxy pod labels; top level podLabels do not apply |
-| haproxy.podAnnotations | object | `{}` | HAProxy pod annotations; top level podAnnotations do not apply |
-| haproxy.resources | object | `{}` |  |
-| haproxy.podSecurityContext | object | see values.yaml |  |
-| haproxy.securityContext | object | see values.yaml |  |
-| haproxy.extraInitContainers | list | `[]` |  |
-| haproxy.extraVolumes | list | `[]` |  |
-| haproxy.extraVolumeMounts | list | `[]` | /tls and /usr/local/etc/haproxy are refused |
+| replica.service.loadBalancerSourceRanges | list | `[]` |  |
+| replica.service.nodePort | int | `0` |  |
+| replica.service.port | int | `6379` |  |
+| replica.service.type | string | `"ClusterIP"` |  |
 | resources | object | `{}` |  |
+| runtimeClassName | string | `""` |  |
+| securityContext.allowPrivilegeEscalation | bool | `false` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
 | securityContext.runAsNonRoot | bool | `true` |  |
 | securityContext.runAsUser | int | `1000` |  |
-| sentinel.enabled | bool | `false` | Run Valkey Sentinel for automatic failover |
-| sentinel.replicas | int | `3` | Number of independently deployed Sentinel pods |
-| sentinel.port | int | `26379` |  |
-| sentinel.masterSet | string | `"mymaster"` |  |
-| sentinel.initialTopologyWaitSeconds | int | `180` | How long a pod with no recorded topology waits to be told one before giving up |
-| sentinel.masterRecordRefreshSeconds | int | `1` | How often the cold-start topology record is checked against the running config |
-| sentinel.quorum | int | `2` | Sentinels that must agree before a failover starts |
+| sentinel.affinity | object | `{}` |  |
 | sentinel.downAfterMilliseconds | int | `5000` |  |
+| sentinel.enabled | bool | `false` |  |
+| sentinel.existingSecret | string | `""` |  |
+| sentinel.extraConfig | string | `""` |  |
 | sentinel.failoverTimeout | int | `60000` |  |
+| sentinel.initialTopologyWaitSeconds | int | `180` |  |
+| sentinel.masterRecordRefreshSeconds | int | `1` |  |
+| sentinel.masterSet | string | `"mymaster"` |  |
+| sentinel.minReadySeconds | int | `15` |  |
+| sentinel.monitorUser | string | `""` |  |
+| sentinel.nodeSelector | string | `nil` |  |
+| sentinel.orphanCheckSeconds | int | `30` |  |
 | sentinel.parallelSyncs | int | `1` |  |
-| sentinel.monitorUser | string | `""` | Defaults to replica.replicationUser |
-| sentinel.orphanCheckSeconds | int | `30` | How often each Sentinel looks for a node replicating from something it cannot see |
-| sentinel.password | string | `""` | Dedicated Sentinel password; this or existingSecret is required |
-| sentinel.existingSecret | string | `""` | Secret holding the Sentinel password, instead of sentinel.password |
-| sentinel.passwordKey | string | `"sentinel"` | Key of the Sentinel password in sentinel.existingSecret |
-| sentinel.preStopFailover | bool | `true` | Fail over before a master pod is terminated |
-| sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
-| sentinel.minReadySeconds | int | `15` | minReadySeconds of the Valkey StatefulSet, lets Sentinel catch up with a restarted pod during a rolling update |
-| sentinel.startupTimeoutSeconds | int | `60` |  |
-| sentinel.extraConfig | string | `""` | Raw lines appended to sentinel.conf; supports templating |
-| sentinel.resources | object | `{}` |  |
-| sentinel.securityContext | object | `{}` | Defaults to securityContext |
-| sentinel.service.enabled | bool | `true` |  |
-| sentinel.service.type | string | `"ClusterIP"` |  |
-| sentinel.service.port | int | `26379` |  |
-| sentinel.service.annotations | object | `{}` |  |
+| sentinel.password | string | `""` |  |
+| sentinel.passwordKey | string | `"sentinel"` |  |
+| sentinel.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
 | sentinel.persistence.enabled | bool | `false` |  |
 | sentinel.persistence.size | string | `"100Mi"` |  |
 | sentinel.persistence.storageClass | string | `""` |  |
-| sentinel.persistentVolumeClaimRetentionPolicy | object | `{}` | PVC retention policy for the Sentinel StatefulSet |
-| sentinel.podLabels | object | `{}` | Sentinel pod labels; top level podLabels do not apply |
-| sentinel.podAnnotations | object | `{}` | Sentinel pod annotations; top level podAnnotations do not apply |
-| sentinel.nodeSelector | object | `null` | null inherits nodeSelector; {} for none |
-| sentinel.tolerations | list | `null` | null inherits tolerations; [] for none |
-| sentinel.affinity | object | `{}` | Top level affinity does not apply |
-| sentinel.topologySpreadConstraints | list | `[]` | Top level topologySpreadConstraints do not apply |
-| sentinel.podDisruptionBudget.enabled | bool | `false` | Keep a Sentinel quorum available across node drains |
-| sentinel.podDisruptionBudget.minAvailable | int | `null` | Takes precedence over maxUnavailable |
-| sentinel.podDisruptionBudget.maxUnavailable | int | `1` | Must keep max(quorum, majority) Sentinels running |
+| sentinel.persistentVolumeClaimRetentionPolicy | object | `{}` |  |
+| sentinel.podAnnotations | object | `{}` |  |
+| sentinel.podDisruptionBudget.enabled | bool | `false` |  |
+| sentinel.podDisruptionBudget.maxUnavailable | int | `1` |  |
+| sentinel.podDisruptionBudget.minAvailable | string | `nil` |  |
 | sentinel.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
+| sentinel.podLabels | object | `{}` |  |
+| sentinel.port | int | `26379` |  |
+| sentinel.preStopFailover | bool | `true` |  |
+| sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
+| sentinel.quorum | int | `2` |  |
+| sentinel.replicas | int | `3` |  |
+| sentinel.resources | object | `{}` |  |
+| sentinel.securityContext | object | `{}` |  |
+| sentinel.service.annotations | object | `{}` |  |
+| sentinel.service.appProtocol | string | `""` |  |
+| sentinel.service.clusterIP | string | `""` |  |
+| sentinel.service.enabled | bool | `true` |  |
+| sentinel.service.loadBalancerClass | string | `""` |  |
+| sentinel.service.loadBalancerSourceRanges | list | `[]` |  |
+| sentinel.service.nodePort | int | `0` |  |
+| sentinel.service.port | int | `26379` |  |
+| sentinel.service.type | string | `"ClusterIP"` |  |
+| sentinel.startupTimeoutSeconds | int | `60` |  |
+| sentinel.tolerations | string | `nil` |  |
+| sentinel.topologySpreadConstraints | list | `[]` |  |
 | service.annotations | object | `{}` |  |
+| service.appProtocol | string | `""` |  |
+| service.clusterIP | string | `""` |  |
+| service.loadBalancerClass | string | `""` |  |
+| service.loadBalancerSourceRanges | list | `[]` |  |
 | service.nodePort | int | `0` |  |
 | service.port | int | `6379` |  |
 | service.type | string | `"ClusterIP"` |  |
-| service.appProtocol | string | `""` |  |
-| service.loadBalancerClass | string | `""` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.automount | bool | `false` |  |
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
-| startupProbe.customProbe | object | `{}` | Full probe spec to replace the default valkey-cli ping handler and timing |
+| startupProbe.customProbe | object | `{}` |  |
 | startupProbe.enabled | bool | `true` |  |
 | startupProbe.failureThreshold | int | `3` |  |
 | startupProbe.initialDelaySeconds | int | `0` |  |
 | startupProbe.periodSeconds | int | `10` |  |
 | startupProbe.timeoutSeconds | int | `1` |  |
-| terminationGracePeriodSeconds | int | `30` | Valkey pods, standalone and replication; must exceed sentinel.preStopFailoverTimeoutSeconds |
-| tls.caPublicKey | string | `"ca.crt"` | CA certificate file, in the Secret or the volume |
+| terminationGracePeriodSeconds | int | `30` |  |
+| tls.caPublicKey | string | `"ca.crt"` |  |
 | tls.dhParamKey | string | `""` |  |
 | tls.enabled | bool | `false` |  |
-| tls.existingSecret | string | `""` | Secret holding the TLS files; set this or tls.volume |
-| tls.volume | object | `{}` | Any other volume source holding the TLS files, mounted at /tls in every pod that reads them |
+| tls.existingSecret | string | `""` |  |
 | tls.requireClientCertificate | bool | `false` |  |
-| tls.serverKey | string | `"server.key"` | Server private key file |
-| tls.serverPublicKey | string | `"server.crt"` | Server certificate file |
+| tls.serverKey | string | `"server.key"` |  |
+| tls.serverPublicKey | string | `"server.crt"` |  |
+| tls.volume | object | `{}` |  |
 | tolerations | list | `[]` |  |
-| topologySpreadConstraints | list | `[]` | Valkey pods only, see sentinel.topologySpreadConstraints |
+| topologySpreadConstraints | list | `[]` |  |
 | valkeyLogLevel | string | `"notice"` |  |
 | workloadAnnotations | object | `{}` |  |

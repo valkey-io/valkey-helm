@@ -132,6 +132,24 @@ tests:
       - failedTemplate:
           errorPattern: "metrics.service.ports was flattened to metrics.service.port.*See UPGRADE.md."
 
+  - it: should refuse metrics.serviceMonitor.additionalLabels
+    set:
+      metrics.serviceMonitor.additionalLabels:
+        a: b
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.serviceMonitor.additionalLabels was never applied.*metrics.serviceMonitor.labels.*See UPGRADE.md."
+
+  - it: should refuse metrics.podMonitor.additionalLabels
+    set:
+      metrics.podMonitor.additionalLabels:
+        a: b
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "metrics.podMonitor.additionalLabels was never applied.*metrics.podMonitor.labels.*See UPGRADE.md."
+
   - it: should refuse metrics.serviceMonitor.extraLabels
     set:
       metrics.serviceMonitor.extraLabels:

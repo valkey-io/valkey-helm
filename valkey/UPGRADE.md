@@ -88,6 +88,8 @@ Replication, from `replica.persistence`: move the block to the top level as `per
 
 **How to configure:** rename `extraLabels` to `labels` and `extraAnnotations` to `annotations`.
 
+`metrics.serviceMonitor.additionalLabels` and `metrics.podMonitor.additionalLabels` are removed as well. 0.x never applied them, so labels set there, such as a Prometheus `release` selector, never reached the ServiceMonitor or PodMonitor. Move them to `labels`.
+
 ---
 
 ### Metrics service port flattened to `metrics.service.port`
