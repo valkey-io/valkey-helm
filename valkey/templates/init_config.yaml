@@ -134,8 +134,79 @@ data:
       done
     }
 
+    # Before anything else, make sure a restarted master does not come back
+    # writable with an older dataset than its replicas hold.
+    SELF="$SELF" CONF="$CONF" MARKER="$MARKER" /scripts/master-restart-guard.sh ||
+      echo "$(date) ERROR: the master restart check failed, starting as configured" >&2
+
     track_master &
     exec valkey-server "$@"
+
+  master-restart-guard.sh: |-
+    #!/bin/sh
+    # Run by valkey-start.sh before the server starts, with SELF, CONF and
+    # MARKER set. Kept apart from it because it needs the Sentinel credential,
+    # which valkey-start.sh, running for the life of the pod, does without.
+    set -eu
+
+    SENTINEL_PEER="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+
+    sentinel_cli() {
+      sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
+      REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+        -t 2 -h "$SENTINEL_PEER" -p {{ .Values.sentinel.port }} --raw "$@" 2>/dev/null | tr -d '\r'
+    }
+
+    # Prints the master Sentinel names, as "host port".
+    sentinel_master() {
+      addr=$(sentinel_cli sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }}) || return 1
+      host=$(echo "$addr" | sed -n 1p)
+      port=$(echo "$addr" | sed -n 2p)
+      [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$" || return 1
+      printf '%s %s\n' "$host" "$port"
+    }
+
+    # The number of replicas Sentinel holds as healthy, flagged as nothing but
+    # "slave". --raw prints each replica's fields as name and value lines.
+    sentinel_healthy_replicas() {
+      sentinel_cli sentinel replicas {{ .Values.sentinel.masterSet }} |
+        awk 'prev == "flags" && $0 == "slave" { n++ } { prev = $0 } END { print n + 0 }'
+    }
+
+    # A server that starts as the master comes back with the dataset of its
+    # last save, and the replicas then resynchronise from it and drop every
+    # write they had since. That is what a restart of the master looks like
+    # when it is back before Sentinel's downAfterMilliseconds: Sentinel only
+    # sees a reboot and keeps it as the master. The replicas Sentinel still
+    # holds as healthy were following this server until it went down, so they
+    # are at least as recent as anything on disk here. Stay down instead, so
+    # that Sentinel promotes one of them, and come back as its replica.
+    # Init containers do not run again when only this container restarts, so
+    # the check has to be here rather than in init.sh.
+    if ! grep -qE '^(replicaof|slaveof) ' "$CONF" || grep -qE '^(replicaof|slaveof) no one' "$CONF"; then
+      MASTER=$(sentinel_master || true)
+      if [ "${MASTER% *}" = "$SELF" ] && [ "$(sentinel_healthy_replicas || echo 0)" -gt 0 ]; then
+        echo "$(date) Sentinel still names this pod as the master and holds healthy replicas; waiting for it to promote one of them instead of starting with the dataset on disk" >&2
+        WAITED=0
+        while [ "$WAITED" -lt "{{ .Values.sentinel.restartFailoverWaitSeconds }}" ]; do
+          sleep 2
+          WAITED=$((WAITED + 2))
+          MASTER=$(sentinel_master || true)
+          if [ -n "$MASTER" ] && [ "${MASTER% *}" != "$SELF" ]; then
+            break
+          fi
+        done
+        if [ -n "$MASTER" ] && [ "${MASTER% *}" != "$SELF" ]; then
+          echo "$(date) Sentinel promoted ${MASTER% *}, starting as its replica" >&2
+          sed -i -E '/^(replicaof|slaveof) /d' "$CONF"
+          printf 'replicaof %s %s\n' "${MASTER% *}" "${MASTER#* }" >> "$CONF"
+          mkdir -p /data/conf
+          printf '%s\n' "$MASTER" > "$MARKER.tmp" && mv "$MARKER.tmp" "$MARKER"
+        else
+          echo "$(date) WARNING: Sentinel promoted no replica within {{ .Values.sentinel.restartFailoverWaitSeconds }}s, starting as the master with the dataset on disk" >&2
+        fi
+      fi
+    fi
 {{- end }}
 
   init.sh: |-

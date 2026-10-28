@@ -412,6 +412,15 @@ sentinel:
   # this bounds one attempt rather than the whole startup.
   initialTopologyWaitSeconds: 180
 
+  # How long a restarted master waits for Sentinel to promote a replica.
+  # A master that is back before downAfterMilliseconds would otherwise stay
+  # the master with only the dataset of its last save, and the replicas would
+  # resynchronise from it and lose every write since. So while Sentinel still
+  # names it the master and holds healthy replicas, it does not start, and
+  # comes back as a replica of the one Sentinel promotes. If none is promoted
+  # in time, e.g. without a Sentinel quorum, it starts as the master anyway.
+  restartFailoverWaitSeconds: 120 # @schema minimum:0
+
   # How often each Valkey pod mirrors the current master onto its data volume.
   # That record is what a cold start falls back on when no Sentinel answers,
   # so it bounds how stale the topology can be after an abrupt restart.

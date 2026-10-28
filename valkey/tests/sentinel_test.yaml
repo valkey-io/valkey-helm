@@ -773,6 +773,56 @@ tests:
           path: data["valkey-start.sh"]
           pattern: 'REDISCLI_AUTH|valkey-cli'
 
+  - it: should keep a restarted master down while Sentinel can promote a replica
+    template: templates/init_config.yaml
+    asserts:
+      # Back before downAfterMilliseconds, a master is only seen as rebooted
+      # and stays the master with the dataset of its last save, and the
+      # replicas resynchronise from it and lose every write since.
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: '/scripts/master-restart-guard.sh \|\|'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'sentinel replicas mymaster'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'while \[ "\$WAITED" -lt "120" \]; do'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: "printf 'replicaof %s %s\\\\n'"
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'SENTINEL_PEER="RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
+
+  - it: should bound the restarted master's wait with restartFailoverWaitSeconds
+    set:
+      sentinel.restartFailoverWaitSeconds: 30
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'while \[ "\$WAITED" -lt "30" \]; do'
+
+  - it: should not render the restart guard without Sentinel
+    set:
+      sentinel.enabled: false
+    template: templates/init_config.yaml
+    asserts:
+      - notExists:
+          path: data["master-restart-guard.sh"]
+
+  - it: should mount the sentinel credential in the valkey container without the preStop failover
+    set:
+      sentinel.preStopFailover: false
+    template: templates/statefulset.yaml
+    asserts:
+      # master-restart-guard.sh asks Sentinel for the master on every start
+      - exists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-scripts")]
+
   - it: should check for a failover once a second by default
     template: templates/init_config.yaml
     asserts:

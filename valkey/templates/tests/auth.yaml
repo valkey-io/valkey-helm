@@ -51,32 +51,64 @@ spec:
           TLS_FLAGS=""
           {{- end }}
 
+          {{- if and .Values.replica.enabled .Values.sentinel.enabled }}
+          # The valkey service balances across every pod in Sentinel mode, so a
+          # write through it can land on a replica. Ask Sentinel for the master.
+          MASTER=$(REDISCLI_AUTH="$(cat /sentinel-auth/password)" valkey-cli $TLS_FLAGS --user sentinel --raw \
+            -h {{ include "valkey.sentinel.fullname" . }} -p {{ .Values.sentinel.service.port }} \
+            SENTINEL get-master-addr-by-name {{ .Values.sentinel.masterSet }} | tr '\n' ' ')
+          set -- $MASTER
+          if [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
+            echo "✗ Sentinel named no master: '$MASTER'"
+            exit 1
+          fi
+          HOST="$1"
+          PORT="$2"
+          echo "Sentinel names $HOST:$PORT as the master"
+          {{- else }}
+          HOST="{{ include "valkey.fullname" . }}"
+          PORT="{{ .Values.service.port }}"
+          {{- end }}
+
           # Test authentication
-          PING_RESULT=$(valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} $TLS_FLAGS --user "$USERNAME" --pass "$PASSWORD" PING)
+          PING_RESULT=$(valkey-cli -h "$HOST" -p "$PORT" $TLS_FLAGS --user "$USERNAME" --pass "$PASSWORD" --no-auth-warning PING)
           if [ "$PING_RESULT" != "PONG" ]; then
             echo "✗ Authentication test failed: expected 'PONG', got '$PING_RESULT'"
             exit 1
           fi
           echo "✓ PING successful: $PING_RESULT"
 
-          # Test that we can set and get a value (if permissions allow)
-          if valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} $TLS_FLAGS --user "$USERNAME" --pass "$PASSWORD" SET test-key-generated "test-value" 2>/dev/null; then
-            VALUE=$(valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }} $TLS_FLAGS --user "$USERNAME" --pass "$PASSWORD" GET test-key-generated)
-            if [ "$VALUE" = "test-value" ]; then
-              echo "✓ Authentication test passed with write permissions"
-              exit 0
-            else
+          # Test that we can set and get a value (if permissions allow).
+          # valkey-cli exits 0 on an error reply too, so check the reply itself.
+          SET_RESULT=$(valkey-cli -h "$HOST" -p "$PORT" $TLS_FLAGS --user "$USERNAME" --pass "$PASSWORD" --no-auth-warning SET test-key-generated "test-value" || true)
+          case "$SET_RESULT" in
+            OK)
+              VALUE=$(valkey-cli -h "$HOST" -p "$PORT" $TLS_FLAGS --user "$USERNAME" --pass "$PASSWORD" --no-auth-warning GET test-key-generated)
+              if [ "$VALUE" = "test-value" ]; then
+                echo "✓ Authentication test passed with write permissions"
+                exit 0
+              fi
               echo "✗ Authentication test failed: expected 'test-value', got '$VALUE'"
               exit 1
-            fi
-          else
-            echo "✓ Authentication test passed (read-only or restricted permissions)"
-            exit 0
-          fi
+              ;;
+            *NOPERM*)
+              echo "✓ Authentication test passed (read-only or restricted permissions)"
+              exit 0
+              ;;
+            *)
+              echo "✗ SET failed: $SET_RESULT"
+              exit 1
+              ;;
+          esac
       volumeMounts:
         - name: valkey-auth
           mountPath: /valkey-auth
           readOnly: true
+        {{- if and .Values.replica.enabled .Values.sentinel.enabled }}
+        - name: sentinel-auth
+          mountPath: /sentinel-auth
+          readOnly: true
+        {{- end }}
         {{- if .Values.tls.enabled }}
         - name: valkey-tls
           mountPath: /tls
@@ -86,6 +118,9 @@ spec:
     - name: valkey-auth
       secret:
         secretName: {{ include "valkey.fullname" . }}-auth
+    {{- if and .Values.replica.enabled .Values.sentinel.enabled }}
+    {{- include "valkey.sentinel.authVolume" . | nindent 4 }}
+    {{- end }}
     {{- if .Values.tls.enabled }}
     - name: valkey-tls
       {{- include "valkey.tls.volumeSource" . | nindent 6 }}

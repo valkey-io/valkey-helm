@@ -1034,6 +1034,10 @@
                 "resources": {
                     "type": "object"
                 },
+                "restartFailoverWaitSeconds": {
+                    "type": "integer",
+                    "minimum": 0
+                },
                 "securityContext": {
                     "type": "object"
                 },

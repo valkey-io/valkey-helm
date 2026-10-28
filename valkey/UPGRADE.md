@@ -20,7 +20,11 @@ Upgrade with your complete, migrated values file, without `--reuse-values` or `-
 
 **Who is affected:** standalone releases (`replica.enabled: false`) that do not set `deploymentStrategy`.
 
-**How to configure:** no action needed. Without persistence, set `deploymentStrategy: RollingUpdate` to keep upgrades without downtime. If the release is applied with server-side apply (e.g. Argo CD `ServerSideApply=true`), run `kubectl patch deployment <release>-valkey -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'` before upgrading.
+**How to configure:** without persistence, set `deploymentStrategy: RollingUpdate` to keep upgrades without downtime. Note that changing from RollingUpdate to Recreate when using Helm 4, or any other server-side apply (e.g. Argo CD `ServerSideApply=true`), will lead to an `spec.strategy.rollingUpdate: Forbidden: may not be specified when strategy type is 'Recreate'` error. Run the command below before upgrading:
+
+  ```bash
+  kubectl patch deployment <release>-valkey -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+  ```
 
 ---
 
