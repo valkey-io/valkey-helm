@@ -188,13 +188,15 @@ extraContainers: []
 # replication mode. The volume and claim names do not depend on these values,
 # so existing data is kept when they change.
 persistence:
-  # Standalone: without persistence the data lives on an emptyDir and is lost
-  # when the pod is replaced. Replication: required, the chart refuses to
-  # render without it.
+  # Without persistence the data lives on an emptyDir and is lost when the pod
+  # is replaced. Replication: required unless sentinel.enabled, the chart
+  # refuses to render without either. Toggling it on an existing replication
+  # release changes the StatefulSet's volumeClaimTemplates, which Kubernetes
+  # rejects: the StatefulSet has to be recreated.
   enabled: false
 
-  # Size of the PVC (one per pod in replication), e.g. 5Gi. Required unless
-  # existingClaim or hostPath is set.
+  # Size of the PVC (one per pod in replication), e.g. 5Gi. Required when
+  # enabled, unless existingClaim or hostPath is set (standalone only).
   size: ""
 
   # Storage class of the PVC (empty = the cluster's default storage class)

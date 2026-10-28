@@ -23,7 +23,6 @@ data:
     MASTER_PORT="{{ .Values.service.port }}"
     VALKEY_PODS="{{ $valkeyPods }}"
     SELF_HOST="${POD_NAME}.{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-    SENTINEL_HOST="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
     DEFAULT_MASTER_HOST="{{ include "valkey.statefulsetName" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
 
     # Logging goes to stderr so that command substitutions stay clean.
@@ -98,15 +97,31 @@ data:
     # Ask the Sentinels that are already running. They hold the authoritative
     # view of the topology, which matters when this pod joins or rejoins a
     # cluster that has already failed over away from pod-0.
+    #
+    # Each peer by name rather than through the headless service: that name
+    # resolves to every Sentinel pod, ready or not, and the client only tries
+    # the first address, so on a fresh install it keeps landing on a peer that
+    # is still in this same loop and misses the one that already bootstrapped.
     master_from_peers() {
-      addr=$(sentinel_cli -h "$SENTINEL_HOST" sentinel get-master-addr-by-name "$MASTER_SET" 2>/dev/null || true)
-      host=$(echo "$addr" | sed -n 1p)
-      port=$(echo "$addr" | sed -n 2p)
-      # A peer that does not know this master set answers with an error or a
-      # single line, which would otherwise become a broken monitor directive.
-      [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$" || return 1
-      log "A Sentinel peer reports the master as $host:$port"
-      printf '%s\n%s\n' "$host" "$port"
+      i=0
+      while [ "$i" -lt "{{ int .Values.sentinel.replicas }}" ]; do
+        peer="{{ include "valkey.sentinel.fullname" . }}-${i}.{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        i=$((i + 1))
+        if [ "$peer" = "$SELF_HOST" ]; then
+          continue
+        fi
+        addr=$(sentinel_cli -h "$peer" sentinel get-master-addr-by-name "$MASTER_SET" 2>/dev/null | tr -d '\r' || true)
+        host=$(echo "$addr" | sed -n 1p)
+        port=$(echo "$addr" | sed -n 2p)
+        # A peer that does not know this master set answers with an error or a
+        # single line, which would otherwise become a broken monitor directive.
+        if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
+          log "Sentinel peer ${peer%%.*} reports the master as $host:$port"
+          printf '%s\n%s\n' "$host" "$port"
+          return 0
+        fi
+      done
+      return 1
     }
 
     # After a full Sentinel restart, inspect the Valkey pods. Their persisted
@@ -136,6 +151,9 @@ data:
     }
 
     # Give the Valkey StatefulSet time to start during a fresh installation.
+    # By the clock rather than by rounds: a round of lookups takes seconds of
+    # its own, and the Valkey pods size their wait for this one in seconds.
+    STARTED_AT=$(date +%s)
     WAITED=0
     DISCOVERED=""
     while [ "$WAITED" -lt "{{ .Values.sentinel.startupTimeoutSeconds }}" ]; do
@@ -144,7 +162,7 @@ data:
         break
       fi
       sleep 1
-      WAITED=$((WAITED + 1))
+      WAITED=$(($(date +%s) - STARTED_AT))
     done
 
     MASTER_HOST="$DEFAULT_MASTER_HOST"
@@ -352,7 +370,7 @@ data:
     {{- end }}
 
     # HOSTNAME is the pod name for a StatefulSet pod.
-    SELF_HOST="${HOSTNAME}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    SELF_HOST="$HOSTNAME.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
 
     local_cli() {
       {{- if .Values.auth.enabled }}

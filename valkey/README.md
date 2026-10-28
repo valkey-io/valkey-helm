@@ -334,7 +334,42 @@ When more than one is set, `existingClaim` wins over `size`, which wins over `ho
 
 ### Replication Storage
 
-Persistent storage is **mandatory** in replication mode. Without it, the primary might come up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
+Without Sentinel, persistent storage is **mandatory** in replication mode. Without it, the primary might come up with an empty dataset after a restart, all replicas will synchronize with the empty primary and lose their data. See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off) for details.
+
+With Sentinel (`sentinel.enabled: true`), persistence is optional.
+Without persistence each pod gets an `emptyDir`. With persistence, the StatefulSet creates PVCs instead of emptyDir data volumes.
+A master pod that restarts on an empty volume while Sentinel still names it as master does not start as master when a Sentinel knows of a replica or another Valkey pod is up. It waits until Sentinel fails over to a replica that still has the data, and then joins the new master.
+Sentinel remembers every replica it has seen, so a replica that is unreachable at that moment still counts.
+The pod only starts as an empty master once a quorum of Sentinels reports no replica at all, as on a fresh install.
+
+The same applies when only the Valkey container restarts inside a running pod (a crash, an OOM kill or a failed liveness probe), with or without persistence.
+Kubernetes does not rerun the init container then, so the container's start script reruns its checks itself and treats the data on disk as unproven, since it may be older than the replicas' data.
+A master that restarted this way exits again rather than serving that data, and Kubernetes restarts the container after its usual back-off until Sentinel has failed over; the pod then joins the new master.
+Expect a restart or two of the `valkey` container, and a `CrashLoopBackOff` status in between, while that happens.
+Because the configuration is generated again on such a restart, changes made at runtime with `CONFIG SET` or `ACL SETUSER` do not survive it; put them in `extraConfig` or `auth` instead.
+
+If Sentinel cannot fail over, a pod with an empty volume waits up to `sentinel.initialTopologyWaitSeconds` in its init container, and a restarted container exits at once; either way the pod keeps restarting until a replica is promoted:
+
+- Without quorum, `SENTINEL FAILOVER <masterSet>` on one Sentinel forces the failover without the agreement of the others.
+- If that answers `NOGOODSLAVE`, no replica qualifies, for example because every one was cut off from the master for too long. `SENTINEL FAILOVER` cannot override that: promote a replica by hand with `REPLICAOF NO ONE`, then point each Sentinel at it with `SENTINEL REMOVE <masterSet>`, `SENTINEL MONITOR` and the `SENTINEL SET` options the chart configures.
+
+Without persistence, losing every Valkey pod at once still loses the data; with it, the PVCs keep the data and the pods come back in their recorded roles. If the Sentinels survive the loss, they still know the old replicas, and what happens next depends on which pod they name as master:
+
+- Another pod than pod-0: the pods before it start as empty replicas of it, and Sentinel promotes one of them once its failover retries come round, which can take a few minutes.
+- Pod-0: it waits for a failover that cannot happen, because the StatefulSet only starts the other pods once pod-0 is ready.
+
+In either case, start over to recover without waiting. `<release>` is the Helm release name; the selectors include it so that other releases in the namespace are left alone:
+
+```sh
+kubectl scale statefulset <valkey> --replicas=0
+kubectl wait --for=delete pod -l app.kubernetes.io/instance=<release>,app.kubernetes.io/component=valkey
+kubectl delete pod -l app.kubernetes.io/instance=<release>,app.kubernetes.io/component=sentinel
+# wait sentinel.startupTimeoutSeconds, until each Sentinel logs that it is bootstrapping with pod-0 as master
+kubectl scale statefulset <valkey> --replicas=<replica.replicas>
+```
+
+With no Valkey pod and no Sentinel peer to ask, the Sentinels bootstrap as on a fresh install, knowing no replica, and pod-0 starts as an empty master.
+If the Sentinels restart along with the Valkey pods, this happens on its own.
 
 ```yaml
 replica:
@@ -347,7 +382,7 @@ persistence:
 
 Each pod gets its own PVC from the StatefulSet's `volumeClaimTemplates`.
 `existingClaim`, `hostPath` and `keepOnUninstall` do not apply; to reuse existing volumes, create the claims as `valkey-data-<statefulset>-<index>` before installing.
-Kubernetes does not allow changing `volumeClaimTemplates`, so `persistence.labels` and `persistence.annotations` only apply to new installs, and changing `accessModes` or `storageClass` later requires recreating the StatefulSet.
+Kubernetes does not allow changing `volumeClaimTemplates`, so `persistence.labels` and `persistence.annotations` only apply to new installs, and changing `persistence.enabled`, `accessModes` or `storageClass` later requires recreating the StatefulSet.
 
 ## Customizing Valkey
 
@@ -675,7 +710,7 @@ TLS files cannot be added through `extraVolumeMounts`: mounts on `/tls`, or on a
 | networkPolicy.labels | object | `{}` |  |
 | networkPolicy.annotations | object | `{}` |  |
 | nodeSelector | object | `{}` |  |
-| persistence.enabled | bool | `false` | Required in replication mode |
+| persistence.enabled | bool | `false` | Required in replication mode without Sentinel |
 | persistence.size | string | `""` | PVC size (one per pod in replication) |
 | persistence.storageClass | string | `""` |  |
 | persistence.accessModes | list | `["ReadWriteOnce"]` |  |

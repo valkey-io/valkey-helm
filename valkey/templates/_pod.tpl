@@ -177,16 +177,26 @@ spec:
         {{- if $preStopFailover }}
         - name: sentinel-scripts
           mountPath: /sentinel-scripts
+        {{- end }}
+        {{- /* valkey-start.sh reruns init.sh when the server restarts inside a
+               running pod, so this container needs what the init container
+               reads: the Sentinel and user credentials, and extraConfig. */}}
+        {{- if $sentinel }}
         - name: sentinel-auth
           mountPath: /sentinel-auth
           readOnly: true
+        {{- if .Values.extraConfig }}
+        - name: valkey-config
+          mountPath: /usr/local/etc/valkey/valkey.conf
+          subPath: valkey.conf
+        {{- end }}
         {{- end }}
         {{- if .Values.tls.enabled }}
         - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
           mountPath: /tls
         {{- end }}
         {{- if .Values.auth.enabled }}
-        {{- if $preStopFailover }}
+        {{- if $sentinel }}
         {{- if .Values.auth.usersExistingSecret }}
         - name: valkey-users-secret
           mountPath: /valkey-users-secret
@@ -339,8 +349,8 @@ spec:
         defaultMode: 0400
     {{- end }}
     {{- end }}
-    {{- /* The StatefulSet provides the data volume through its volumeClaimTemplate */}}
-    {{- if not $replicated }}
+    {{- /* With persistence the StatefulSet provides the data volume through its volumeClaimTemplate */}}
+    {{- if or (not $replicated) (not $storage.enabled) }}
     - name: valkey-data
     {{- if not $storage.enabled }}
       emptyDir: {}

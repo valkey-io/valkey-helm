@@ -219,14 +219,44 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should fail in replication mode without persistence
+  - it: should fail in replication mode without persistence or sentinel
     set:
       replica.enabled: true
-      persistence.size: 5Gi
     template: templates/statefulset.yaml
     asserts:
       - failedTemplate:
-          errorPattern: "Replication requires persistent storage.*"
+          errorPattern: "Replication without Sentinel requires persistent storage.*"
+
+  - it: should use an emptyDir per pod with sentinel and no persistence
+    set:
+      replica.enabled: true
+      sentinel.enabled: true
+      sentinel.password: sentinelpw
+    template: templates/statefulset.yaml
+    asserts:
+      - isNull:
+          path: spec.volumeClaimTemplates
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            emptyDir: {}
+
+  - it: should not add a data volume next to the volumeClaimTemplate
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 5Gi
+    template: templates/statefulset.yaml
+    asserts:
+      - isNotNull:
+          path: spec.volumeClaimTemplates
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: valkey-data
+            emptyDir: {}
+          any: true
 
   - it: should fail on standalone only options in replication mode
     set:
