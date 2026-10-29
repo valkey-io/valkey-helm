@@ -139,15 +139,17 @@ serviceAccount:
 # cluster.spec.users[].passwordSecret.name (see examples/users-acl.yaml).
 usersSecret:
   create: false
-  # Defaults to "<fullname>-users" and may use templates. When set, users in cluster.spec.users
-  # without passwordSecret.name are pointed at this Secret.
+  # Defaults to "<fullname>-users" and may use templates. When set, users in
+  # cluster.spec.users without passwordSecret.name are pointed at this Secret.
   name: ""
   annotations: {}
   # username -> password. Each key becomes a Secret data key. Values must be
-  # strings: quote anything YAML would read as a number or boolean. Every user in cluster.spec.users that reads this
-  # Secret must have an entry (or one per passwordSecret.keys entry); the
-  # render fails otherwise. Keep real passwords out of committed values files.
+  # strings: quote anything YAML would read as a number or boolean. Every user
+  # in cluster.spec.users that reads this Secret must have an entry (or one per
+  # passwordSecret.keys entry); the render fails otherwise. Keep real passwords
+  # out of committed values files.
   passwords: {}
+
 # Extra Kubernetes objects rendered with the release (for example a ConfigMap
 # or Secret the ValkeyCluster references). A map, so each key can be overridden
 # per environment; set a key to null to drop an inherited entry. Each value is

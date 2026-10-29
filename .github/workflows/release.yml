@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version_changed: ${{ steps.check.outputs.version_changed }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,6 +26,7 @@ jobs:
         id: check
         run: |
           version_changed=false
+          prerelease=false
 
           for chart in valkey valkey-operator valkey-resources; do
             CURRENT_VERSION=$(grep '^version:' ${chart}/Chart.yaml | awk '{print $2}')
@@ -35,10 +37,15 @@ jobs:
             if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
               echo "Version changed for ${chart}: ${PREVIOUS_VERSION} -> ${CURRENT_VERSION}"
               version_changed=true
+              # A SemVer prerelease such as 1.0.0-rc.1
+              case "$CURRENT_VERSION" in
+                *-*) prerelease=true ;;
+              esac
             fi
           done
 
           echo "version_changed=${version_changed}" >> $GITHUB_OUTPUT
+          echo "prerelease=${prerelease}" >> $GITHUB_OUTPUT
 
   release:
     needs: check-version-change
@@ -66,27 +73,35 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Run chart-releaser
+        id: chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
         with:
           charts_dir: .
           skip_existing: true
+          # A prerelease must not replace the stable release as 'latest'
+          mark_as_latest: ${{ needs.check-version-change.outputs.prerelease != 'true' }}
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           CR_GENERATE_RELEASE_NOTES: true
 
       - name: Push charts to GHCR
         run: |
-          shopt -s nullglob
           repo=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          echo "${GITHUB_TOKEN}" | helm registry login ghcr.io/${repo} --username ${GITHUB_ACTOR} --password-stdin
-          for pkg in .cr-release-packages/*; do
-            if [ -z "${pkg:-}" ]; then
-              break
-            fi
-            chart_name=$(helm show chart "${pkg}" | grep '^name:' | awk '{print $2}')
-            chart_version=$(helm show chart "${pkg}" | grep '^version:' | awk '{print $2}')
+          # Helm 4 only accepts a registry hostname here, not a repository path
+          echo "${GITHUB_TOKEN}" | helm registry login ghcr.io --username ${GITHUB_ACTOR} --password-stdin
+          mkdir -p .cr-release-packages
+          for chart_name in valkey valkey-operator valkey-resources; do
+            chart_version=$(grep '^version:' ${chart_name}/Chart.yaml | awk '{print $2}')
             if helm show chart "oci://ghcr.io/${repo}/${chart_name}" --version "${chart_version}" &>/dev/null; then
               echo "Skipping ${chart_name}:${chart_version} — already exists in GHCR"
+              continue
+            fi
+            pkg=".cr-release-packages/${chart_name}-${chart_version}.tgz"
+            # chart-releaser only packages charts changed in this run, so a re-run
+            # after a failed push falls back to the asset already on the release
+            if [ ! -f "${pkg}" ] && ! gh release download "${chart_name}-${chart_version}" \
+                --pattern "${chart_name}-${chart_version}.tgz" --dir .cr-release-packages; then
+              echo "Skipping ${chart_name}:${chart_version} — no package or release to push"
               continue
             fi
             echo "Pushing ${chart_name}:${chart_version} to ghcr.io/${repo}"
@@ -94,3 +109,34 @@ jobs:
           done
         env:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      # After the GHCR push, so that a GitHub API error here cannot keep a chart
+      # out of GHCR, but run even when that push fails: the releases exist once
+      # chart-releaser succeeds. It only edits release flags and is safe to re-run.
+      - name: Mark prerelease GitHub releases
+        if: ${{ !cancelled() && steps.chart-releaser.outcome == 'success' }}
+        run: |
+          # chart-releaser cannot flag a release as a prerelease itself
+          for chart_name in valkey valkey-operator valkey-resources; do
+            chart_version=$(grep '^version:' ${chart_name}/Chart.yaml | awk '{print $2}')
+            case "$chart_version" in
+              *-*) ;;
+              *) continue ;;
+            esac
+            tag="${chart_name}-${chart_version}"
+            # Skip only a release that does not exist; fail on any other error
+            if ! out=$(gh release view "$tag" --json tagName 2>&1); then
+              case "$out" in
+                *"release not found"*)
+                  echo "No release ${tag}, skipping"
+                  continue
+                  ;;
+              esac
+              echo "Could not look up ${tag}: ${out}" >&2
+              exit 1
+            fi
+            echo "Marking ${tag} as a prerelease"
+            gh release edit "$tag" --prerelease --latest=false
+          done
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
