@@ -705,6 +705,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | sentinel.quorum | int | `2` |  |
 | sentinel.replicas | int | `3` |  |
 | sentinel.resources | object | `{}` |  |
+| sentinel.restartFailoverWaitSeconds | int | `120` |  |
 | sentinel.securityContext | object | `{}` |  |
 | sentinel.service.annotations | object | `{}` |  |
 | sentinel.service.appProtocol | string | `""` |  |
