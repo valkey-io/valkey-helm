@@ -19,6 +19,8 @@ Kubernetes does not allow changing `volumeClaimTemplates`, so `persistence.label
 
 Persistence is mandatory with replication: without it, the primary might come up with an empty dataset after a restart, and all replicas synchronize with the empty primary and lose their data.
 See [Valkey Replication Safety](https://valkey.io/topics/replication/#safety-of-replication-when-primary-has-persistence-turned-off).
+Persistence narrows this but does not close it: a primary that crashes comes back with its last save, and the replicas drop every write made since then when they resynchronize from it.
+Without Sentinel, enable AOF in `extraConfig` (`appendonly yes`) to keep that window to about a second; with Sentinel, the chart prevents it, see [Failover](#failover).
 
 ## Authentication
 
@@ -71,6 +73,12 @@ Sentinel still marks a restarted pod as down for several seconds after it is rea
 
 A failover that is not planned, a crashed pod or a lost node, is not coordinated: Valkey replicates asynchronously, so the writes the master acknowledged last before it went away can be lost.
 The Sentinel documentation covers this under [consistency under partitions](https://valkey.io/topics/sentinel/).
+
+A master pod that crashes or is deleted forcibly is usually back before `sentinel.downAfterMilliseconds`, so Sentinel never fails over.
+It would come back with its last save only, and its replicas would resynchronize from it and drop every write since.
+So a pod that starts with no `replicaof` in its configuration, while Sentinel still names it the master and holds healthy replicas, waits instead of starting: Sentinel then sees the master down, promotes a replica, and the pod starts as a replica of it.
+Writes are unavailable until the promotion, a few seconds after `sentinel.downAfterMilliseconds`, and reads keep working on the replicas.
+If no replica is promoted within `sentinel.restartFailoverWaitSeconds`, e.g. without a Sentinel quorum, the pod starts as the master with the dataset on disk; keep the value well above `sentinel.downAfterMilliseconds`.
 
 ### Cold start and the master record
 
