@@ -465,10 +465,13 @@ data:
     # Ask the Sentinels that are already running which node is the master.
     # Without this, a pod that lost its volume would fall back to the pod index
     # and pod-0 would come back as a second writable master after a failover.
+    # Every valkey-cli call here runs under timeout: -t bounds only the
+    # connect, and a peer that accepts and never answers would otherwise hold
+    # this init container, which no probe restarts, forever.
     master_from_sentinels() {
       sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
       peer="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-      addr=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+      addr=$(REDISCLI_AUTH="$sentinel_password" timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
         -t 2 -h "$peer" -p {{ .Values.sentinel.port }} \
         sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }} 2>/dev/null || true)
       host=$(echo "$addr" | sed -n 1p)
@@ -500,7 +503,7 @@ data:
           continue
         fi
         {{- if .Values.auth.enabled }}
-        info=$(REDISCLI_AUTH="$monitor_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user "{{ $initMonitorUser }}" \
+        info=$(REDISCLI_AUTH="$monitor_password" timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user "{{ $initMonitorUser }}" \
           -t 2 -h "$node" -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true)
         case "$info" in
           # valkey-cli prints the refusal and still exits 0, so without this the
@@ -511,7 +514,7 @@ data:
             ;;
         esac
         {{- else }}
-        info=$(valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+        info=$(timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
           -t 2 -h "$node" -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true)
         {{- end }}
         if [ "$(echo "$info" | sed -n 's/^role://p')" = "master" ]; then

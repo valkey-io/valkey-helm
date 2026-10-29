@@ -76,10 +76,12 @@ data:
     {{- end }}
 
     # The password goes through REDISCLI_AUTH rather than an argument, so that
-    # it does not show up in the process list of the pod.
+    # it does not show up in the process list of the pod. timeout bounds the
+    # whole call, as -t bounds only the connect: a peer that accepts and never
+    # answers would otherwise hold the startup forever.
     sentinel_cli() {
       REDISCLI_AUTH="$SENTINEL_PASSWORD" \
-      valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+      timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
         --user sentinel \
         -t 2 -p "{{ $sentinelPort }}" "$@"
     }
@@ -88,7 +90,7 @@ data:
       {{- if .Values.auth.enabled }}
       REDISCLI_AUTH="$MONITOR_PASSWORD" \
       {{- end }}
-      valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+      timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
         {{- if .Values.auth.enabled }}
         --user "{{ $monitorUser }}" \
         {{- end }}

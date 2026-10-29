@@ -872,6 +872,40 @@ tests:
           path: data["master-restart-guard.sh"]
           pattern: 'WAITED'
 
+  # -t bounds only the connect. Init containers have no probe, so a peer that
+  # accepts and never answers would hold the pod in Init forever.
+  - it: should bound every startup query to Sentinel and the Valkey nodes
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REDISCLI_AUTH="\$sentinel_password" timeout 5 valkey-cli'
+        template: templates/init_config.yaml
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REDISCLI_AUTH="\$monitor_password" timeout 5 valkey-cli'
+        template: templates/init_config.yaml
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'timeout 5 valkey-cli\s+\\\n\s+--user "default" \\\n\s+-t 2 -p "6379"'
+        template: templates/sentinel-configmap.yaml
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'REDISCLI_AUTH="\$SENTINEL_PASSWORD" \\\n\s+timeout 5 valkey-cli'
+        template: templates/sentinel-configmap.yaml
+
+  - it: should bound the startup query to Valkey nodes without auth
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'info=\$\(timeout 5 valkey-cli'
+
   - it: should not render the restart guard without Sentinel
     set:
       sentinel.enabled: false
@@ -1085,7 +1119,7 @@ tests:
       # The credential goes through the environment, never the process list.
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'REDISCLI_AUTH="\$monitor_password" valkey-cli'
+          pattern: 'REDISCLI_AUTH="\$monitor_password" timeout 5 valkey-cli'
 
   - it: should ask as the user allowed to run info
     set:
