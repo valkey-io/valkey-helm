@@ -800,7 +800,7 @@ tests:
       # demotes it.
       - matchRegex:
           path: data["master-restart-guard.sh"]
-          pattern: 'if \[ "\$1" != "\$SELF" \]; then\s+follow "\$1 \$2"'
+          pattern: 'if \[ "\$1" != "\$SELF" \]; then(\s+#[^\n]*)*\s+rm -f "\$SINCE_FILE"\s+follow "\$1 \$2"'
 
   - it: should ask every Sentinel by name rather than the headless service
     set:
@@ -831,6 +831,20 @@ tests:
       - matchRegex:
           path: data["master-restart-guard.sh"]
           pattern: '\[ -f "\$SINCE_FILE" \] && WAITING="yes"'
+
+  - it: should bound every Sentinel query and drop the wait before following
+    template: templates/init_config.yaml
+    asserts:
+      # -t bounds only the connect; a Sentinel that accepts and never answers
+      # would hold the guard forever.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'timeout 5 valkey-cli'
+      # A container stopped right after the replicaof line goes in must not
+      # leave a deadline behind for a later wait.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'rm -f "\$SINCE_FILE"\s+follow "\$1 \$2"'
 
   - it: should count the replica Sentinel is promoting as healthy
     template: templates/init_config.yaml

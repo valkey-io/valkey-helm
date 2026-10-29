@@ -154,12 +154,14 @@ data:
     SENTINELS="{{ range $i := until (int .Values.sentinel.replicas) }}{{ include "valkey.sentinel.fullname" $ }}-{{ $i }}.{{ include "valkey.sentinel.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }} {{ end }}"
 
     # Fails when the Sentinel cannot be reached. An error reply still succeeds,
-    # so callers check what came back.
+    # so callers check what came back. -t bounds only the connect, so timeout
+    # bounds the whole call: a Sentinel that accepts and never answers would
+    # otherwise hold the guard, and the pod, forever.
     sentinel_cli() {
       peer="$1"
       shift
       sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
-      out=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+      out=$(REDISCLI_AUTH="$sentinel_password" timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
         -t 2 -h "$peer" -p {{ .Values.sentinel.port }} --raw "$@" 2>/dev/null) || return 1
       printf '%s\n' "$out" | tr -d '\r'
     }
@@ -231,6 +233,9 @@ data:
         if VIEW=$(sentinel_view); then
           set -- $VIEW
           if [ "$1" != "$SELF" ]; then
+            # Drop the wait before the replicaof line goes in: a container
+            # stopped in between must not leave a deadline for a later wait.
+            rm -f "$SINCE_FILE"
             follow "$1 $2"
             break
           fi
