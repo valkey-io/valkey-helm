@@ -105,7 +105,7 @@ Use PodMonitor (not ServiceMonitor): node metrics are on pods, not a dedicated S
 
 ### Extra objects
 
-`extraObjects` renders additional Kubernetes objects with the release, for example a ConfigMap or Secret that `cluster.spec` references. It is a map so each key can be overridden or removed per environment. Each value is an object or a multi-line string, and is rendered through Helm `tpl` with the root context. Set a key to `null` to drop an entry inherited from another values file. Entries render in key order. No namespace is injected, so set `metadata.namespace` when the object must live elsewhere.
+`extraObjects` renders additional Kubernetes objects with the release, for example a ConfigMap or Secret that `cluster.spec` references. It is a map so each key can be overridden or removed per environment. Each value is an object or a multi-line string, and is rendered through Helm `tpl` with the root context. Set a key to `null` to drop an entry inherited from another values file. Entries render in key order. No namespace is injected, so set `metadata.namespace` when the object must live elsewhere. Labels and annotations are not included too, these can be templated out in your objects too.
 
 ```yaml
 extraObjects:
