@@ -27,6 +27,17 @@
         }
       }
     },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": true },
+        "labels": { "type": "object", "additionalProperties": true },
+        "automount": { "type": "boolean" }
+      }
+    },
     "cluster": {
       "type": "object",
       "required": ["spec"],

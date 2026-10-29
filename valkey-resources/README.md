@@ -127,6 +127,31 @@ Setting `usersSecret.create` back to `false` makes Helm delete the Secret on the
 
 **Release model:** one logical workload per Helm release. v0.1 only renders `ValkeyCluster`. When more kinds land, the chart will keep that model (enable the kinds you need for that one workload; multiple independent clusters remain multiple releases).
 
+### ServiceAccount
+
+Set `serviceAccount.create: true` to render a ServiceAccount (named `serviceAccount.name`, default the chart fullname) and run the Valkey pods as it. The operator reads `spec.serviceAccountName` (operator v0.8.0+) and the ServiceAccount must exist in the release namespace before the pods start. Helm installs it first.
+
+```yaml
+serviceAccount:
+  create: true
+  annotations:
+    example.com/role: reader
+```
+
+| Value | Description | Default |
+|-------|-------------|---------|
+| `serviceAccount.create` | Render the ServiceAccount | `false` |
+| `serviceAccount.name` | ServiceAccount name; may use templates | chart fullname |
+| `serviceAccount.annotations` | Annotations on the ServiceAccount | `{}` |
+| `serviceAccount.labels` | Labels on the ServiceAccount, merged over the chart labels | `{}` |
+| `serviceAccount.automount` | Mount the API token into pods. Set on the ServiceAccount the chart creates; with `create: false`, the existing ServiceAccount's own setting applies | `false` |
+
+Wiring: when `serviceAccount.create` is true or `serviceAccount.name` is set, and `cluster.spec` has no `serviceAccountName`, the chart sets `spec.serviceAccountName` to the ServiceAccount name. An explicit `cluster.spec.serviceAccountName` always wins. With `create: true` it must name the chart's ServiceAccount, otherwise the render fails, because the created ServiceAccount would go unused. Set only `serviceAccount.name` (with `create: false`) to use a ServiceAccount that already exists.
+
+Setting `serviceAccount.create` back to `false` while `serviceAccount.name` still names the chart's ServiceAccount makes Helm delete it on the next upgrade, but the ValkeyCluster keeps referencing it, so new Valkey pods fail to start. To take the ServiceAccount over, add `helm.sh/resource-policy: keep` to `serviceAccount.annotations` and upgrade once before turning `create` off. If `serviceAccount.name` was empty, set it to the ServiceAccount's name in the same change: with `create: false` and no name, the chart stops setting `spec.serviceAccountName`.
+
+Kubernetes decides whether to mount the API token when a pod is created, so a change to `serviceAccount.automount` reaches the Valkey pods only once they are recreated. The operator does not roll them for it.
+
 ### Extra objects
 
 `extraObjects` renders additional Kubernetes objects with the release, for example a ConfigMap or Secret that `cluster.spec` references. It is a map so each key can be overridden or removed per environment. Each value is an object or a multi-line string, and is rendered through Helm `tpl` with the root context. Set a key to `null` to drop an entry inherited from another values file. Entries render in key order. No namespace is injected, so set `metadata.namespace` when the object must live elsewhere. Labels and annotations are not included too, these can be templated out in your objects too.
