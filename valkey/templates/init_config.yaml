@@ -230,7 +230,11 @@ data:
             follow "$1 $2"
             break
           fi
-          if [ "$3" -eq 0 ]; then
+          # No healthy replica means nothing to wait for. Once waiting, only a
+          # promotion or the deadline ends it: a replica that drops out for a
+          # moment, or is flagged promoted mid-failover, should not start this
+          # pod with the dataset on disk.
+          if [ "$3" -eq 0 ] && [ -z "$WAITING" ]; then
             break
           fi
           if [ -z "$WAITING" ]; then

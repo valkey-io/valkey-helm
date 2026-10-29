@@ -818,6 +818,15 @@ tests:
           path: data["master-restart-guard.sh"]
           pattern: '""\|name\) ;;'
 
+  - it: should keep waiting when Sentinel briefly holds no healthy replica
+    template: templates/init_config.yaml
+    asserts:
+      # Zero healthy replicas only skips the wait; once waiting, a replica
+      # that drops out for a moment must not start the old master early.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'if \[ "\$3" -eq 0 \] && \[ -z "\$WAITING" \]; then\s+break'
+
   - it: should keep counting the wait across a container restart
     set:
       sentinel.restartFailoverWaitSeconds: 30

@@ -220,9 +220,10 @@ tests:
       - matchRegex:
           path: spec.containers[0].command[2]
           pattern: 'SENTINEL get-master-addr-by-name mymaster'
+      # The client service routes only to ready Sentinels.
       - matchRegex:
           path: spec.containers[0].command[2]
-          pattern: '-h RELEASE-NAME-valkey-sentinel-hl -p 26379'
+          pattern: '-h RELEASE-NAME-valkey-sentinel -p 26379'
       - exists:
           path: spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
       - contains:
