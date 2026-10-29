@@ -144,9 +144,11 @@ serviceAccount:
 | `serviceAccount.name` | ServiceAccount name; may use templates | chart fullname |
 | `serviceAccount.annotations` | Annotations on the ServiceAccount | `{}` |
 | `serviceAccount.labels` | Labels on the ServiceAccount, merged over the chart labels | `{}` |
-| `serviceAccount.automount` | Mount the API token into pods | `false` |
+| `serviceAccount.automount` | Mount the API token into pods. Set on the ServiceAccount the chart creates; with `create: false`, the existing ServiceAccount's own setting applies | `false` |
 
 Wiring: when `serviceAccount.create` is true or `serviceAccount.name` is set, and `cluster.spec` has no `serviceAccountName`, the chart sets `spec.serviceAccountName` to the ServiceAccount name. An explicit `cluster.spec.serviceAccountName` always wins. With `create: true` it must name the chart's ServiceAccount, otherwise the render fails, because the created ServiceAccount would go unused. Set only `serviceAccount.name` (with `create: false`) to use a ServiceAccount that already exists.
+
+Setting `serviceAccount.create` back to `false` while `serviceAccount.name` still names the chart's ServiceAccount makes Helm delete it on the next upgrade, but the ValkeyCluster keeps referencing it, so new Valkey pods fail to start. To take the ServiceAccount over, add `helm.sh/resource-policy: keep` to `serviceAccount.annotations` and upgrade once before turning `create` off. If `serviceAccount.name` was empty, set it to the ServiceAccount's name in the same change: with `create: false` and no name, the chart stops setting `spec.serviceAccountName`.
 
 Kubernetes decides whether to mount the API token when a pod is created, so a change to `serviceAccount.automount` reaches the Valkey pods only once they are recreated. The operator does not roll them for it.
 
