@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** the ValkeyCluster and the other rendered objects are named after the release (`<release>`) instead of `<release>-valkey-resources`. `fullnameOverride` still takes precedence. Upgrading a release whose ValkeyCluster is named `<release>-valkey-resources` (or `<release>-<nameOverride>`) renames it: Helm replaces it with a new, empty cluster that does not reuse the old volumes. Releases whose name already contained the chart name kept their release name and are not affected. Aliased subchart copies keep their 0.4.x names (`<release>-<alias>`, or `<release>` when the release name contains the alias) and are not renamed. Before upgrading, set `fullnameOverride` to the current name from `kubectl get valkeycluster -n <namespace>`; see [UPGRADE.md](UPGRADE.md).
+
 ### Added
 
 - Optional `NetworkPolicy` (`networkPolicy.enabled`). It admits only what the cluster needs (its own pods and the operator) on the operator's named ports `client` and `cluster-bus`; everything else goes in `extraIngress` and `extraEgress`, templated with `tpl`. `allowExternal: true` admits clients from any source, and `allowExternalEgress: false` limits egress to the cluster's own pods and DNS. `allowExternal`, `allowExternalEgress`, `extraIngress`, `extraEgress`, `dnsNamespace`, `labels` and `annotations` follow the valkey and valkey-operator charts. Off by default.

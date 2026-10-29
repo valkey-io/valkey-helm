@@ -85,7 +85,16 @@ See [values.yaml](values.yaml), [CHANGELOG.md](CHANGELOG.md), and the [ValkeyClu
 | `extraValues` | Free-form map for use inside `tpl` strings | `{}` |
 | `metrics.podMonitor.enabled` | Create a PodMonitor for ValkeyNode exporter sidecars (Prometheus Operator CRDs) | `false` |
 | `metrics.podMonitor.port` | Scrape port name on the exporter container | `metrics` |
-| `fullnameOverride` | ValkeyCluster name | chart fullname |
+| `fullnameOverride` | ValkeyCluster name | release name |
+| `nameOverride` | `app.kubernetes.io/name` label | chart name |
+
+### Naming
+
+The ValkeyCluster is named after the release, or `fullnameOverride` when set. The operator prefixes what it creates with `valkey-`, so `helm install cache ...` gives the ValkeyCluster `cache`, the headless Service `valkey-cache` and pods `valkey-cache-<shard>-<node>-0`. The other objects this chart renders use the same name.
+
+The operator's CRD rejects names its workloads cannot carry: with StatefulSets and single-digit shard and replica indexes, 41 characters. When this chart is a subchart, the release name is the parent's. Under an alias the chart keeps the 0.4.x naming, so upgrades do not rename the cluster: `<release>-<alias>`, or just `<release>` when the release name already contains the alias. A parent can therefore depend on the chart more than once (for example as `cache` and `sessions`), as long as the release name does not contain more than one of the aliases. Without an alias, set `fullnameOverride` to keep the names apart from the parent's objects.
+
+Releases installed before this change usually have a ValkeyCluster named `<release>-valkey-resources`; check the current name with `kubectl get valkeycluster -n <namespace>` and see [UPGRADE.md](UPGRADE.md) before upgrading them.
 
 ### Metrics (PodMonitor)
 
