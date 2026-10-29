@@ -134,8 +134,133 @@ data:
       done
     }
 
+    # Before anything else, make sure a restarted master does not come back
+    # writable with an older dataset than its replicas hold.
+    SELF="$SELF" CONF="$CONF" MARKER="$MARKER" /scripts/master-restart-guard.sh ||
+      echo "$(date) ERROR: the master restart check failed, starting as configured" >&2
+
     track_master &
     exec valkey-server "$@"
+
+  master-restart-guard.sh: |-
+    #!/bin/sh
+    # Run by valkey-start.sh before the server starts, with SELF, CONF and
+    # MARKER set. Kept apart from it because it needs the Sentinel credential,
+    # which valkey-start.sh, running for the life of the pod, does without.
+    set -eu
+
+    # Every Sentinel by its own name. The headless service also lists a Sentinel
+    # that is down but not deleted, and a client only tries the first address.
+    SENTINELS="{{ range $i := until (int .Values.sentinel.replicas) }}{{ include "valkey.sentinel.fullname" $ }}-{{ $i }}.{{ include "valkey.sentinel.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }} {{ end }}"
+
+    # Fails when the Sentinel cannot be reached. An error reply still succeeds,
+    # so callers check what came back. -t bounds only the connect, so timeout
+    # bounds the whole call: a Sentinel that accepts and never answers would
+    # otherwise hold the guard, and the pod, forever.
+    sentinel_cli() {
+      peer="$1"
+      shift
+      sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
+      out=$(REDISCLI_AUTH="$sentinel_password" timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+        -t 2 -h "$peer" -p {{ .Values.sentinel.port }} --raw "$@" 2>/dev/null) || return 1
+      printf '%s\n' "$out" | tr -d '\r'
+    }
+
+    # Prints "host port healthy" from the first Sentinel that answers: the
+    # master it names, and how many replicas it holds as healthy, flagged as
+    # nothing but "slave", or "slave,promoted" for the one it is promoting
+    # right now. Fails when no Sentinel gives a complete answer.
+    sentinel_view() {
+      for peer in $SENTINELS; do
+        addr=$(sentinel_cli "$peer" sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }}) || continue
+        host=$(echo "$addr" | sed -n 1p)
+        port=$(echo "$addr" | sed -n 2p)
+        [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$" || continue
+        replicas=$(sentinel_cli "$peer" sentinel replicas {{ .Values.sentinel.masterSet }}) || continue
+        # --raw prints each replica's fields as name and value lines, starting
+        # with "name"; no replicas print nothing, and anything else is an error.
+        case "$(echo "$replicas" | sed -n 1p)" in
+          ""|name) ;;
+          *) continue ;;
+        esac
+        healthy=$(echo "$replicas" | awk 'prev == "flags" && ($0 == "slave" || $0 == "slave,promoted") { n++ } { prev = $0 } END { print n + 0 }')
+        printf '%s %s %s\n' "$host" "$port" "$healthy"
+        return 0
+      done
+      return 1
+    }
+
+    # Joins the master Sentinel names, before the server starts.
+    follow() {
+      echo "$(date) Sentinel names ${1% *} as the master, starting as its replica" >&2
+      sed -i -E '/^(replicaof|slaveof) /d' "$CONF"
+      printf 'replicaof %s %s\n' "${1% *}" "${1#* }" >> "$CONF"
+      mkdir -p /data/conf
+      printf '%s\n' "$1" > "$MARKER.tmp" && mv "$MARKER.tmp" "$MARKER"
+    }
+
+    # A server that starts as the master comes back with the dataset of its
+    # last save, and the replicas then resynchronise from it and drop every
+    # write they had since. That is what a restart of the master looks like
+    # when it is back before Sentinel's downAfterMilliseconds: Sentinel only
+    # sees a reboot and keeps it as the master. The replicas Sentinel still
+    # holds as healthy were following this server until it went down, so they
+    # are at least as recent as anything on disk here. Stay down instead, so
+    # that Sentinel promotes one of them, and come back as its replica.
+    # Init containers do not run again when only this container restarts, so
+    # the check has to be here rather than in init.sh.
+    #
+    # A container that restarts after Sentinel already promoted another node
+    # also comes back without a replicaof line, so follow whichever master
+    # Sentinel names that is not this pod. When no Sentinel answers at all,
+    # e.g. on a cold start where they restart too, start as configured.
+    #
+    # The startup probe can restart this container while it waits. The wait
+    # started is kept on the config volume, which survives that restart but
+    # not the pod, so that the fallback still comes after
+    # restartFailoverWaitSeconds instead of the wait starting over each time.
+    if ! grep -qE '^(replicaof|slaveof) ' "$CONF" || grep -qE '^(replicaof|slaveof) no one' "$CONF"; then
+      SINCE_FILE="$(dirname "$CONF")/restart-guard-since"
+      # The file goes once the guard is done, so a file left behind means the
+      # container was restarted while it waited, and the wait carries on.
+      WAITING=""
+      [ -f "$SINCE_FILE" ] && WAITING="yes"
+      if ! IFS= read -r SINCE < "$SINCE_FILE" 2>/dev/null || ! echo "$SINCE" | grep -qE '^[0-9]+$'; then
+        SINCE=$(date +%s)
+        printf '%s\n' "$SINCE" > "$SINCE_FILE"
+      fi
+      while :; do
+        if VIEW=$(sentinel_view); then
+          set -- $VIEW
+          if [ "$1" != "$SELF" ]; then
+            # Drop the wait before the replicaof line goes in: a container
+            # stopped in between must not leave a deadline for a later wait.
+            rm -f "$SINCE_FILE"
+            follow "$1 $2"
+            break
+          fi
+          # No healthy replica means nothing to wait for. Once waiting, only a
+          # promotion or the deadline ends it: a replica that drops out for a
+          # moment, or is flagged promoted mid-failover, should not start this
+          # pod with the dataset on disk.
+          if [ "$3" -eq 0 ] && [ -z "$WAITING" ]; then
+            break
+          fi
+          if [ -z "$WAITING" ]; then
+            WAITING="yes"
+            echo "$(date) Sentinel still names this pod as the master and holds healthy replicas; waiting for it to promote one of them instead of starting with the dataset on disk" >&2
+          fi
+        elif [ -z "$WAITING" ]; then
+          break
+        fi
+        if [ $(( $(date +%s) - SINCE )) -ge {{ .Values.sentinel.restartFailoverWaitSeconds }} ]; then
+          echo "$(date) WARNING: Sentinel promoted no replica within {{ .Values.sentinel.restartFailoverWaitSeconds }}s, starting as configured with the dataset on disk" >&2
+          break
+        fi
+        sleep 2
+      done
+      rm -f "$SINCE_FILE"
+    fi
 {{- end }}
 
   init.sh: |-
@@ -340,10 +465,13 @@ data:
     # Ask the Sentinels that are already running which node is the master.
     # Without this, a pod that lost its volume would fall back to the pod index
     # and pod-0 would come back as a second writable master after a failover.
+    # Every valkey-cli call here runs under timeout: -t bounds only the
+    # connect, and a peer that accepts and never answers would otherwise hold
+    # this init container, which no probe restarts, forever.
     master_from_sentinels() {
       sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
       peer="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-      addr=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+      addr=$(REDISCLI_AUTH="$sentinel_password" timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
         -t 2 -h "$peer" -p {{ .Values.sentinel.port }} \
         sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }} 2>/dev/null || true)
       host=$(echo "$addr" | sed -n 1p)
@@ -375,7 +503,7 @@ data:
           continue
         fi
         {{- if .Values.auth.enabled }}
-        info=$(REDISCLI_AUTH="$monitor_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user "{{ $initMonitorUser }}" \
+        info=$(REDISCLI_AUTH="$monitor_password" timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user "{{ $initMonitorUser }}" \
           -t 2 -h "$node" -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true)
         case "$info" in
           # valkey-cli prints the refusal and still exits 0, so without this the
@@ -386,7 +514,7 @@ data:
             ;;
         esac
         {{- else }}
-        info=$(valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+        info=$(timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
           -t 2 -h "$node" -p {{ .Values.service.port }} info replication 2>/dev/null | tr -d '\r' || true)
         {{- end }}
         if [ "$(echo "$info" | sed -n 's/^role://p')" = "master" ]; then

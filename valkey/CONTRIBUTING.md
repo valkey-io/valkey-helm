@@ -123,8 +123,11 @@ Common places you will make changes within `./valkey`:
   `# @schema` annotations in `values.yaml`, then regenerate the schema with the
   Justfile `schema` target (`just schema`, or `cd valkey && helm schema`). The
   generator is configured by `valkey/.schema.yaml`.
-- `README.md` — user-facing chart documentation. Update it when you change
-  configurable values or behavior.
+- `README.md` — user-facing chart documentation, **generated** by
+  [helm-docs](https://github.com/norwoodj/helm-docs) from `README.md.gotmpl`.
+  Edit the prose in `README.md.gotmpl`; the version badges and the values table
+  come from `Chart.yaml` and `values.yaml`. Regenerate it with the Justfile
+  `docs` target (`just docs`, or `cd valkey && helm-docs`).
 - `tests/` — `helm-unittest` test suites.
 
 ### Following repository coding and documentation conventions
@@ -136,7 +139,8 @@ Common places you will make changes within `./valkey`:
   non-breaking wherever possible.
 - Every new or changed configurable value should be reflected in `values.yaml`
   (with `# @schema` annotations for any validation constraint), regenerated into
-  `values.schema.json` via `just schema`, and documented in `README.md`.
+  `values.schema.json` via `just schema`, and documented in `README.md` via
+  `just docs`.
 - Add or update unit tests in `tests/` for any template change.
 
 ---

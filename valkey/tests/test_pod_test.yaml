@@ -181,3 +181,97 @@ tests:
       - equal:
           path: metadata.name
           value: RELEASE-NAME-valkey-test-auth-existing
+
+  # The client service is optional; the headless one always exists.
+  - it: should find the master without the Sentinel client service
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 1Gi
+      sentinel.enabled: true
+      sentinel.password: sentinel-password
+      sentinel.service.enabled: false
+      sentinel.port: 26380
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: '-h RELEASE-NAME-valkey-sentinel-hl -p 26380'
+
+  # The valkey service balances across every pod in Sentinel mode, so the
+  # test has to write to the master Sentinel names, not through the service.
+  - it: should write to the master Sentinel names in Sentinel mode
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: 1Gi
+      sentinel.enabled: true
+      sentinel.password: sentinel-password
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: 'SENTINEL get-master-addr-by-name mymaster'
+      # The client service routes only to ready Sentinels.
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: '-h RELEASE-NAME-valkey-sentinel -p 26379'
+      - exists:
+          path: spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      - contains:
+          path: spec.volumes
+          content:
+            name: sentinel-auth
+            secret:
+              secretName: RELEASE-NAME-valkey-auth
+              defaultMode: 0400
+              items:
+                - key: sentinel-password
+                  path: password
+
+  - it: should write through the valkey service without Sentinel
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: 'HOST="RELEASE-NAME-valkey"'
+      - notMatchRegex:
+          path: spec.containers[0].command[2]
+          pattern: 'sentinel'
+      - notExists:
+          path: spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
+
+  # valkey-cli exits 0 on an error reply, so a write refused with READONLY
+  # would otherwise pass for one the user lacks permission for.
+  - it: should check the SET reply rather than valkey-cli's exit status
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: 'case "\$SET_RESULT" in'
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: '\*NOPERM\*\)'
+      # The password warning goes to stderr; capturing it would turn an OK
+      # into a failure.
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: '--no-auth-warning SET test-key-generated "test-value" \|\| true\)'

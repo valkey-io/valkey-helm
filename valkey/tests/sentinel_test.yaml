@@ -773,6 +773,158 @@ tests:
           path: data["valkey-start.sh"]
           pattern: 'REDISCLI_AUTH|valkey-cli'
 
+  - it: should keep a restarted master down while Sentinel can promote a replica
+    template: templates/init_config.yaml
+    asserts:
+      # Back before downAfterMilliseconds, a master is only seen as rebooted
+      # and stays the master with the dataset of its last save, and the
+      # replicas resynchronise from it and lose every write since.
+      - matchRegex:
+          path: data["valkey-start.sh"]
+          pattern: '/scripts/master-restart-guard.sh \|\|'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'sentinel replicas mymaster'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '-ge 120 \]; then'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: "printf 'replicaof %s %s\\\\n'"
+
+  - it: should follow a master Sentinel already promoted while this container was down
+    template: templates/init_config.yaml
+    asserts:
+      # A container restarting after the failover still has no replicaof line,
+      # and would otherwise run as a second writable master until Sentinel
+      # demotes it.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'if \[ "\$1" != "\$SELF" \]; then(\s+#[^\n]*)*\s+rm -f "\$SINCE_FILE"\s+follow "\$1 \$2"'
+
+  - it: should ask every Sentinel by name rather than the headless service
+    set:
+      sentinel.replicas: 5
+    template: templates/init_config.yaml
+    asserts:
+      # The headless service lists a Sentinel that is down but not deleted,
+      # and a client only tries the first address, so a single failed query
+      # would skip the guard.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'SENTINELS="RELEASE-NAME-valkey-sentinel-0\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local .*RELEASE-NAME-valkey-sentinel-4\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local "'
+      # An error reply exits 0, so the answer itself is checked.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '""\|name\) ;;'
+
+  - it: should keep waiting when Sentinel briefly holds no healthy replica
+    template: templates/init_config.yaml
+    asserts:
+      # Zero healthy replicas only skips the wait; once waiting, a replica
+      # that drops out for a moment must not start the old master early.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'if \[ "\$3" -eq 0 \] && \[ -z "\$WAITING" \]; then\s+break'
+      # The startup probe restarts the container while it waits; the file
+      # left behind carries the waiting state over, not only the deadline.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '\[ -f "\$SINCE_FILE" \] && WAITING="yes"'
+
+  - it: should bound every Sentinel query and drop the wait before following
+    template: templates/init_config.yaml
+    asserts:
+      # -t bounds only the connect; a Sentinel that accepts and never answers
+      # would hold the guard forever.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'timeout 5 valkey-cli'
+      # A container stopped right after the replicaof line goes in must not
+      # leave a deadline behind for a later wait.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'rm -f "\$SINCE_FILE"\s+follow "\$1 \$2"'
+
+  - it: should count the replica Sentinel is promoting as healthy
+    template: templates/init_config.yaml
+    asserts:
+      # With a single replica, its flags read "slave,promoted" until the
+      # switch; counting none would start the old master mid-failover.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '\$0 == "slave" \|\| \$0 == "slave,promoted"'
+
+  - it: should keep counting the wait across a container restart
+    set:
+      sentinel.restartFailoverWaitSeconds: 30
+    template: templates/init_config.yaml
+    asserts:
+      # The startup probe restarts the container well before the default wait
+      # ends; a wait that started over would never reach the fallback.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'SINCE_FILE="\$\(dirname "\$CONF"\)/restart-guard-since"'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '\$\(\( \$\(date \+%s\) - SINCE \)\) -ge 30 \]'
+      - notMatchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'WAITED'
+
+  # -t bounds only the connect. Init containers have no probe, so a peer that
+  # accepts and never answers would hold the pod in Init forever.
+  - it: should bound every startup query to Sentinel and the Valkey nodes
+    set:
+      auth.enabled: true
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "default-password"
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REDISCLI_AUTH="\$sentinel_password" timeout 5 valkey-cli'
+        template: templates/init_config.yaml
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'REDISCLI_AUTH="\$monitor_password" timeout 5 valkey-cli'
+        template: templates/init_config.yaml
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'timeout 5 valkey-cli\s+\\\n\s+--user "default" \\\n\s+-t 2 -p "6379"'
+        template: templates/sentinel-configmap.yaml
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'REDISCLI_AUTH="\$SENTINEL_PASSWORD" \\\n\s+timeout 5 valkey-cli'
+        template: templates/sentinel-configmap.yaml
+
+  - it: should bound the startup query to Valkey nodes without auth
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'info=\$\(timeout 5 valkey-cli'
+
+  - it: should not render the restart guard without Sentinel
+    set:
+      sentinel.enabled: false
+    template: templates/init_config.yaml
+    asserts:
+      - notExists:
+          path: data["master-restart-guard.sh"]
+
+  - it: should mount the sentinel credential in the valkey container without the preStop failover
+    set:
+      sentinel.preStopFailover: false
+    template: templates/statefulset.yaml
+    asserts:
+      # master-restart-guard.sh asks Sentinel for the master on every start
+      - exists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-scripts")]
+
   - it: should check for a failover once a second by default
     template: templates/init_config.yaml
     asserts:
@@ -967,7 +1119,7 @@ tests:
       # The credential goes through the environment, never the process list.
       - matchRegex:
           path: data["init.sh"]
-          pattern: 'REDISCLI_AUTH="\$monitor_password" valkey-cli'
+          pattern: 'REDISCLI_AUTH="\$monitor_password" timeout 5 valkey-cli'
 
   - it: should ask as the user allowed to run info
     set:

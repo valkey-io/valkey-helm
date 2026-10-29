@@ -693,10 +693,12 @@ tests:
 
   - it: should label the HAProxy resources with the release's Valkey version
     template: templates/haproxy-deployment.yaml
+    chart:
+      appVersion: "9.0.0"
     asserts:
       - equal:
           path: metadata.labels["app.kubernetes.io/version"]
-          value: "9.1.2"
+          value: "9.0.0"
       - notExists:
           path: spec.selector.matchLabels["app.kubernetes.io/version"]
 

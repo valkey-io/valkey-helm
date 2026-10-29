@@ -173,13 +173,15 @@ spec:
         {{- if $sentinel }}
         - name: scripts
           mountPath: /scripts
+        # valkey-start.sh asks Sentinel for the master before a restarted
+        # master starts
+        - name: sentinel-auth
+          mountPath: /sentinel-auth
+          readOnly: true
         {{- end }}
         {{- if $preStopFailover }}
         - name: sentinel-scripts
           mountPath: /sentinel-scripts
-        - name: sentinel-auth
-          mountPath: /sentinel-auth
-          readOnly: true
         {{- end }}
         {{- if .Values.tls.enabled }}
         - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}

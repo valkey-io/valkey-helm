@@ -20,7 +20,11 @@ Upgrade with your complete, migrated values file, without `--reuse-values` or `-
 
 **Who is affected:** standalone releases (`replica.enabled: false`) that do not set `deploymentStrategy`.
 
-**How to configure:** no action needed. Without persistence, set `deploymentStrategy: RollingUpdate` to keep upgrades without downtime. If the release is applied with server-side apply (e.g. Argo CD `ServerSideApply=true`), run `kubectl patch deployment <release>-valkey -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'` before upgrading.
+**How to configure:** without persistence, set `deploymentStrategy: RollingUpdate` to keep upgrades without downtime. Note that changing from RollingUpdate to Recreate when using Helm 4, or any other server-side apply (e.g. Argo CD `ServerSideApply=true`), will lead to an `spec.strategy.rollingUpdate: Forbidden: may not be specified when strategy type is 'Recreate'` error. Run the command below before upgrading:
+
+  ```bash
+  kubectl patch deployment <release>-valkey -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+  ```
 
 ---
 
@@ -87,6 +91,8 @@ Replication, from `replica.persistence`: move the block to the top level as `per
 **Who is affected:** releases that set `metrics.service.extraLabels`, `metrics.serviceMonitor.extraLabels`, `metrics.podMonitor.extraLabels`, `metrics.prometheusRule.extraLabels` or `metrics.prometheusRule.extraAnnotations`.
 
 **How to configure:** rename `extraLabels` to `labels` and `extraAnnotations` to `annotations`.
+
+`metrics.serviceMonitor.additionalLabels` and `metrics.podMonitor.additionalLabels` are removed as well. 0.x never applied them, so labels set there, such as a Prometheus `release` selector, never reached the ServiceMonitor or PodMonitor. Move them to `labels`.
 
 ---
 

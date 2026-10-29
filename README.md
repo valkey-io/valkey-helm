@@ -4,7 +4,7 @@ Helm charts for Valkey on Kubernetes.
 
 | Chart | Description |
 |---|---|
-| [valkey](valkey/) | Standalone / replication without operator |
+| [valkey](valkey/) | Standalone, replication or Sentinel |
 | [valkey-operator](valkey-operator/) | Installs the valkey-operator |
 | [valkey-resources](valkey-resources/) | Operator managed CRs (ValkeyCluster) |
 
