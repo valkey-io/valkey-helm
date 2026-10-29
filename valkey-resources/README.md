@@ -123,13 +123,13 @@ Passwords must be strings. YAML reads unquoted values such as `0123`, `1.10`, `o
 
 To use a Secret you manage yourself, leave `usersSecret.create: false` and set `cluster.spec.users[].passwordSecret.name` (see [examples/users-acl.yaml](examples/users-acl.yaml)).
 
-Setting `usersSecret.create` back to `false` makes Helm delete the Secret on the next upgrade, and the operator then fails to reconcile users until the Secret exists again. To take the Secret over, add `helm.sh/resource-policy: keep` to `usersSecret.annotations` and upgrade once before turning `create` off. To move to a different Secret, create it and point `passwordSecret.name` at it first.
+Setting `usersSecret.create` back to `false` makes Helm delete the Secret on the next upgrade, and the operator then fails to reconcile users until the Secret exists again. To take the Secret over, add `helm.sh/resource-policy: keep` to `usersSecret.annotations` and upgrade once before turning `create` off. If `usersSecret.name` is set, also set `passwordSecret.name` to that name on each user in `cluster.spec.users` when you turn `create` off: the chart only adds it while `create` is true, and without it the operator reads `<fullname>-users`. To move to a different Secret, create it and point `passwordSecret.name` at it first.
 
 **Release model:** one logical workload per Helm release. v0.1 only renders `ValkeyCluster`. When more kinds land, the chart will keep that model (enable the kinds you need for that one workload; multiple independent clusters remain multiple releases).
 
 ### Extra objects
 
-`extraObjects` renders additional Kubernetes objects with the release, for example a ConfigMap or Secret that `cluster.spec` references. It is a map so each key can be overridden or removed per environment. Each value is an object or a multi-line string, and is rendered through Helm `tpl` with the root context. Set a key to `null` to drop an entry inherited from another values file. Entries render in key order. No namespace is injected, so set `metadata.namespace` when the object must live elsewhere.
+`extraObjects` renders additional Kubernetes objects with the release, for example a ConfigMap or Secret that `cluster.spec` references. It is a map so each key can be overridden or removed per environment. Each value is an object or a multi-line string, and is rendered through Helm `tpl` with the root context. Set a key to `null` to drop an entry inherited from another values file. Entries render in key order. No namespace is injected, so set `metadata.namespace` when the object must live elsewhere. Labels and annotations are not included too, these can be templated out in your objects too.
 
 ```yaml
 extraObjects:
