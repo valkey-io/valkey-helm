@@ -2,7 +2,7 @@
 
 ![Version: 1.0.0-rc.1](https://img.shields.io/badge/Version-1.0.0--rc.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.1.3](https://img.shields.io/badge/AppVersion-9.1.3-informational?style=flat-square)
 
-Valkey, an open source, high-performance key/value datastore
+Valkey, an open source, high-performance in-memory datastore
 
 **Homepage:** <https://valkey.io/valkey-helm/>
 

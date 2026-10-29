@@ -1,6 +1,6 @@
 apiVersion: v2
 name: valkey
-description: Valkey, an open source, high-performance key/value datastore
+description: Valkey, an open source, high-performance in-memory datastore
 type: application
 version: 1.0.0-rc.1
 appVersion: "9.1.3"
