@@ -1,8 +1,10 @@
 # valkey
 
-![Version: 0.12.0](https://img.shields.io/badge/Version-0.12.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.1.3](https://img.shields.io/badge/AppVersion-9.1.3-informational?style=flat-square)
+![Version: 1.0.0-rc.1](https://img.shields.io/badge/Version-1.0.0--rc.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.1.3](https://img.shields.io/badge/AppVersion-9.1.3-informational?style=flat-square)
 
-A Helm chart for Kubernetes
+Valkey, an open source, high-performance in-memory datastore
+
+> **1.0.0-rc.1 is a release candidate.** The current stable release is **0.12.1**, which a plain `helm install` still installs. This README describes 1.0.0-rc.1, whose values differ from 0.12.1, so the examples need `--version 1.0.0-rc.1`. To move an existing release from 0.12.1, see [UPGRADE.md](UPGRADE.md).
 
 **Homepage:** <https://valkey.io/valkey-helm/>
 
@@ -32,16 +34,22 @@ The chart is published both as a Helm repository and as an OCI artifact.
 ```bash
 helm repo add valkey https://valkey.io/valkey-helm/
 helm repo update
+# Stable release, 0.12.1
 helm install valkey valkey/valkey
+# Release candidate
+helm install valkey valkey/valkey --version 1.0.0-rc.1
 ```
 
 **OCI registry:**
 
 ```bash
-helm install valkey oci://ghcr.io/valkey-io/valkey-helm/valkey --version 0.12.0
+# Stable release
+helm install valkey oci://ghcr.io/valkey-io/valkey-helm/valkey --version 0.12.1
+# Release candidate
+helm install valkey oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0-rc.1
 ```
 
-The examples below use `valkey/valkey`; replace it with `oci://ghcr.io/valkey-io/valkey-helm/valkey --version 0.12.0` to install from the OCI registry.
+The examples below are for the release candidate and use `valkey/valkey`; add `--version 1.0.0-rc.1` to each, or replace `valkey/valkey` with `oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0-rc.1` to install from the OCI registry.
 Service names assume a release named `valkey`.
 
 These commands are the shortest way to try each mode and run without authentication.
