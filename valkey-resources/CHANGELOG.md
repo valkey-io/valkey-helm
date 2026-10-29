@@ -4,6 +4,7 @@
 
 ### Added
 
+- Optional `NetworkPolicy` (`networkPolicy.enabled`). It admits only what the cluster needs (its own pods and the operator) on the operator's named ports `client` and `cluster-bus`; everything else goes in `extraIngress` and `extraEgress`, templated with `tpl`. `allowExternal: true` admits clients from any source, and `allowExternalEgress: false` limits egress to the cluster's own pods and DNS. `allowExternal`, `allowExternalEgress`, `extraIngress`, `extraEgress`, `dnsNamespace`, `labels` and `annotations` follow the valkey and valkey-operator charts. Off by default.
 - Optional `serviceAccount` values render a ServiceAccount and set `spec.serviceAccountName` on the ValkeyCluster. An explicit `cluster.spec.serviceAccountName` wins.
 - `usersSecret` values render the Secret `<fullname>-users` that the operator reads ACL user passwords from. Off by default. The render fails when a user in `cluster.spec.users` has no password in it, and a renamed Secret (`usersSecret.name`) is set as `passwordSecret.name` on users that do not set one.
 - `extraObjects` map renders extra Kubernetes objects with the release. Each entry is an object or a multi-line string, rendered through `tpl`. Set an entry to `null` to drop it.

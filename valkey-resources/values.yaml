@@ -68,6 +68,55 @@ cluster:
     shards: 3
     replicas: 1
 
+# NetworkPolicy for the Valkey pods (selected by valkey.io/cluster=<ValkeyCluster name>).
+# Off by default. When enabled, ingress is limited to what the cluster needs to
+# run, plus extraIngress:
+#   - the cluster's own pods on the client (6379) and cluster-bus (16379) ports
+#   - the operator on the client port
+# Clients, metrics scrapers and anything else go in extraIngress, or set
+# allowExternal to admit clients from any source. Egress is open unless
+# allowExternalEgress is false.
+# More info: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+networkPolicy:
+  enabled: false
+  # Peer allowed to reach the client port for reconciliation (a NetworkPolicyPeer).
+  # Set it to null to drop the rule; {} does not, because Helm merges it into
+  # this default. To replace the peer, set the default's namespaceSelector or
+  # podSelector key to null alongside your own.
+  operator:
+    namespaceSelector: {}
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: valkey-operator
+  # With metrics.podMonitor.enabled, the exporter port is also admitted from any
+  # source so Prometheus can scrape it.
+  # Admit clients on the client port from any source. When false, only the
+  # cluster's own pods, the operator and extraIngress are admitted.
+  allowExternal: false
+  # Allow all egress. When false, egress is limited to the cluster's own pods
+  # (client, cluster-bus) and DNS in dnsNamespace, plus extraEgress.
+  allowExternalEgress: true
+  # Namespace running kube-dns / CoreDNS, used when allowExternalEgress is false.
+  # With NodeLocal DNSCache, also admit the node-local address (commonly
+  # 169.254.20.10) through extraEgress; see README.
+  dnsNamespace: kube-system
+  # Additional ingress rules appended verbatim to the policy (templated with tpl)
+  extraIngress: []
+  # Example (allow an application namespace on the client port):
+  #   extraIngress:
+  #     - from:
+  #         - namespaceSelector:
+  #             matchLabels:
+  #               kubernetes.io/metadata.name: my-app
+  #       ports:
+  #         - protocol: TCP
+  #           port: client
+  # Additional egress rules appended verbatim to the policy (templated with tpl)
+  extraEgress: []
+  # Extra labels to add to the NetworkPolicy
+  labels: {}
+  # Extra annotations to add to the NetworkPolicy
+  annotations: {}
 # ServiceAccount for the Valkey pods (operator v0.8.0+ spec.serviceAccountName).
 # When create is true or name is set, and cluster.spec has no serviceAccountName,
 # the chart sets spec.serviceAccountName. An explicit cluster.spec value always wins;

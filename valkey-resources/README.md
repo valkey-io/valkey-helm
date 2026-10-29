@@ -101,6 +101,55 @@ metrics:
 
 Use PodMonitor (not ServiceMonitor): node metrics are on pods, not a dedicated Service. Operator controller metrics stay on the `valkey-operator` chart ServiceMonitor.
 
+### NetworkPolicy
+
+Set `networkPolicy.enabled: true` to render a NetworkPolicy named after the ValkeyCluster. It selects pods with `valkey.io/cluster=<ValkeyCluster name>` and admits only what the cluster needs to run:
+
+- the cluster's own pods on the `client` (6379) and `cluster-bus` (16379) ports
+- the operator on the `client` port, so it can reconcile (`networkPolicy.operator`, default: pods labelled `app.kubernetes.io/name: valkey-operator` in any namespace)
+
+With `metrics.podMonitor.enabled: true` it also admits the exporter port (`metrics.podMonitor.port`, default `metrics`, 9121) from any source, so Prometheus can scrape, as the valkey chart does with `metrics.enabled`. To narrow that, scrape some other way and admit the scraper through `extraIngress`.
+
+`networkPolicy.allowExternal: true` also admits clients on the `client` port from any source. It defaults to `false`, unlike the valkey chart, so the policy admits nothing beyond the cluster until you add rules.
+
+Egress is open by default (`networkPolicy.allowExternalEgress: true`, as in the valkey chart). With `allowExternalEgress: false` egress is limited to the cluster's own pods on `client` and `cluster-bus` and to UDP and TCP 53 in `networkPolicy.dnsNamespace` (default `kube-system`). On clusters with NodeLocal DNSCache, pods resolve through a node-local address (commonly `169.254.20.10`) that this rule does not cover; admit it with `extraEgress`:
+
+```yaml
+networkPolicy:
+  allowExternalEgress: false
+  extraEgress:
+    - to:
+        - ipBlock:
+            cidr: 169.254.20.10/32
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+```
+
+Everything else, including your clients, goes in `extraIngress` and `extraEgress`. Both are lists of NetworkPolicy rules appended as they are and templated with `tpl`:
+
+```yaml
+networkPolicy:
+  enabled: true
+  extraIngress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "{{ .Release.Namespace }}"
+      ports:
+        - port: client
+          protocol: TCP
+  extraEgress: []
+```
+
+Rules use the operator's named container ports, `client`, `cluster-bus` and `metrics`, so they follow the pods if the port numbers change. The CNI must support named ports in NetworkPolicy (Calico and Cilium do).
+
+Set `networkPolicy.operator: null` to drop the operator rule. An empty map does not drop it: Helm merges `{}` into the default peer, which then still renders. Helm merges overrides into the default peer, so to replace it set the default's `namespaceSelector` or `podSelector` key to null alongside your own.
+
+`extraIngress` and `extraEgress` add rules on top; Kubernetes admits a connection if any rule matches, so they can only widen what the policy allows. They are lists, so a later values file replaces them whole. `networkPolicy.labels` and `networkPolicy.annotations` go on the policy object. The policy only has an effect when the CNI enforces NetworkPolicy. See [examples/network-policy.yaml](examples/network-policy.yaml).
+
 ### Users Secret
 
 The operator reads ACL user passwords from the Secret `<ValkeyCluster name>-users` unless `cluster.spec.users[].passwordSecret.name` is set. The data key defaults to the username. The chart can render that Secret:

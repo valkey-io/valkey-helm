@@ -63,6 +63,21 @@
         }
       }
     },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "operator": { "type": "object", "additionalProperties": true },
+        "allowExternal": { "type": "boolean" },
+        "allowExternalEgress": { "type": "boolean" },
+        "dnsNamespace": { "type": "string" },
+        "extraIngress": { "type": "array" },
+        "extraEgress": { "type": "array" },
+        "labels": { "type": "object", "additionalProperties": true },
+        "annotations": { "type": "object", "additionalProperties": true }
+      }
+    },
     "usersSecret": {
       "type": "object",
       "additionalProperties": true,
