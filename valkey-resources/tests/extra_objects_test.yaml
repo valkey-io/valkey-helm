@@ -1,0 +1,137 @@
+suite: extraObjects
+templates:
+  - templates/extra-objects.yaml
+release:
+  name: demo
+  namespace: ns1
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders an object entry through tpl
+    set:
+      fullnameOverride: mt
+      extraObjects:
+        cm:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: '{{ include "valkey-resources.fullname" . }}-extra'
+          data:
+            ns: '{{ .Release.Namespace }}'
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: mt-extra
+      - equal:
+          path: data.ns
+          value: ns1
+
+  - it: renders a string entry through tpl
+    set:
+      extraObjects:
+        raw: |
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: {{ .Release.Name }}-raw
+          data:
+            key: value
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: demo-raw
+
+  - it: skips null entries
+    set:
+      extraObjects:
+        keep:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: kept
+        dropped: null
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: kept
+
+  - it: drops one inherited entry and keeps its siblings
+    values:
+      - values/extra-objects-base.yaml
+      - values/extra-objects-drop-first.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: second
+
+  - it: renders entries in key order
+    set:
+      extraObjects:
+        b:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: second
+        a:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: first
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: first
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: second
+        documentIndex: 1
+
+  - it: renders a value containing a quote through the string form
+    set:
+      extraValues:
+        owner: "o'neil"
+      extraObjects:
+        owner: |
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: owner
+          data:
+            owner: {{ .Values.extraValues.owner | quote }}
+    asserts:
+      - equal:
+          path: data.owner
+          value: "o'neil"
+
+  - it: renders a value containing double quotes through the string form
+    set:
+      extraValues:
+        note: 'say "hi"'
+      extraObjects:
+        note: |
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: note
+          data:
+            note: {{ .Values.extraValues.note | quote }}
+    asserts:
+      - equal:
+          path: data.note
+          value: 'say "hi"'

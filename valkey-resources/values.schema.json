@@ -51,6 +51,10 @@
           }
         }
       }
+    },
+    "extraObjects": {
+      "type": "object",
+      "additionalProperties": { "type": ["object", "string", "null"] }
     }
   }
 }
