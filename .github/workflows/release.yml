@@ -83,24 +83,6 @@ jobs:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           CR_GENERATE_RELEASE_NOTES: true
 
-      - name: Mark prerelease GitHub releases
-        run: |
-          # chart-releaser cannot flag a release as a prerelease itself
-          for chart_name in valkey valkey-operator valkey-resources; do
-            chart_version=$(grep '^version:' ${chart_name}/Chart.yaml | awk '{print $2}')
-            case "$chart_version" in
-              *-*) ;;
-              *) continue ;;
-            esac
-            tag="${chart_name}-${chart_version}"
-            if gh release view "$tag" &>/dev/null; then
-              echo "Marking ${tag} as a prerelease"
-              gh release edit "$tag" --prerelease --latest=false
-            fi
-          done
-        env:
-          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-
       - name: Push charts to GHCR
         run: |
           repo=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
@@ -126,3 +108,32 @@ jobs:
           done
         env:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      # After the GHCR push, so that a GitHub API error here cannot keep a chart
+      # out of GHCR; the step only edits release flags and is safe to re-run.
+      - name: Mark prerelease GitHub releases
+        run: |
+          # chart-releaser cannot flag a release as a prerelease itself
+          for chart_name in valkey valkey-operator valkey-resources; do
+            chart_version=$(grep '^version:' ${chart_name}/Chart.yaml | awk '{print $2}')
+            case "$chart_version" in
+              *-*) ;;
+              *) continue ;;
+            esac
+            tag="${chart_name}-${chart_version}"
+            # Skip only a release that does not exist; fail on any other error
+            if ! out=$(gh release view "$tag" --json tagName 2>&1); then
+              case "$out" in
+                *"release not found"*)
+                  echo "No release ${tag}, skipping"
+                  continue
+                  ;;
+              esac
+              echo "Could not look up ${tag}: ${out}" >&2
+              exit 1
+            fi
+            echo "Marking ${tag} as a prerelease"
+            gh release edit "$tag" --prerelease --latest=false
+          done
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
