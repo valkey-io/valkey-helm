@@ -826,6 +826,20 @@ tests:
       - matchRegex:
           path: data["master-restart-guard.sh"]
           pattern: 'if \[ "\$3" -eq 0 \] && \[ -z "\$WAITING" \]; then\s+break'
+      # The startup probe restarts the container while it waits; the file
+      # left behind carries the waiting state over, not only the deadline.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '\[ -f "\$SINCE_FILE" \] && WAITING="yes"'
+
+  - it: should count the replica Sentinel is promoting as healthy
+    template: templates/init_config.yaml
+    asserts:
+      # With a single replica, its flags read "slave,promoted" until the
+      # switch; counting none would start the old master mid-failover.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '\$0 == "slave" \|\| \$0 == "slave,promoted"'
 
   - it: should keep counting the wait across a container restart
     set:

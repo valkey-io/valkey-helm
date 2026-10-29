@@ -166,7 +166,8 @@ data:
 
     # Prints "host port healthy" from the first Sentinel that answers: the
     # master it names, and how many replicas it holds as healthy, flagged as
-    # nothing but "slave". Fails when no Sentinel gives a complete answer.
+    # nothing but "slave", or "slave,promoted" for the one it is promoting
+    # right now. Fails when no Sentinel gives a complete answer.
     sentinel_view() {
       for peer in $SENTINELS; do
         addr=$(sentinel_cli "$peer" sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }}) || continue
@@ -180,7 +181,7 @@ data:
           ""|name) ;;
           *) continue ;;
         esac
-        healthy=$(echo "$replicas" | awk 'prev == "flags" && $0 == "slave" { n++ } { prev = $0 } END { print n + 0 }')
+        healthy=$(echo "$replicas" | awk 'prev == "flags" && ($0 == "slave" || $0 == "slave,promoted") { n++ } { prev = $0 } END { print n + 0 }')
         printf '%s %s %s\n' "$host" "$port" "$healthy"
         return 0
       done
@@ -218,11 +219,14 @@ data:
     # restartFailoverWaitSeconds instead of the wait starting over each time.
     if ! grep -qE '^(replicaof|slaveof) ' "$CONF" || grep -qE '^(replicaof|slaveof) no one' "$CONF"; then
       SINCE_FILE="$(dirname "$CONF")/restart-guard-since"
+      # The file goes once the guard is done, so a file left behind means the
+      # container was restarted while it waited, and the wait carries on.
+      WAITING=""
+      [ -f "$SINCE_FILE" ] && WAITING="yes"
       if ! IFS= read -r SINCE < "$SINCE_FILE" 2>/dev/null || ! echo "$SINCE" | grep -qE '^[0-9]+$'; then
         SINCE=$(date +%s)
         printf '%s\n' "$SINCE" > "$SINCE_FILE"
       fi
-      WAITING=""
       while :; do
         if VIEW=$(sentinel_view); then
           set -- $VIEW
