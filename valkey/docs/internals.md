@@ -55,8 +55,9 @@ A starting pod asks the other nodes which of them is the primary as the same use
 
 Valkey needs the replication password in plain text in its configuration, and `CONFIG REWRITE` writes it back on every failover even if the chart does not.
 The configuration therefore lives on a memory backed `emptyDir` rather than on the data volume, so no credential is written to persistent storage.
-The ACL file holds only password hashes and sits next to it on the same volume, and the Sentinel state is memory backed for the same reason, since Sentinel rewrites `auth-pass` and `sentinel-pass` into `sentinel.conf`.
-Only the RDB or AOF and the init log stay on the data volume.
+The ACL file sits next to it on the same volume: it holds password hashes for `auth.aclUsers`, but `auth.aclConfig` is copied in as written, plain text passwords included.
+The Sentinel state is memory backed for the same reason, since Sentinel rewrites `auth-pass` and `sentinel-pass` into `sentinel.conf`.
+Only the RDB or AOF, the init log and, with Sentinel, the record of the last master (a host and port, no credential) stay on the data volume.
 
 Enabling `sentinel.persistence` opts out of this and puts `sentinel.conf`, credentials included, on a PersistentVolume.
 It is off by default and not needed, because each Sentinel rediscovers the current master on startup.
@@ -79,6 +80,8 @@ It would come back with its last save only, and its replicas would resynchronize
 So a pod that starts with no `replicaof` in its configuration, while Sentinel still names it the master and holds healthy replicas, waits instead of starting: Sentinel then sees the master down, promotes a replica, and the pod starts as a replica of it.
 Writes are unavailable until the promotion, a few seconds after `sentinel.downAfterMilliseconds`, and reads keep working on the replicas.
 If no replica is promoted within `sentinel.restartFailoverWaitSeconds`, e.g. without a Sentinel quorum, the pod starts as the master with the dataset on disk; keep the value well above `sentinel.downAfterMilliseconds`.
+The wait carries over when the startup probe restarts the container, so that fallback comes on time.
+A master container that comes back after Sentinel already promoted another node starts as that node's replica, and when no Sentinel answers at all, as on a cold start, the pod starts as configured.
 
 ### Cold start and the master record
 

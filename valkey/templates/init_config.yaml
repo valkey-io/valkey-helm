@@ -149,28 +149,51 @@ data:
     # which valkey-start.sh, running for the life of the pod, does without.
     set -eu
 
-    SENTINEL_PEER="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+    # Every Sentinel by its own name. The headless service also lists a Sentinel
+    # that is down but not deleted, and a client only tries the first address.
+    SENTINELS="{{ range $i := until (int .Values.sentinel.replicas) }}{{ include "valkey.sentinel.fullname" $ }}-{{ $i }}.{{ include "valkey.sentinel.headlessServiceName" $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }} {{ end }}"
 
+    # Fails when the Sentinel cannot be reached. An error reply still succeeds,
+    # so callers check what came back.
     sentinel_cli() {
+      peer="$1"
+      shift
       sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
-      REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
-        -t 2 -h "$SENTINEL_PEER" -p {{ .Values.sentinel.port }} --raw "$@" 2>/dev/null | tr -d '\r'
+      out=$(REDISCLI_AUTH="$sentinel_password" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+        -t 2 -h "$peer" -p {{ .Values.sentinel.port }} --raw "$@" 2>/dev/null) || return 1
+      printf '%s\n' "$out" | tr -d '\r'
     }
 
-    # Prints the master Sentinel names, as "host port".
-    sentinel_master() {
-      addr=$(sentinel_cli sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }}) || return 1
-      host=$(echo "$addr" | sed -n 1p)
-      port=$(echo "$addr" | sed -n 2p)
-      [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$" || return 1
-      printf '%s %s\n' "$host" "$port"
+    # Prints "host port healthy" from the first Sentinel that answers: the
+    # master it names, and how many replicas it holds as healthy, flagged as
+    # nothing but "slave". Fails when no Sentinel gives a complete answer.
+    sentinel_view() {
+      for peer in $SENTINELS; do
+        addr=$(sentinel_cli "$peer" sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }}) || continue
+        host=$(echo "$addr" | sed -n 1p)
+        port=$(echo "$addr" | sed -n 2p)
+        [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$" || continue
+        replicas=$(sentinel_cli "$peer" sentinel replicas {{ .Values.sentinel.masterSet }}) || continue
+        # --raw prints each replica's fields as name and value lines, starting
+        # with "name"; no replicas print nothing, and anything else is an error.
+        case "$(echo "$replicas" | sed -n 1p)" in
+          ""|name) ;;
+          *) continue ;;
+        esac
+        healthy=$(echo "$replicas" | awk 'prev == "flags" && $0 == "slave" { n++ } { prev = $0 } END { print n + 0 }')
+        printf '%s %s %s\n' "$host" "$port" "$healthy"
+        return 0
+      done
+      return 1
     }
 
-    # The number of replicas Sentinel holds as healthy, flagged as nothing but
-    # "slave". --raw prints each replica's fields as name and value lines.
-    sentinel_healthy_replicas() {
-      sentinel_cli sentinel replicas {{ .Values.sentinel.masterSet }} |
-        awk 'prev == "flags" && $0 == "slave" { n++ } { prev = $0 } END { print n + 0 }'
+    # Joins the master Sentinel names, before the server starts.
+    follow() {
+      echo "$(date) Sentinel names ${1% *} as the master, starting as its replica" >&2
+      sed -i -E '/^(replicaof|slaveof) /d' "$CONF"
+      printf 'replicaof %s %s\n' "${1% *}" "${1#* }" >> "$CONF"
+      mkdir -p /data/conf
+      printf '%s\n' "$1" > "$MARKER.tmp" && mv "$MARKER.tmp" "$MARKER"
     }
 
     # A server that starts as the master comes back with the dataset of its
@@ -183,29 +206,47 @@ data:
     # that Sentinel promotes one of them, and come back as its replica.
     # Init containers do not run again when only this container restarts, so
     # the check has to be here rather than in init.sh.
+    #
+    # A container that restarts after Sentinel already promoted another node
+    # also comes back without a replicaof line, so follow whichever master
+    # Sentinel names that is not this pod. When no Sentinel answers at all,
+    # e.g. on a cold start where they restart too, start as configured.
+    #
+    # The startup probe can restart this container while it waits. The wait
+    # started is kept on the config volume, which survives that restart but
+    # not the pod, so that the fallback still comes after
+    # restartFailoverWaitSeconds instead of the wait starting over each time.
     if ! grep -qE '^(replicaof|slaveof) ' "$CONF" || grep -qE '^(replicaof|slaveof) no one' "$CONF"; then
-      MASTER=$(sentinel_master || true)
-      if [ "${MASTER% *}" = "$SELF" ] && [ "$(sentinel_healthy_replicas || echo 0)" -gt 0 ]; then
-        echo "$(date) Sentinel still names this pod as the master and holds healthy replicas; waiting for it to promote one of them instead of starting with the dataset on disk" >&2
-        WAITED=0
-        while [ "$WAITED" -lt "{{ .Values.sentinel.restartFailoverWaitSeconds }}" ]; do
-          sleep 2
-          WAITED=$((WAITED + 2))
-          MASTER=$(sentinel_master || true)
-          if [ -n "$MASTER" ] && [ "${MASTER% *}" != "$SELF" ]; then
+      SINCE_FILE="$(dirname "$CONF")/restart-guard-since"
+      if ! IFS= read -r SINCE < "$SINCE_FILE" 2>/dev/null || ! echo "$SINCE" | grep -qE '^[0-9]+$'; then
+        SINCE=$(date +%s)
+        printf '%s\n' "$SINCE" > "$SINCE_FILE"
+      fi
+      WAITING=""
+      while :; do
+        if VIEW=$(sentinel_view); then
+          set -- $VIEW
+          if [ "$1" != "$SELF" ]; then
+            follow "$1 $2"
             break
           fi
-        done
-        if [ -n "$MASTER" ] && [ "${MASTER% *}" != "$SELF" ]; then
-          echo "$(date) Sentinel promoted ${MASTER% *}, starting as its replica" >&2
-          sed -i -E '/^(replicaof|slaveof) /d' "$CONF"
-          printf 'replicaof %s %s\n' "${MASTER% *}" "${MASTER#* }" >> "$CONF"
-          mkdir -p /data/conf
-          printf '%s\n' "$MASTER" > "$MARKER.tmp" && mv "$MARKER.tmp" "$MARKER"
-        else
-          echo "$(date) WARNING: Sentinel promoted no replica within {{ .Values.sentinel.restartFailoverWaitSeconds }}s, starting as the master with the dataset on disk" >&2
+          if [ "$3" -eq 0 ]; then
+            break
+          fi
+          if [ -z "$WAITING" ]; then
+            WAITING="yes"
+            echo "$(date) Sentinel still names this pod as the master and holds healthy replicas; waiting for it to promote one of them instead of starting with the dataset on disk" >&2
+          fi
+        elif [ -z "$WAITING" ]; then
+          break
         fi
-      fi
+        if [ $(( $(date +%s) - SINCE )) -ge {{ .Values.sentinel.restartFailoverWaitSeconds }} ]; then
+          echo "$(date) WARNING: Sentinel promoted no replica within {{ .Values.sentinel.restartFailoverWaitSeconds }}s, starting as configured with the dataset on disk" >&2
+          break
+        fi
+        sleep 2
+      done
+      rm -f "$SINCE_FILE"
     fi
 {{- end }}
 

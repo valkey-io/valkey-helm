@@ -787,22 +787,53 @@ tests:
           pattern: 'sentinel replicas mymaster'
       - matchRegex:
           path: data["master-restart-guard.sh"]
-          pattern: 'while \[ "\$WAITED" -lt "120" \]; do'
+          pattern: '-ge 120 \]; then'
       - matchRegex:
           path: data["master-restart-guard.sh"]
           pattern: "printf 'replicaof %s %s\\\\n'"
+
+  - it: should follow a master Sentinel already promoted while this container was down
+    template: templates/init_config.yaml
+    asserts:
+      # A container restarting after the failover still has no replicaof line,
+      # and would otherwise run as a second writable master until Sentinel
+      # demotes it.
       - matchRegex:
           path: data["master-restart-guard.sh"]
-          pattern: 'SENTINEL_PEER="RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local"'
+          pattern: 'if \[ "\$1" != "\$SELF" \]; then\s+follow "\$1 \$2"'
 
-  - it: should bound the restarted master's wait with restartFailoverWaitSeconds
+  - it: should ask every Sentinel by name rather than the headless service
+    set:
+      sentinel.replicas: 5
+    template: templates/init_config.yaml
+    asserts:
+      # The headless service lists a Sentinel that is down but not deleted,
+      # and a client only tries the first address, so a single failed query
+      # would skip the guard.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'SENTINELS="RELEASE-NAME-valkey-sentinel-0\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local .*RELEASE-NAME-valkey-sentinel-4\.RELEASE-NAME-valkey-sentinel-hl\.NAMESPACE\.svc\.cluster\.local "'
+      # An error reply exits 0, so the answer itself is checked.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '""\|name\) ;;'
+
+  - it: should keep counting the wait across a container restart
     set:
       sentinel.restartFailoverWaitSeconds: 30
     template: templates/init_config.yaml
     asserts:
+      # The startup probe restarts the container well before the default wait
+      # ends; a wait that started over would never reach the fallback.
       - matchRegex:
           path: data["master-restart-guard.sh"]
-          pattern: 'while \[ "\$WAITED" -lt "30" \]; do'
+          pattern: 'SINCE_FILE="\$\(dirname "\$CONF"\)/restart-guard-since"'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '\$\(\( \$\(date \+%s\) - SINCE \)\) -ge 30 \]'
+      - notMatchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'WAITED'
 
   - it: should not render the restart guard without Sentinel
     set:
