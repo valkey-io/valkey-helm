@@ -73,6 +73,7 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Run chart-releaser
+        id: chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
         with:
           charts_dir: .
@@ -110,8 +111,10 @@ jobs:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
       # After the GHCR push, so that a GitHub API error here cannot keep a chart
-      # out of GHCR; the step only edits release flags and is safe to re-run.
+      # out of GHCR, but run even when that push fails: the releases exist once
+      # chart-releaser succeeds. It only edits release flags and is safe to re-run.
       - name: Mark prerelease GitHub releases
+        if: ${{ !cancelled() && steps.chart-releaser.outcome == 'success' }}
         run: |
           # chart-releaser cannot flag a release as a prerelease itself
           for chart_name in valkey valkey-operator valkey-resources; do
