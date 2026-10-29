@@ -4,6 +4,8 @@
 
 Valkey, an open source, high-performance in-memory datastore
 
+> **1.0.0-rc.1 is a release candidate.** The current stable release is **0.12.1**, which a plain `helm install` still installs. This README describes 1.0.0-rc.1, whose values differ from 0.12.1, so the examples need `--version 1.0.0-rc.1`. To move an existing release from 0.12.1, see [UPGRADE.md](UPGRADE.md).
+
 **Homepage:** <https://valkey.io/valkey-helm/>
 
 ## Maintainers
@@ -32,16 +34,22 @@ The chart is published both as a Helm repository and as an OCI artifact.
 ```bash
 helm repo add valkey https://valkey.io/valkey-helm/
 helm repo update
+# Stable release, 0.12.1
 helm install valkey valkey/valkey
+# Release candidate
+helm install valkey valkey/valkey --version 1.0.0-rc.1
 ```
 
 **OCI registry:**
 
 ```bash
+# Stable release
+helm install valkey oci://ghcr.io/valkey-io/valkey-helm/valkey --version 0.12.1
+# Release candidate
 helm install valkey oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0-rc.1
 ```
 
-The examples below use `valkey/valkey`; replace it with `oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0-rc.1` to install from the OCI registry.
+The examples below are for the release candidate and use `valkey/valkey`; add `--version 1.0.0-rc.1` to each, or replace `valkey/valkey` with `oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0-rc.1` to install from the OCI registry.
 Service names assume a release named `valkey`.
 
 These commands are the shortest way to try each mode and run without authentication.
