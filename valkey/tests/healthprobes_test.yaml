@@ -5,14 +5,14 @@ templates:
   - templates/init_config.yaml
   - templates/secret.yaml
 tests:
-  - it: renders default startup and liveness probes on the Deployment valkey container
+  - it: renders default startup, liveness and readiness probes on the Deployment valkey container
     template: templates/deploy_valkey.yaml
     asserts:
       - exists:
           path: spec.template.spec.containers[0].startupProbe
       - exists:
           path: spec.template.spec.containers[0].livenessProbe
-      - notExists:
+      - exists:
           path: spec.template.spec.containers[0].readinessProbe
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command
@@ -26,6 +26,15 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.failureThreshold
           value: 3
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command
+          value:
+            - sh
+            - -c
+            - r=$('valkey-cli' '-p' '6379' 'ping' 2>&1); case "$r" in PONG) exit 0;; esac; echo "$r"; exit 1
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.successThreshold
+          value: 1
 
   - it: renders default probes on the StatefulSet valkey container
     template: templates/statefulset.yaml
@@ -38,25 +47,18 @@ tests:
           path: spec.template.spec.containers[0].startupProbe
       - exists:
           path: spec.template.spec.containers[0].livenessProbe
-      - notExists:
-          path: spec.template.spec.containers[0].readinessProbe
-
-  - it: enables the readiness probe with its success threshold when requested
-    template: templates/deploy_valkey.yaml
-    set:
-      readinessProbe.enabled: true
-    asserts:
       - exists:
           path: spec.template.spec.containers[0].readinessProbe
-      - equal:
-          path: spec.template.spec.containers[0].readinessProbe.successThreshold
-          value: 1
-      - equal:
-          path: spec.template.spec.containers[0].readinessProbe.exec.command
-          value:
-            - sh
-            - -c
-            - r=$('valkey-cli' '-p' '6379' 'ping' 2>&1); case "$r" in PONG) exit 0;; esac; echo "$r"; exit 1
+
+  - it: omits the readiness probe when it is disabled
+    template: templates/deploy_valkey.yaml
+    set:
+      readinessProbe.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
+      - exists:
+          path: spec.template.spec.containers[0].livenessProbe
 
   - it: omits a probe when it is disabled
     template: templates/deploy_valkey.yaml
@@ -230,6 +232,9 @@ tests:
         tcpSocket:
           port: 6379
       livenessProbe.customProbe:
+        tcpSocket:
+          port: 6379
+      readinessProbe.customProbe:
         tcpSocket:
           port: 6379
     asserts:

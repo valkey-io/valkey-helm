@@ -262,8 +262,9 @@ replica:
   minReplicasMaxLag: 10  # With at most 10 seconds of lag
 ```
 
-`valkey-read` drops a pod only when its probes fail.
-Enable `readinessProbe` to take an unresponsive or still-loading replica out of `valkey-read` faster.
+`valkey-read` drops a pod once its readiness probe fails, so new connections no longer go to a replica that is still loading its dataset or has stopped answering.
+Connections already open to it stay there until the client reconnects.
+Lower `readinessProbe.periodSeconds` or `readinessProbe.failureThreshold` to take it out faster.
 
 ### Sentinel
 
@@ -651,7 +652,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
 | priorityClassName | string | `""` |  |
 | readinessProbe.customProbe | object | `{}` |  |
-| readinessProbe.enabled | bool | `false` |  |
+| readinessProbe.enabled | bool | `true` |  |
 | readinessProbe.failureThreshold | int | `3` |  |
 | readinessProbe.initialDelaySeconds | int | `0` |  |
 | readinessProbe.periodSeconds | int | `10` |  |
