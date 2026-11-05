@@ -130,8 +130,9 @@ When the old master goes away on its own `preStop` hook, it steps down before th
 After an unplanned failover, they stay on the old master until Sentinel demotes it if it comes back.
 
 There is no separate HAProxy read endpoint because `valkey-read` already load balances across every pod.
-It only drops a pod based on the pod's own probes, and the readiness probe is off by default, so a pod that stops answering keeps receiving reads until the liveness probe restarts it (`livenessProbe.periodSeconds` times `livenessProbe.failureThreshold`, 30 seconds by default).
-The readiness probe passes only on `PONG`, so with it enabled a replica that is still loading its dataset stays out of `valkey-read` until it can answer.
+It drops a pod once the pod's readiness probe fails: the probe notices a pod that stopped answering after about `readinessProbe.periodSeconds` times `readinessProbe.failureThreshold`, 30 seconds by default, and the Service stops routing new connections to it once its endpoints are updated; connections already open stay with the pod until the client closes them.
+The readiness probe passes only on `PONG`, so a replica that is still loading its dataset stays out of `valkey-read` until it can answer.
+The exception is auth with the default user defined only in `auth.aclConfig`: the chart cannot know its password, so the probe runs unauthenticated and also accepts `NOAUTH`, which Valkey answers before it checks whether it is loading. Such a replica counts as ready while it loads; set `readinessProbe.customProbe` to an authenticated probe if loading replicas must stay out of `valkey-read`.
 
 ### Labels
 
