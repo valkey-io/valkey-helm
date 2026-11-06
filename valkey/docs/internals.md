@@ -96,11 +96,10 @@ A pod with neither a Sentinel, nor a running node, nor a record waits up to `sen
 That wait is what a first install spends: the Sentinels bootstrap a master once their own `sentinel.startupTimeoutSeconds` expires, and the pod is simply there to be told, so the chart refuses to render unless the wait is at least 30 seconds above it.
 
 The record is read from the config file Valkey rewrites when Sentinel changes a pod's role, so it needs no credentials.
-A rewrite empties that file before filling it again, and a check landing in between sees no `replicaof` line, which is indistinguishable from a promotion.
-A pod naming itself as the master therefore has to see that on two consecutive checks, while a pod that finds a master to follow records it on the first, since a partial read can drop a `replicaof` line but cannot invent one.
-The record is one interval behind a demotion and two behind a promotion, one second each by default.
+Valkey rewrites that file by writing a temporary file and renaming it over the old one (`rewriteConfigOverwriteFile` in `src/config.c`), so a check always sees a complete config, either the old or the new one, and never a partial file.
+A check therefore records a role change as soon as it sees it, and the record is at most one interval behind, one second by default.
 
-A promotion followed inside that window by the loss of every pod at once no longer hands writes back to the demoted node, because that node recorded its demotion on the first check.
+A promotion followed inside that window by the loss of every pod at once no longer hands writes back to the demoted node, because that node recorded its demotion within one interval.
 What can still happen is that a pod which was down during a failover comes back following a node that has since been demoted, so it replicates through that node rather than from the primary.
 Agreeing on a primary when no node can be reached is a consensus problem rather than a record keeping one, and this chart does not solve it.
 

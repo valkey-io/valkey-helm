@@ -426,11 +426,9 @@ sentinel:
   # How often each Valkey pod mirrors the current master onto its data volume.
   # That record is what a cold start falls back on when no Sentinel answers,
   # so it bounds how stale the topology can be after an abrupt restart.
-  # A pod that finds itself named as the master has to see that twice before
-  # it is written, because a check landing inside a config rewrite sees the
-  # same thing; a pod that finds a master to follow records it at once. The
-  # check only reads a file that Valkey keeps up to date, and writes nothing
-  # when the topology has not moved.
+  # Each check reads the config file that Valkey keeps up to date, and records
+  # a change on the check that sees it. It writes nothing when the topology
+  # has not moved.
   masterRecordRefreshSeconds: 1
 
   # How often each Sentinel looks for a Valkey node that is replicating from

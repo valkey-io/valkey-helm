@@ -22,11 +22,12 @@ data:
     # failover that happened after this pod started. An abrupt restart would
     # then come back with the pre-failover topology and could hand writes to a
     # node that had already been demoted. Mirroring the replicaof line onto the
-    # data volume keeps the record one interval behind a demotion, and two
-    # behind a promotion, for the reason given at the check below.
+    # data volume keeps the record at most one interval behind a role change.
     #
     # It reads the config Valkey maintains rather than asking the server, so it
-    # needs no credentials and no TLS material.
+    # needs no credentials and no TLS material. Valkey rewrites that file by
+    # writing a temporary file and renaming it over the old one, so a read
+    # always sees a complete config, either the old or the new.
     #
     # Valkey rewrites the config at the moment Sentinel changes this pod's role,
     # so the loop below runs once a second by default to keep the record close
@@ -65,7 +66,6 @@ data:
       # Word splitting is what parses each config line, so keep globbing off:
       # an unrelated directive holding a * must not expand against the cwd.
       set -f
-      pending=""
       cfg_line=""
       write_failed=""
       while :; do
@@ -74,11 +74,8 @@ data:
         # No replicaof line means this pod is the master.
         host="$SELF"
         port="{{ .Values.service.port }}"
-        # A line without a closing newline is the tail of a file still being
-        # rewritten, and a truncated "replicaof host po" would record a port
-        # that was never configured, so unterminated input is left for the next
-        # tick. Valkey always ends the rewritten config with a newline, so this
-        # only ever discards a partial read.
+        # Valkey ends every line of the config it writes with a newline, so
+        # read, which skips a final line that lacks one, sees all of them.
         while IFS= read -r cfg_line; do
           # The trailing "" keeps $1 defined for blank and whitespace only lines.
           set -- $cfg_line ""
@@ -99,19 +96,6 @@ data:
           ""|*[!0-9]*) continue ;;
         esac
         [ -n "$host" ] || continue
-        # A rewrite truncates the file before filling it again, so a tick can
-        # read a prefix of it and find no replicaof line, which is exactly what
-        # a promotion looks like. Recording that wrongly is the direction that
-        # loses data, because the pod would come back writable, so this pod
-        # naming itself has to hold for two ticks. A replicaof line is recorded
-        # at once: a torn read can drop it but cannot invent one, and coming
-        # back as a replica of a node that is not the master costs a resync,
-        # not the writes.
-        if [ "$host" = "$SELF" ] && [ "$pending" != "$host $port" ]; then
-          pending="$host $port"
-          continue
-        fi
-        pending="$host $port"
         current=""
         if [ -f "$MARKER" ]; then
           IFS= read -r current < "$MARKER" || current=""
