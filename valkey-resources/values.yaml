@@ -495,6 +495,12 @@ usersSecret:
   # cluster.spec.users without passwordSecret.name are pointed at this Secret.
   name: ""
   annotations: {}
+  # If generate is enabled and the password value is empty Helm will
+  # automatically generate a password for you. To make sure that the password
+  # doesn't change too often by automated CD tools it checks if one was generated
+  # previously via Helm's lookup function and reuses it.
+  # This may not be supported by your CD tool.
+  generate: false
   # username -> password. Each key becomes a Secret data key. Values must be
   # strings: quote anything YAML would read as a number or boolean. Every user
   # in cluster.spec.users that reads this Secret must have an entry (or one per
