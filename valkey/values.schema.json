@@ -280,6 +280,9 @@
                         }
                     }
                 },
+                "strategy": {
+                    "type": "object"
+                },
                 "tls": {
                     "type": "object",
                     "properties": {

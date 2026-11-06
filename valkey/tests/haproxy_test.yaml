@@ -239,6 +239,29 @@ tests:
           path: spec.ports
           count: 1
 
+  - it: should not render a strategy by default
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.strategy
+
+  - it: should render the configured strategy
+    set:
+      haproxy.strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: 0
+          maxUnavailable: 1
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.strategy
+          value:
+            type: RollingUpdate
+            rollingUpdate:
+              maxSurge: 0
+              maxUnavailable: 1
+
 
   # role:master alone also matches an old master that Sentinel has not demoted
   # yet, and the writes it takes are discarded when it resyncs.

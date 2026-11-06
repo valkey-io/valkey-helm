@@ -692,6 +692,10 @@ haproxy:
   tolerations: null # @schema type:[array, null]
   topologySpreadConstraints: []
 
+  # Deployment strategy. Set rollingUpdate.maxSurge: 0 if no node is free
+  # for an extra pod during a rollout.
+  strategy: {} # @schema type:object
+
   # Additional init containers, volumes and volume mounts. Mounts on /tls or
   # /usr/local/etc/haproxy, or below them, are refused.
   extraInitContainers: []
