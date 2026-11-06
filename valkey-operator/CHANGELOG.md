@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1
+
+### Added
+
+- Add opt-in `rbac.namespaced`. When `true`, the chart grants the manager permissions through a Role and RoleBinding in each namespace in `manager.watchNamespaces` and omits the manager ClusterRole and ClusterRoleBinding. Rendering fails if `manager.watchNamespaces` is empty. The default (`false`) keeps the cluster-wide manager RBAC.
+
 ## 0.8.0
 
 - Valkey Operator version defaults to v0.8.0. See the [v0.8.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.8.0) for the upstream changes.
