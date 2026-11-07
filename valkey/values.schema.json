@@ -355,6 +355,10 @@
                 }
             }
         },
+        "maxmemory": {
+            "type": "string",
+            "pattern": "^([0-9]+([bB]|[kKmMgG][bB]?)?)?$"
+        },
         "metrics": {
             "type": "object",
             "properties": {
