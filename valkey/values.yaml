@@ -124,25 +124,38 @@ networkPolicy:
   # Annotations added to the NetworkPolicy
   annotations: {}
 
-# Resource limits/requests for the main Valkey container
-resources: {}
-  # Example:
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+# Resource requests and limits for the main Valkey container. The requests let
+# the scheduler place the pod where it fits; the memory limit bounds it, with
+# maxmemory below it, so Valkey refuses writes before the kernel kills it. No
+# CPU limit: throttling under the CFS quota adds latency spikes. Raise the
+# memory limit and maxmemory together for a larger dataset, keeping the limit
+# a bit more than twice maxmemory (see maxmemory).
+resources: # @schema type:object; skipProperties:true
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 512Mi
 
-# Resource limits/requests for init containers
-initResources: {}
-  # Example:
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+# Valkey's maxmemory: the dataset's ceiling, at most about 45% of
+# resources.limits.memory. A background save or a replica's full sync forks
+# Valkey, and while it runs, every page written is copied, so memory can reach
+# twice the dataset; the rest is room for the process and its buffers. With
+# the default maxmemory-policy noeviction, writes past it get an OOM error
+# reply.
+# A byte count, optionally with a unit: b, k, kb, m, mb, g or gb (any case;
+# k is 1000, kb is 1024). Kubernetes units such as Mi are not valid here.
+# Empty: no maxmemory, as before 1.0.
+maxmemory: 192mb # @schema type:string; pattern:^([0-9]+([bB]|[kKmMgG][bB]?)?)?$
+
+# Resource requests and limits for the init containers, which write the
+# configuration and exit.
+initResources: # @schema type:object; skipProperties:true
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    memory: 32Mi
 
 # Health probes for the main Valkey container.
 # Each probe is gated on its own `enabled` flag and rendered by the
