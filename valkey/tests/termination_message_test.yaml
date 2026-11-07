@@ -1,0 +1,104 @@
+suite: termination message policy
+templates:
+  - templates/deploy_valkey.yaml
+  - templates/statefulset.yaml
+  - templates/sentinel-statefulset.yaml
+  - templates/haproxy-deployment.yaml
+  - templates/init_config.yaml
+  - templates/secret.yaml
+  - templates/sentinel-configmap.yaml
+  - templates/haproxy-configmap.yaml
+tests:
+  # Every container the chart runs reports why it failed: the kubelet copies
+  # the end of its log into the termination message on an error exit.
+
+  - it: should set FallbackToLogsOnError on every container of the standalone Deployment
+    set:
+      metrics.enabled: true
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "init")].terminationMessagePolicy
+          value: FallbackToLogsOnError
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "valkey")].terminationMessagePolicy
+          value: FallbackToLogsOnError
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "metrics")].terminationMessagePolicy
+          value: FallbackToLogsOnError
+
+  - it: should set FallbackToLogsOnError on every container of the replicated StatefulSet
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: "5Gi"
+      metrics.enabled: true
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "init")].terminationMessagePolicy
+          value: FallbackToLogsOnError
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "valkey")].terminationMessagePolicy
+          value: FallbackToLogsOnError
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "metrics")].terminationMessagePolicy
+          value: FallbackToLogsOnError
+
+  - it: should set FallbackToLogsOnError on the Sentinel and HAProxy containers
+    set:
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: "5Gi"
+      sentinel.enabled: true
+      sentinel.password: "sentinelpw"
+      haproxy.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "sentinel")].terminationMessagePolicy
+          value: FallbackToLogsOnError
+        template: templates/sentinel-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "haproxy")].terminationMessagePolicy
+          value: FallbackToLogsOnError
+        template: templates/haproxy-deployment.yaml
+
+  - it: should use the policy given in values on every container
+    set:
+      terminationMessagePolicy: File
+      replica.enabled: true
+      persistence.enabled: true
+      persistence.size: "5Gi"
+      metrics.enabled: true
+      sentinel.enabled: true
+      sentinel.password: "sentinelpw"
+      haproxy.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "init")].terminationMessagePolicy
+          value: File
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "valkey")].terminationMessagePolicy
+          value: File
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "metrics")].terminationMessagePolicy
+          value: File
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "sentinel")].terminationMessagePolicy
+          value: File
+        template: templates/sentinel-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "haproxy")].terminationMessagePolicy
+          value: File
+        template: templates/haproxy-deployment.yaml
+
+  - it: should reject a policy Kubernetes doesn't know
+    set:
+      terminationMessagePolicy: Always
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "terminationMessagePolicy"

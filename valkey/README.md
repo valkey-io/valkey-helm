@@ -749,6 +749,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | startupProbe.periodSeconds | int | `10` |  |
 | startupProbe.timeoutSeconds | int | `1` |  |
 | terminationGracePeriodSeconds | int | `30` |  |
+| terminationMessagePolicy | string | `"FallbackToLogsOnError"` |  |
 | tls.caPublicKey | string | `"ca.crt"` |  |
 | tls.dhParamKey | string | `""` |  |
 | tls.enabled | bool | `false` |  |
