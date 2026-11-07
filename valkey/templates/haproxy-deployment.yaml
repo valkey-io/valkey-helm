@@ -13,6 +13,10 @@ metadata:
   {{- end }}
 spec:
   replicas: {{ .Values.haproxy.replicas }}
+  {{- with .Values.haproxy.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "valkey.haproxy.selectorLabels" . | nindent 6 }}
