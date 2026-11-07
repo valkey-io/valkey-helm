@@ -145,10 +145,11 @@ usersSecret:
   name: ""
   annotations: {}
   # username -> password. Each key becomes a Secret data key. Values must be
-  # strings: quote anything YAML would read as a number or boolean. Every user
-  # in cluster.spec.users that reads this Secret must have an entry (or one per
-  # passwordSecret.keys entry); the render fails otherwise. Keep real passwords
-  # out of committed values files.
+  # strings: quote anything YAML would read as a number or boolean. You may
+  # also use templating in the password value with the `.secretName` & `.user`
+  # variables being available to you. Every user in in cluster.spec.users that
+  # reads this Secret must have an entry (or one per passwordSecret.keys entry);
+  # the render fails otherwise. Keep real passwords out of committed values files.
   passwords: {}
 
 # Extra Kubernetes objects rendered with the release (for example a ConfigMap
