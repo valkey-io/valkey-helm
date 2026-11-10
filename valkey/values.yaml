@@ -559,7 +559,7 @@ haproxy:
     pullPolicy: IfNotPresent
     # Image tag. HAProxy 3.1 or newer is required for the init-state server
     # option, which keeps replicas out of the write backend on startup.
-    tag: "3.2-alpine"
+    tag: "lts-alpine"
 
   # User HAProxy authenticates with to run its health check, ignored if
   # auth.enabled is false. Must be defined in auth.aclUsers and needs +info
