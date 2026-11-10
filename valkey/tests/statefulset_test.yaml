@@ -587,10 +587,27 @@ tests:
           path: spec.replicas
           value: 1
 
-  - it: should refuse zero Valkey pods
+  - it: should scale down to zero Valkey pods and keep the volume claim template
     set:
       replica.enabled: true
       replica.replicas: 0
+      persistence.enabled: true
+      persistence.size: "5Gi"
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 0
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "5Gi"
+      - notExists:
+          path: spec.persistentVolumeClaimRetentionPolicy
+
+  - it: should refuse a negative number of Valkey pods
+    set:
+      replica.enabled: true
+      replica.replicas: -1
       persistence.enabled: true
       persistence.size: "5Gi"
     template: templates/statefulset.yaml

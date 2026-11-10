@@ -284,7 +284,10 @@ replica:
 
   # Number of Valkey pods, the master included: 1 runs the master alone,
   # 3 runs a master and two replicas. Sentinel needs at least 2.
-  replicas: 3 # @schema minimum:1
+  # 0 scales Valkey down to no pods. The PVCs are kept unless
+  # persistentVolumeClaimRetentionPolicy.whenScaled is Delete, so scaling
+  # back up reattaches the same volumes.
+  replicas: 3 # @schema minimum:0
 
   # Username for replicas to authenticate to master, ignored if auth.enabled is false.
   # IMPORTANT: When auth.enabled is true, this user MUST be defined in auth.aclUsers.
