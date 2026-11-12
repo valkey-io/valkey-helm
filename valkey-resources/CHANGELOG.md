@@ -11,7 +11,7 @@
 ### Notes
 
 - New fields can be set through the `cluster.spec` drop-in:
-  - `replicasPerShard` replaces `replicas`. A spec cannot set both: to move, set `replicasPerShard` and remove `replicas` in the same upgrade. With `helm upgrade --reuse-values` the previous `replicas` carries over, including the old default of 1, so also pass `--set cluster.spec.replicas=null`.
+  - `replicasPerShard` replaces `replicas`. A spec cannot set both: to move, set `replicasPerShard` and remove `replicas` in the same upgrade. With `helm upgrade --reuse-values` the previous `replicas` carries over, including the old default of 1. Passing `--set cluster.spec.replicas=null` as well removes the old default, but Helm keeps a `replicas` the previous release set itself. For that case edit the output of `helm get values` and pass it with `-f`, or use `--reset-then-reuse-values` with the same two `--set` flags.
   - `acl.users` replaces `users`. A spec cannot set both.
   - `networking.tls.clientAuth.ca` names the CA bundle that client certificates are verified against.
   - `networking.perNodeServices` creates a ClusterIP Service for each Valkey node.
