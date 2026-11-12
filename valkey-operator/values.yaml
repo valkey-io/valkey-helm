@@ -9,7 +9,8 @@ image:
   registry: "ghcr.io"
   # Operator container image repository
   repository: valkey-io/valkey-operator
-  # Image tag (leave empty to use .Chart.AppVersion)
+  # Image tag (leave empty to use .Chart.AppVersion). Must be v0.9.0 or later:
+  # the chart passes flags that an older operator does not accept.
   tag: ""
   # Image pull policy (Always, IfNotPresent, Never)
   pullPolicy: IfNotPresent

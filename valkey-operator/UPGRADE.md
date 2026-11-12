@@ -13,6 +13,11 @@ kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.c
 kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/valkey-io/valkey-operator/v0.9.0/config/crd/bases/valkey.io_valkeynodes.yaml
 ```
 
+Before upgrading the chart, check two things:
+
+- The upgrade turns the Valkey `default` user off on every cluster that does not declare it, and closes the connections logged in as `default`, which includes clients that never authenticate. To keep an open `default`, declare it in each ValkeyCluster's `spec.users` first. The [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0) have the snippet.
+- If your values set `image.tag`, remove it or set it to v0.9.0 or later. The chart now passes `--default-valkey-image` and `--default-exporter-image`, and an older operator exits on flags it does not know.
+
 Then upgrade the chart:
 
 ```console
@@ -21,11 +26,11 @@ helm upgrade <release-name> valkey/valkey-operator --version 0.9.0
 
 If the CRDs are applied after the chart upgrade, restart the operator Deployment afterwards. An operator that was running when the CRDs changed does not create per-node Services until it restarts.
 
-The upgrade rolls every ValkeyCluster once, one node at a time. It also turns the Valkey `default` user off on every cluster that does not declare it, and closes the connections logged in as `default`, which includes clients that never authenticate. To keep an open `default`, declare it in the ValkeyCluster's users before upgrading.
+The upgrade rolls every ValkeyCluster once, one node at a time.
 
 The operator now requires `--default-valkey-image` and `--default-exporter-image`. The chart passes both from `manager.defaultImages`, set to the images v0.8 had built in. If you maintain your own operator Deployment, add both flags or the operator exits at startup.
 
-`spec.users` and `spec.replicas` are deprecated in favour of `spec.acl.users` and `spec.replicasPerShard`. They still work, and a ValkeyCluster that uses one reports a `ConfigurationWarning` condition. See the [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0) for details.
+`spec.users` and `spec.replicas` are deprecated in favour of `spec.acl.users` and `spec.replicasPerShard`. They still work, and a ValkeyCluster that uses one reports a `ConfigurationWarning` condition. Move a cluster to the new fields only after this upgrade, once the new CRDs are applied and the v0.8 operator pod is gone: a v0.8 operator reads 0 replicas from a cluster that only sets `replicasPerShard` and deletes its replicas. See the [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0) for details.
 
 ## From 0.7.x to 0.8.0
 

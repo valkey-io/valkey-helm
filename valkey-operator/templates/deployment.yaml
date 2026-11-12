@@ -55,8 +55,10 @@ spec:
         {{- range .Values.manager.watchNamespaces }}
         - --watch-namespace={{ tpl . $ }}
         {{- end }}
-        - --default-valkey-image={{ required "manager.defaultImages.valkey is required" .Values.manager.defaultImages.valkey }}
-        - --default-exporter-image={{ required "manager.defaultImages.exporter is required" .Values.manager.defaultImages.exporter }}
+        {{- /* Values reused from a chart before 0.9.0 have no manager.defaultImages */}}
+        {{- $defaultImages := .Values.manager.defaultImages | default dict }}
+        - --default-valkey-image={{ $defaultImages.valkey | default "valkey/valkey:9.0.0" }}
+        - --default-exporter-image={{ $defaultImages.exporter | default "oliver006/redis_exporter:v1.88.0" }}
         {{- with .Values.manager.args }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

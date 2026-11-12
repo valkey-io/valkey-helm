@@ -61,12 +61,24 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --default-exporter-image=registry.example.com/redis_exporter:v1.90.0
 
-  - it: should fail when a default image is empty
+  - it: should fall back to the built-in images when values reused from 0.8.0 lack manager.defaultImages
+    set:
+      manager.defaultImages: null
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --default-valkey-image=valkey/valkey:9.0.0
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --default-exporter-image=oliver006/redis_exporter:v1.88.0
+
+  - it: should fall back to the built-in image when one default image is empty
     set:
       manager.defaultImages.valkey: ""
     asserts:
-      - failedTemplate:
-          errorMessage: manager.defaultImages.valkey is required
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --default-valkey-image=valkey/valkey:9.0.0
 
   - it: should place manager.args after the default images so they can override them
     set:
