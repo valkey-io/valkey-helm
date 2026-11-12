@@ -41,6 +41,17 @@ tests:
       - notExists:
           path: spec.replicasPerShard
 
+  - it: drops a null replicas so replicasPerShard can replace a reused value
+    set:
+      cluster.spec.replicas: null
+      cluster.spec.replicasPerShard: 2
+    asserts:
+      - equal:
+          path: spec.replicasPerShard
+          value: 2
+      - notExists:
+          path: spec.replicas
+
   - it: keeps an explicit replicasPerShard of 0
     set:
       cluster.spec.replicasPerShard: 0

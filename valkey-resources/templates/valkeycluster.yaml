@@ -13,6 +13,10 @@ metadata:
     {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
 {{- $spec := deepCopy .Values.cluster.spec }}
+{{- /* replicas: null drops a value reused from an earlier release */}}
+{{- if and (hasKey $spec "replicas") (kindIs "invalid" $spec.replicas) }}
+{{- $_ := unset $spec "replicas" }}
+{{- end }}
 {{- /* Without either field the operator runs no replicas */}}
 {{- if not (or (hasKey $spec "replicas") (hasKey $spec "replicasPerShard")) }}
 {{- $_ := set $spec "replicasPerShard" 1 }}
