@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0
+
+- Valkey Operator version defaults to v0.9.0. See the [v0.9.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0) for the upstream changes.
+- New values `manager.defaultImages.valkey` and `manager.defaultImages.exporter`, passed to the operator as `--default-valkey-image` and `--default-exporter-image`. The v0.9.0 operator exits at startup without them. The defaults are the images v0.8.0 had built in, so the upgrade does not change the image of any cluster. The same flags in `manager.args` come later on the command line and take precedence.
+
+> **Note:** CRDs are not upgraded automatically by Helm. Apply both v0.9.0 CRDs before upgrading the chart. With the old ValkeyNode CRD, the operator runs `ACL LOAD` on every Valkey node every 30 seconds, and `networking.perNodeServices` never reaches the ValkeyNodes. See [UPGRADE.md](UPGRADE.md).
+
 ## 0.8.0
 
 - Valkey Operator version defaults to v0.8.0. See the [v0.8.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.8.0) for the upstream changes.

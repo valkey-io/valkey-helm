@@ -1,5 +1,32 @@
 # Upgrade
 
+## From 0.8.x to 0.9.0
+
+This version updates the CRDs to match the valkey-operator release bundled in this chart.
+Helm does not upgrade CRDs during `helm upgrade`, so you must apply them manually before upgrading.
+The v0.9 operator records the ACL revision each Valkey node has loaded in the ValkeyNode status. The v0.8 ValkeyNode CRD does not have that field, so the API server drops it and the operator runs `ACL LOAD` on every Valkey node about every 30 seconds. The old CRD also drops `networking.perNodeServices` from each ValkeyNode: the ValkeyCluster accepts the field, but no per-node Service is created.
+
+Run these commands to update the CRDs before applying the upgrade. `--force-conflicts` is needed because Helm owns the CRD fields it installed:
+
+```console
+kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/valkey-io/valkey-operator/v0.9.0/config/crd/bases/valkey.io_valkeyclusters.yaml
+kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/valkey-io/valkey-operator/v0.9.0/config/crd/bases/valkey.io_valkeynodes.yaml
+```
+
+Then upgrade the chart:
+
+```console
+helm upgrade <release-name> valkey/valkey-operator --version 0.9.0
+```
+
+If the CRDs are applied after the chart upgrade, restart the operator Deployment afterwards. An operator that was running when the CRDs changed does not create per-node Services until it restarts.
+
+The upgrade rolls every ValkeyCluster once, one node at a time. It also turns the Valkey `default` user off on every cluster that does not declare it, and closes the connections logged in as `default`, which includes clients that never authenticate. To keep an open `default`, declare it in the ValkeyCluster's users before upgrading.
+
+The operator now requires `--default-valkey-image` and `--default-exporter-image`. The chart passes both from `manager.defaultImages`, set to the images v0.8 had built in. If you maintain your own operator Deployment, add both flags or the operator exits at startup.
+
+`spec.users` and `spec.replicas` are deprecated in favour of `spec.acl.users` and `spec.replicasPerShard`. They still work, and a ValkeyCluster that uses one reports a `ConfigurationWarning` condition. See the [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0) for details.
+
 ## From 0.7.x to 0.8.0
 
 This version updates the CRDs to match the valkey-operator release bundled in this chart.

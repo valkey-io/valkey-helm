@@ -39,3 +39,40 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].args
           content: --metrics-secure=false
+
+  - it: should pass the default images the operator requires
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --default-valkey-image=valkey/valkey:9.0.0
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --default-exporter-image=oliver006/redis_exporter:v1.88.0
+
+  - it: should pass overridden default images
+    set:
+      manager.defaultImages.valkey: registry.example.com/valkey:9.1.3
+      manager.defaultImages.exporter: registry.example.com/redis_exporter:v1.90.0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --default-valkey-image=registry.example.com/valkey:9.1.3
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --default-exporter-image=registry.example.com/redis_exporter:v1.90.0
+
+  - it: should fail when a default image is empty
+    set:
+      manager.defaultImages.valkey: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: manager.defaultImages.valkey is required
+
+  - it: should place manager.args after the default images so they can override them
+    set:
+      manager.args:
+        - --default-valkey-image=valkey/valkey:9.1.3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args[-1]
+          value: --default-valkey-image=valkey/valkey:9.1.3
