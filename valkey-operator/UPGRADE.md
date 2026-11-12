@@ -16,7 +16,7 @@ kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.c
 Before upgrading the chart, check three things:
 
 - The upgrade turns the Valkey `default` user off on every cluster that does not declare it, and closes the connections logged in as `default`, which includes clients that never authenticate. To keep an open `default`, declare it in each ValkeyCluster's `spec.users` first. The [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0) have the snippet.
-- If the release sets `image.tag`, a plain `helm upgrade` keeps the stored value. Add `--set image.tag=` to the upgrade command to use the chart's version, or set the tag to v0.9.0 or later. The chart now passes `--default-valkey-image` and `--default-exporter-image`, and an older operator exits on flags it does not know.
+- If the release sets `image.tag`, a plain `helm upgrade` keeps the stored value. Pass your full values file with the tag removed or set to v0.9.0 or later, or add `--reuse-values --set image.tag=` to the upgrade command. `--set` without `--reuse-values` resets every other stored value to the chart default. The chart now passes `--default-valkey-image` and `--default-exporter-image`, and an older operator exits on flags it does not know.
 - The operator now sets `allowPrivilegeEscalation: false` on the Valkey and exporter containers. If a custom image needs privilege escalation, set `allowPrivilegeEscalation: true` on that container in the ValkeyCluster's `spec.containers` first.
 
 Then upgrade the chart:
