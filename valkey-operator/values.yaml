@@ -9,7 +9,8 @@ image:
   registry: "ghcr.io"
   # Operator container image repository
   repository: valkey-io/valkey-operator
-  # Image tag (leave empty to use .Chart.AppVersion)
+  # Image tag (leave empty to use .Chart.AppVersion). Must be v0.9.0 or later:
+  # the chart passes flags that an older operator does not accept.
   tag: ""
   # Image pull policy (Always, IfNotPresent, Never)
   pullPolicy: IfNotPresent
@@ -57,6 +58,13 @@ manager:
   #     - valkey-staging
   #     - valkey-{{ .Values.myEnv }}
   watchNamespaces: []
+  # Images the operator uses for a ValkeyCluster or ValkeyNode that does not set
+  # spec.image or spec.exporter.image. Passed as --default-valkey-image and
+  # --default-exporter-image, which the operator requires from v0.9.0.
+  # Changing one rolls the pods of every cluster that relies on it.
+  defaultImages:
+    valkey: valkey/valkey:9.0.0
+    exporter: oliver006/redis_exporter:v1.88.0
   # Additional command-line arguments for the operator binary
   # Example: set log verbosity
   #   args:
