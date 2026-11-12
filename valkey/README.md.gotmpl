@@ -249,6 +249,8 @@ replica:
 
 `replica.replicas` counts the Valkey pods, the primary included (default 3).
 
+Set `replica.replicas: 0` to scale Valkey down to no pods without removing anything else. The StatefulSet keeps its PVCs when scaled down, unless `replica.persistentVolumeClaimRetentionPolicy.whenScaled` is `Delete`, so scaling back up reattaches the same volumes. Sentinel still needs at least 2.
+
 To reject writes unless enough replicas are in sync:
 
 ```yaml
