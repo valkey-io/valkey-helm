@@ -1,6 +1,6 @@
 # valkey-resources
 
-![Version: 0.5.0](https://img.shields.io/badge/Version-0.5.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.8.0](https://img.shields.io/badge/AppVersion-v0.8.0-informational?style=flat-square)
+![Version: 0.6.0](https://img.shields.io/badge/Version-0.6.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.9.0](https://img.shields.io/badge/AppVersion-v0.9.0-informational?style=flat-square)
 
 Deploys a single operator managed `ValkeyCluster`. Does not install the operator.
 
@@ -8,9 +8,9 @@ Deploys a single operator managed `ValkeyCluster`. Does not install the operator
 
 * Kubernetes 1.31+
 * Helm 3.5+
-* [valkey-operator](../valkey-operator/) **v0.8.0+** installed (CRDs present)
+* [valkey-operator](../valkey-operator/) **v0.9.0+** installed (CRDs present)
 
-Without matching CRDs the API server rejects `ValkeyCluster` on apply. Helm does not upgrade CRDs for you; apply the operator chart CRDs when moving to v0.8.0. See [CHANGELOG.md](CHANGELOG.md) and the operator [v0.8.0](https://github.com/valkey-io/valkey-operator/releases/tag/v0.8.0) notes.
+Without matching CRDs the API server rejects `ValkeyCluster` on apply. Helm does not upgrade CRDs for you; apply the operator chart CRDs when moving to v0.9.0. See [CHANGELOG.md](CHANGELOG.md) and the operator [v0.9.0](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0) notes.
 
 ## Install
 
@@ -45,7 +45,7 @@ extraValues:
 cluster:
   spec:
     shards: 3
-    replicas: 1
+    replicasPerShard: 1
     networking:
       tls:
         certificates:
@@ -61,7 +61,7 @@ Placement and PDB fields changed in the CRD. Use the nested forms in values:
 cluster:
   spec:
     shards: 3
-    replicas: 1
+    replicasPerShard: 1
     podDisruptionBudget:
       mode: Cluster   # or Disabled
     scheduling:
@@ -81,7 +81,7 @@ See [values.yaml](values.yaml), [CHANGELOG.md](CHANGELOG.md), and the [ValkeyClu
 | Parameter | Description | Default |
 |---|---|---|
 | `cluster.spec.shards` | Shard groups | `3` |
-| `cluster.spec.replicas` | Replicas per shard | `1` |
+| `cluster.spec.replicasPerShard` | Replicas per shard. Set by the chart when neither it nor the deprecated `cluster.spec.replicas` is given | `1` |
 | `extraValues` | Free-form map for use inside `tpl` strings | `{}` |
 | `metrics.podMonitor.enabled` | Create a PodMonitor for ValkeyNode exporter sidecars (Prometheus Operator CRDs) | `false` |
 | `metrics.podMonitor.port` | Scrape port name on the exporter container | `metrics` |
@@ -179,7 +179,9 @@ usersSecret:
 
 Passwords must be strings. YAML reads unquoted values such as `0123`, `1.10`, `on` or very long digit strings as numbers or booleans and changes them before the chart sees them (`0123` becomes `83`), so the schema rejects them: quote them, or pass them with `--set-string`. `usersSecret.name` may use templates. The render fails when `passwords` is empty, when a password is an empty string, or when a user in `cluster.spec.users` reads a key that `passwords` does not have. A user reads the key named after it, or each key in its `passwordSecret.keys`. Users the operator reads no password for (`nopass: true`, `resetpass: true` or `enabled: false`), and users whose `passwordSecret.name` names another Secret, are not checked. When `usersSecret.name` is set, the chart sets `passwordSecret.name` on every other user that does not set it. Passwords in values files are stored in plain text in the release, so supply them from a secrets tool rather than committing them. See [examples/users-secret.yaml](examples/users-secret.yaml).
 
-To use a Secret you manage yourself, leave `usersSecret.create: false` and set `cluster.spec.users[].passwordSecret.name` (see [examples/users-acl.yaml](examples/users-acl.yaml)).
+The checks above read `cluster.spec.users` only. With `cluster.spec.acl.users` (operator v0.9.0+) the rendered Secret still works under its default name, because the operator reads `<fullname>-users` with the username as the key. The chart does not check `acl.users` against `passwords`, and it does not set `password.secret.name` when `usersSecret.name` is set: name the Secret on each user yourself.
+
+To use a Secret you manage yourself, leave `usersSecret.create: false` and set `cluster.spec.acl.users[].password.secret.name` (see [examples/users-acl.yaml](examples/users-acl.yaml)).
 
 Setting `usersSecret.create` back to `false` makes Helm delete the Secret on the next upgrade, and the operator then fails to reconcile users until the Secret exists again. To take the Secret over, add `helm.sh/resource-policy: keep` to `usersSecret.annotations` and upgrade once before turning `create` off. If `usersSecret.name` is set, also set `passwordSecret.name` to that name on each user in `cluster.spec.users` when you turn `create` off: the chart only adds it while `create` is true, and without it the operator reads `<fullname>-users`. To move to a different Secret, create it and point `passwordSecret.name` at it first.
 

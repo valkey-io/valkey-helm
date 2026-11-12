@@ -10,15 +10,17 @@ extraValues:
 cluster:
   spec:
     shards: 3
-    replicas: 1
-    users:
-      - name: alice
-        passwordSecret:
-          name: "{{ .Values.extraValues.usersSecret }}"
-          keys: [alicepw]
-        commands:
-          allow: ["@read", "@write", "@connection"]
-          deny: ["@admin", "@dangerous"]
-        keys:
-          readWrite: ["app:*"]
-          readOnly: ["shared:*"]
+    replicasPerShard: 1
+    acl:
+      users:
+        - name: alice
+          password:
+            secret:
+              name: "{{ .Values.extraValues.usersSecret }}"
+              keys: [alicepw]
+          commands:
+            allow: ["@read", "@write", "@connection"]
+            deny: ["@admin", "@dangerous"]
+          keys:
+            readWrite: ["app:*"]
+            readOnly: ["shared:*"]

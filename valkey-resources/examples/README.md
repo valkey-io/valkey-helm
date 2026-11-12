@@ -23,7 +23,7 @@ helm install my-cluster valkey/valkey-resources -n valkey \
 
 | File | What it shows |
 |---|---|
-| [minimal.yaml](minimal.yaml) | Explicit shards / replicas only |
+| [minimal.yaml](minimal.yaml) | Explicit shards / replicasPerShard only |
 | [scheduling-node-spread.yaml](scheduling-node-spread.yaml) | `scheduling.node.spread` (shard-aware node HA) + PDB |
 | [scheduling-zone-spread.yaml](scheduling-zone-spread.yaml) | `scheduling.zone.spread` (zone-aware placement) |
 | [tls.yaml](tls.yaml) | TLS Secret ref via `extraValues` + `tpl` |
@@ -36,6 +36,7 @@ helm install my-cluster valkey/valkey-resources -n valkey \
 
 ## Notes
 
+- `users-acl.yaml`, `users-secret.yaml` and every `replicasPerShard` need operator v0.9.0+. On an older operator use `users` and `replicas`.
 - Chart defaults leave `node.spread` off (operator default `Disabled`). Production clusters should set `shard` to at least `Preferred`; see `scheduling-node-spread.yaml`.
 - Prefer `node.spread` for hostname / node anti-colocation and `zone.spread` for zone-aware placement over hand-written `topologySpreadConstraints`; the operator owns the emitted constraints. Do not enable two dimensions at the same strength on the same axis (admission rejects duplicate constraints).
 - `zone.spread` and `zone.pinning` are mutually exclusive.

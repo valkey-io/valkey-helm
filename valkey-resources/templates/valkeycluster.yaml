@@ -13,6 +13,10 @@ metadata:
     {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
 {{- $spec := deepCopy .Values.cluster.spec }}
+{{- /* Without either field the operator runs no replicas */}}
+{{- if not (or (hasKey $spec "replicas") (hasKey $spec "replicasPerShard")) }}
+{{- $_ := set $spec "replicasPerShard" 1 }}
+{{- end }}
 {{- if and (or .Values.serviceAccount.create .Values.serviceAccount.name) (not (hasKey $spec "serviceAccountName")) }}
 {{- $_ := set $spec "serviceAccountName" (include "valkey-resources.serviceAccountName" .) }}
 {{- else if and .Values.serviceAccount.create (ne (tpl (toString $spec.serviceAccountName) .) (include "valkey-resources.serviceAccountName" .)) }}

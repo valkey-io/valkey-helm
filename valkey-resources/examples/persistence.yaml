@@ -4,7 +4,7 @@
 cluster:
   spec:
     shards: 3
-    replicas: 1
+    replicasPerShard: 1
     workloadType: StatefulSet
     persistence:
       size: 1Gi
