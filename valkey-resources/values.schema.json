@@ -58,7 +58,8 @@
           "description": "Drop-in for ValkeyCluster.spec; any CRD field is allowed.",
           "properties": {
             "shards": { "type": "integer", "minimum": 1 },
-            "replicas": { "type": "integer", "minimum": 0 }
+            "replicas": { "type": ["integer", "null"], "minimum": 0 },
+            "replicasPerShard": { "type": "integer", "minimum": 0 }
           }
         }
       }

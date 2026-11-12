@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0
+
+### Changed
+
+- `appVersion` defaults to operator **v0.9.0** (up from v0.8.0). Upgrade the `valkey-operator` chart and apply both v0.9.0 CRDs first. See the [v0.9.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0).
+- `values.yaml` no longer sets `cluster.spec.replicas: 1`, which operator v0.9.0 deprecates. The chart sets `replicasPerShard: 1` when `cluster.spec` gives neither `replicas` nor `replicasPerShard`. A release that relied on the default moves from `replicas: 1` to `replicasPerShard: 1` on upgrade from 0.5.x, and its pods are not replaced. An upgrade from 0.4.x can also rename the ValkeyCluster: see the 0.5.0 entry. Values that set `cluster.spec.replicas` render as before.
+- The examples use `replicasPerShard` and `acl.users`, so they need operator v0.9.0.
+
+### Notes
+
+- New fields can be set through the `cluster.spec` drop-in:
+  - `replicasPerShard` replaces `replicas`. A spec cannot set both: to move, set `replicasPerShard` and remove `replicas` in the same upgrade. With `helm upgrade --reuse-values` the previous `replicas` carries over, including the old default of 1. Passing `--set cluster.spec.replicas=null` as well removes the old default, but Helm keeps a `replicas` the previous release set itself. For that case edit the output of `helm get values` and pass it with `-f`, or use `--reset-then-reuse-values` with the same two `--set` flags.
+  - `acl.users` replaces `users`. A spec cannot set both.
+  - `networking.tls.clientAuth.ca` names the CA bundle that client certificates are verified against.
+  - `networking.perNodeServices` creates a ClusterIP Service for each Valkey node.
+- A ValkeyCluster that still sets `replicas` or `users` reports a `ConfigurationWarning` condition with reason `DeprecatedField`.
+- `usersSecret` checks `cluster.spec.users` only. With `acl.users` the rendered Secret works under its default name, without the password check and without the `usersSecret.name` redirect. See the README.
+- Upgrading the operator rolls every cluster once and turns the Valkey `default` user off unless the cluster declares it. See the operator chart's [UPGRADE.md](../valkey-operator/UPGRADE.md).
+
 ## 0.5.0
 
 ### Changed

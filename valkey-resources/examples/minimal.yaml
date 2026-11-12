@@ -1,5 +1,5 @@
-# Explicit topology size only. Matches chart defaults for shards / replicas.
+# Explicit topology size only. Matches chart defaults for shards / replicasPerShard.
 cluster:
   spec:
     shards: 3
-    replicas: 1
+    replicasPerShard: 1

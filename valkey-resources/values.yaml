@@ -59,15 +59,16 @@ cluster:
   labels: {}
 
   # ValkeyCluster.spec drop-in (any CRD field allowed). Tested against operator
-  # appVersion (v0.8.0): scheduling under spec.scheduling, PDB as {mode: ...},
+  # appVersion (v0.9.0): scheduling under spec.scheduling, PDB as {mode: ...},
   # node.spread.shard|primaries|pods. See CHANGELOG.md.
   # Rendered via tpl so string values may use Helm templates, e.g.
   #   image: "valkey/valkey:{{ .Chart.AppVersion }}"
   #   networking.tls.certificates.server.secretName: "{{ .Release.Name }}-tls"
   # API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
+  # replicasPerShard defaults to 1 when neither it nor the deprecated replicas
+  # is set here.
   spec:
     shards: 3
-    replicas: 1
 
 # NetworkPolicy for the Valkey pods (selected by valkey.io/cluster=<ValkeyCluster name>).
 # Off by default. When enabled, ingress is limited to what the cluster needs to
@@ -135,9 +136,9 @@ serviceAccount:
   automount: false
 # Secret holding ACL user passwords, in the form the operator reads by default.
 # The operator looks for Secret "<ValkeyCluster name>-users" unless
-# cluster.spec.users[].passwordSecret.name is set; the data key defaults to the
+# a user names another Secret; the data key defaults to the
 # username. To use a Secret you manage yourself, leave create: false and set
-# cluster.spec.users[].passwordSecret.name (see examples/users-acl.yaml).
+# cluster.spec.acl.users[].password.secret.name (see examples/users-acl.yaml).
 usersSecret:
   create: false
   # Defaults to "<fullname>-users" and may use templates. When set, users in

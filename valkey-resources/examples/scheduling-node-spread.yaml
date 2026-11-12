@@ -11,7 +11,7 @@
 cluster:
   spec:
     shards: 3
-    replicas: 1
+    replicasPerShard: 1
     podDisruptionBudget:
       mode: Cluster
     scheduling:

@@ -11,4 +11,4 @@ metrics:
 cluster:
   spec:
     shards: 3
-    replicas: 1
+    replicasPerShard: 1
