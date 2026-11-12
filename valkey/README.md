@@ -522,10 +522,10 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | haproxy.extraInitContainers | list | `[]` |  |
 | haproxy.extraVolumeMounts | list | `[]` |  |
 | haproxy.extraVolumes | list | `[]` |  |
-| haproxy.image.pullPolicy | string | `"IfNotPresent"` |  |
+| haproxy.image.pullPolicy | string | `"Always"` |  |
 | haproxy.image.registry | string | `"docker.io"` |  |
 | haproxy.image.repository | string | `"haproxy"` |  |
-| haproxy.image.tag | string | `"3.2-alpine"` |  |
+| haproxy.image.tag | string | `"lts-alpine"` |  |
 | haproxy.nodeSelector | string | `nil` |  |
 | haproxy.podAnnotations | object | `{}` |  |
 | haproxy.podDisruptionBudget.enabled | bool | `false` |  |
