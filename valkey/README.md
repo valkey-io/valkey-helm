@@ -49,7 +49,7 @@ Service names assume a release named `valkey`.
 These commands are the shortest way to try each mode and run without authentication.
 See [Before Going to Production](#before-going-to-production) for a real deployment.
 
-### Standalone
+### Standalone (No replication)
 
 A single Valkey pod. This is the default.
 
@@ -63,7 +63,7 @@ helm install valkey valkey/valkey
 
 ### Replicated
 
-One primary and two replicas. Replication requires persistent storage.
+One primary and two replicas by default. Replication requires persistent storage.
 
 ```bash
 helm install valkey valkey/valkey \
