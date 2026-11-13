@@ -1,5 +1,38 @@
 # Upgrade
 
+## From 0.8.x to 0.9.0
+
+This version updates the CRDs to match the valkey-operator release bundled in this chart.
+Helm does not upgrade CRDs during `helm upgrade`, so you must apply them manually before upgrading.
+The v0.9 operator records the ACL revision each Valkey node has loaded in the ValkeyNode status. The v0.8 ValkeyNode CRD does not have that field, so the API server drops it and the operator runs `ACL LOAD` on every Valkey node about every 30 seconds. The old CRD also drops `networking.perNodeServices` from each ValkeyNode: the ValkeyCluster accepts the field, but no per-node Service is created.
+
+Run these commands to update the CRDs before applying the upgrade. `--force-conflicts` is needed because Helm owns the CRD fields it installed:
+
+```console
+kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/valkey-io/valkey-operator/v0.9.0/config/crd/bases/valkey.io_valkeyclusters.yaml
+kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/valkey-io/valkey-operator/v0.9.0/config/crd/bases/valkey.io_valkeynodes.yaml
+```
+
+Before upgrading the chart, check three things:
+
+- The upgrade turns the Valkey `default` user off on every cluster that does not declare it, and closes the connections logged in as `default`, which includes clients that never authenticate. To keep an open `default`, declare it in each ValkeyCluster's `spec.users` first. The [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0) have the snippet.
+- If the release sets `image.tag`, a plain `helm upgrade` keeps the stored value. Pass your full values file with the tag removed or set to v0.9.0 or later, or add `--reuse-values --set image.tag=` to the upgrade command. `--set` without `--reuse-values` resets every other stored value to the chart default. The chart now passes `--default-valkey-image` and `--default-exporter-image`, and an older operator exits on flags it does not know.
+- The operator now sets `allowPrivilegeEscalation: false` on the Valkey and exporter containers. If a custom image needs privilege escalation, set `allowPrivilegeEscalation: true` on that container in the ValkeyCluster's `spec.containers` first.
+
+Then upgrade the chart:
+
+```console
+helm upgrade <release-name> valkey/valkey-operator --version 0.9.0
+```
+
+If the CRDs are applied after the chart upgrade, restart the operator Deployment afterwards. An operator that was running when the CRDs changed does not create per-node Services until it restarts.
+
+The upgrade rolls every ValkeyCluster once, one node at a time.
+
+The operator now requires `--default-valkey-image` and `--default-exporter-image`. The chart passes both from `manager.defaultImages`, set to the images v0.8 had built in. If you maintain your own operator Deployment, add both flags or the operator exits at startup.
+
+`spec.users` and `spec.replicas` are deprecated in favour of `spec.acl.users` and `spec.replicasPerShard`. They still work, and a ValkeyCluster that uses one reports a `ConfigurationWarning` condition. Move a cluster to the new fields only after this upgrade, once the new CRDs are applied and the v0.8 operator pod is gone: a v0.8 operator reads 0 replicas from a cluster that only sets `replicasPerShard` and deletes its replicas. See the [release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0) for details.
+
 ## From 0.7.x to 0.8.0
 
 This version updates the CRDs to match the valkey-operator release bundled in this chart.

@@ -2,17 +2,51 @@ apiVersion: v2
 name: valkey
 description: Valkey, an open source, high-performance in-memory datastore
 type: application
-version: 1.0.0-rc.1
+version: 1.0.0
 appVersion: "9.1.3"
 home: https://valkey.io/valkey-helm/
 sources:
   - https://github.com/valkey-io/valkey-helm.git
   - https://valkey.io
+keywords:
+  - valkey
+  - key-value
+  - cache
+  - database
+  - sentinel
 maintainers:
   - name: raven
     url: https://github.com/mk-raven
   - name: sgissi
     url: https://github.com/sgissi
   - name: Bloodraven21
-    url: https://github.com/Bloodraven21    
+    url: https://github.com/Bloodraven21
 icon: https://dyltqmyl993wv.cloudfront.net/assets/stacks/valkey/img/valkey-stack-220x234.png
+annotations:
+  artifacthub.io/license: BSD-3-Clause
+  # Default images; keep in sync with appVersion and the image tags in values.yaml.
+  artifacthub.io/images: |
+    - name: valkey
+      image: docker.io/valkey/valkey:9.1.3
+    - name: haproxy
+      image: docker.io/haproxy:3.2-alpine
+    - name: redis-exporter
+      image: ghcr.io/oliver006/redis_exporter:v1.88.0
+  artifacthub.io/links: |
+    - name: Upgrading from 0.x
+      url: https://github.com/valkey-io/valkey-helm/blob/main/valkey/UPGRADE.md
+  artifacthub.io/changes: |
+    - kind: added
+      description: Valkey Sentinel for automatic failover, with coordinated failover on graceful shutdown (requires Valkey 9.0 or later)
+    - kind: added
+      description: Optional HAProxy front-end that routes clients to the master named by a Sentinel majority
+    - kind: added
+      description: tls.volume accepts any volume source for the TLS files
+    - kind: changed
+      description: Readiness probe enabled by default
+    - kind: changed
+      description: Standalone deploymentStrategy defaults to Recreate
+    - kind: changed
+      description: "Breaking: persistence, extraConfig, extraEnv, extraVolumes/extraVolumeMounts, metrics labels/annotations and networkPolicy reworked; replica.replicas counts all pods. Removed keys are refused at render. See UPGRADE.md"
+    - kind: security
+      description: Metrics exporter hardened by default (restricted Pod Security Standard)

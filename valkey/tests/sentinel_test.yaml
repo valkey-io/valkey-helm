@@ -969,21 +969,19 @@ tests:
           path: data["valkey-start.sh"]
           pattern: 'elif \[ -z "\$write_failed" \]; then'
 
-  - it: should ignore a config read taken during a rewrite
+  - it: should record a role change on the tick that sees it
     template: templates/init_config.yaml
     asserts:
-      # A rewrite empties the file before filling it again, so a single tick can
-      # see no replicaof line at all and record this pod as the master. That is
-      # the reading that has to be confirmed; a replicaof line cannot be
-      # invented by a torn read, so it is recorded on the tick that sees it.
+      # Valkey replaces the config by renaming a complete temporary file over
+      # it, so a read never sees a partial one and a promotion needs no second
+      # reading to be believed. Once a reading is valid, nothing may stand
+      # between it and the comparison with the record: any check placed there
+      # would hold back a promotion, a demotion or both, whatever it is called.
       - matchRegex:
           path: data["valkey-start.sh"]
-          pattern: 'if \[ "\$host" = "\$SELF" \] && \[ "\$pending" != "\$host \$port" \]; then'
-      - matchRegex:
-          path: data["valkey-start.sh"]
-          pattern: 'pending="\$host \$port"'
-      # An unterminated last line is the tail of a file being rewritten, and a
-      # truncated port would otherwise be recorded as a real one.
+          pattern: '\[ -n "\$host" \] \|\| continue\n *current=""\n *if \[ -f "\$MARKER" \]; then\n *IFS= read -r current < "\$MARKER" \|\| current=""\n *fi\n *if \[ "\$current" != "\$host \$port" \]; then\n'
+      # An unterminated last line is not parsed, which is how read behaves
+      # without the "|| ..." idiom; it must not be added back.
       - notMatchRegex:
           path: data["valkey-start.sh"]
           pattern: 'read -r cfg_line \|\|'

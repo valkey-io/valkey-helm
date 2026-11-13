@@ -96,11 +96,10 @@ A pod with neither a Sentinel, nor a running node, nor a record waits up to `sen
 That wait is what a first install spends: the Sentinels bootstrap a master once their own `sentinel.startupTimeoutSeconds` expires, and the pod is simply there to be told, so the chart refuses to render unless the wait is at least 30 seconds above it.
 
 The record is read from the config file Valkey rewrites when Sentinel changes a pod's role, so it needs no credentials.
-A rewrite empties that file before filling it again, and a check landing in between sees no `replicaof` line, which is indistinguishable from a promotion.
-A pod naming itself as the master therefore has to see that on two consecutive checks, while a pod that finds a master to follow records it on the first, since a partial read can drop a `replicaof` line but cannot invent one.
-The record is one interval behind a demotion and two behind a promotion, one second each by default.
+Valkey rewrites that file by writing a temporary file and renaming it over the old one (`rewriteConfigOverwriteFile` in `src/config.c`), so a check always sees a complete config, either the old or the new one, and never a partial file.
+A check therefore records a role change as soon as it sees it, and the record is at most one interval behind, one second by default.
 
-A promotion followed inside that window by the loss of every pod at once no longer hands writes back to the demoted node, because that node recorded its demotion on the first check.
+A promotion followed inside that window by the loss of every pod at once no longer hands writes back to the demoted node, because that node recorded its demotion within one interval.
 What can still happen is that a pod which was down during a failover comes back following a node that has since been demoted, so it replicates through that node rather than from the primary.
 Agreeing on a primary when no node can be reached is a consensus problem rather than a record keeping one, and this chart does not solve it.
 
@@ -130,8 +129,9 @@ When the old master goes away on its own `preStop` hook, it steps down before th
 After an unplanned failover, they stay on the old master until Sentinel demotes it if it comes back.
 
 There is no separate HAProxy read endpoint because `valkey-read` already load balances across every pod.
-It only drops a pod based on the pod's own probes, and the readiness probe is off by default, so a pod that stops answering keeps receiving reads until the liveness probe restarts it (`livenessProbe.periodSeconds` times `livenessProbe.failureThreshold`, 30 seconds by default).
-The readiness probe passes only on `PONG`, so with it enabled a replica that is still loading its dataset stays out of `valkey-read` until it can answer.
+It drops a pod once the pod's readiness probe fails: the probe notices a pod that stopped answering after about `readinessProbe.periodSeconds` times `readinessProbe.failureThreshold`, 30 seconds by default, and the Service stops routing new connections to it once its endpoints are updated; connections already open stay with the pod until the client closes them.
+The readiness probe passes only on `PONG`, so a replica that is still loading its dataset stays out of `valkey-read` until it can answer.
+The exception is auth with the default user defined only in `auth.aclConfig`: the chart cannot know its password, so the probe runs unauthenticated and also accepts `NOAUTH`, which Valkey answers before it checks whether it is loading. Such a replica counts as ready while it loads; set `readinessProbe.customProbe` to an authenticated probe if loading replicas must stay out of `valkey-read`.
 
 ### Labels
 

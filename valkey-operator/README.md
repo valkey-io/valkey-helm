@@ -1,6 +1,6 @@
 # valkey-operator
 
-![Version: 0.8.0](https://img.shields.io/badge/Version-0.8.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.8.0](https://img.shields.io/badge/AppVersion-v0.8.0-informational?style=flat-square)
+![Version: 0.9.0](https://img.shields.io/badge/Version-0.9.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.9.0](https://img.shields.io/badge/AppVersion-v0.9.0-informational?style=flat-square)
 
 A Helm chart for deploying the [Valkey Operator](https://github.com/valkey-io/valkey-operator) on Kubernetes.
 
@@ -37,7 +37,7 @@ metadata:
   name: my-cluster
 spec:
   shards: 3
-  replicas: 1
+  replicasPerShard: 1
 ```
 
 ## Configuration
@@ -56,6 +56,8 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `rbac.namespaced` | Grant the manager permissions through a Role and RoleBinding in each namespace in `manager.watchNamespaces`, and omit the manager ClusterRole/ClusterRoleBinding. Requires a non-empty `manager.watchNamespaces` | `false` |
 | `manager.leaderElection.enabled` | Enable leader election | `true` |
 | `manager.watchNamespaces` | Restrict cache to these namespaces (cluster-wide if empty) | `[]` |
+| `manager.defaultImages.valkey` | Valkey image for a ValkeyCluster that does not set `spec.image` (passes `--default-valkey-image`). Changing it rolls those clusters | `valkey/valkey:9.0.0` |
+| `manager.defaultImages.exporter` | Exporter image for a ValkeyCluster that does not set `spec.exporter.image` (passes `--default-exporter-image`). Changing it rolls those clusters | `oliver006/redis_exporter:v1.88.0` |
 | `podDisruptionBudget.enabled` | Enable PodDisruptionBudget | `false` |
 | `podDisruptionBudget.minAvailable` | Minimum pods available during disruptions | `null` |
 | `podDisruptionBudget.maxUnavailable` | Maximum pods unavailable during disruptions | `1` |

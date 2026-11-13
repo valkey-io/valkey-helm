@@ -1,10 +1,10 @@
 # valkey
 
-![Version: 1.0.0-rc.1](https://img.shields.io/badge/Version-1.0.0--rc.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.1.3](https://img.shields.io/badge/AppVersion-9.1.3-informational?style=flat-square)
+![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.1.3](https://img.shields.io/badge/AppVersion-9.1.3-informational?style=flat-square)
 
 Valkey, an open source, high-performance in-memory datastore
 
-> **1.0.0-rc.1 is a release candidate.** The current stable release is **0.12.1**, which a plain `helm install` still installs. This README describes 1.0.0-rc.1, whose values differ from 0.12.1, so the examples need `--version 1.0.0-rc.1`. To move an existing release from 0.12.1, see [UPGRADE.md](UPGRADE.md).
+> Upgrading from 0.x? The values changed in 1.0; see [UPGRADE.md](UPGRADE.md).
 
 **Homepage:** <https://valkey.io/valkey-helm/>
 
@@ -34,28 +34,22 @@ The chart is published both as a Helm repository and as an OCI artifact.
 ```bash
 helm repo add valkey https://valkey.io/valkey-helm/
 helm repo update
-# Stable release, 0.12.1
 helm install valkey valkey/valkey
-# Release candidate
-helm install valkey valkey/valkey --version 1.0.0-rc.1
 ```
 
 **OCI registry:**
 
 ```bash
-# Stable release
-helm install valkey oci://ghcr.io/valkey-io/valkey-helm/valkey --version 0.12.1
-# Release candidate
-helm install valkey oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0-rc.1
+helm install valkey oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0
 ```
 
-The examples below are for the release candidate and use `valkey/valkey`; add `--version 1.0.0-rc.1` to each, or replace `valkey/valkey` with `oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0-rc.1` to install from the OCI registry.
+The examples below use `valkey/valkey`; replace `valkey/valkey` with `oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0` to install from the OCI registry.
 Service names assume a release named `valkey`.
 
 These commands are the shortest way to try each mode and run without authentication.
 See [Before Going to Production](#before-going-to-production) for a real deployment.
 
-### Standalone
+### Standalone (No replication)
 
 A single Valkey pod. This is the default.
 
@@ -69,7 +63,7 @@ helm install valkey valkey/valkey
 
 ### Replicated
 
-One primary and two replicas. Replication requires persistent storage.
+One primary and two replicas by default. Replication requires persistent storage.
 
 ```bash
 helm install valkey valkey/valkey \
@@ -262,8 +256,9 @@ replica:
   minReplicasMaxLag: 10  # With at most 10 seconds of lag
 ```
 
-`valkey-read` drops a pod only when its probes fail.
-Enable `readinessProbe` to take an unresponsive or still-loading replica out of `valkey-read` faster.
+`valkey-read` drops a pod once its readiness probe fails, so new connections no longer go to a replica that is still loading its dataset or has stopped answering.
+Connections already open to it stay there until the client reconnects.
+Lower `readinessProbe.periodSeconds` or `readinessProbe.failureThreshold` to take it out faster.
 
 ### Sentinel
 
@@ -337,6 +332,7 @@ After a failover clients get connection errors until HAProxy sees the new primar
 
 HAProxy runs 3 pods by default (`haproxy.replicas`), labelled `app.kubernetes.io/name: valkey-haproxy` and `app.kubernetes.io/component: haproxy`.
 Like the Sentinels, they take their own `haproxy.affinity`, `haproxy.topologySpreadConstraints`, `haproxy.podLabels`, `haproxy.podAnnotations`, `haproxy.nodeSelector` and `haproxy.tolerations`, and their own `haproxy.podDisruptionBudget`.
+`haproxy.strategy` sets the Deployment's rollout strategy.
 
 With authentication, HAProxy health checks Valkey as `haproxy.checkUser` (default `default`), which needs `+info` and `+ping`.
 
@@ -548,6 +544,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | haproxy.service.nodePort | int | `0` |  |
 | haproxy.service.port | int | `6379` |  |
 | haproxy.service.type | string | `"ClusterIP"` |  |
+| haproxy.strategy | object | `{}` |  |
 | haproxy.tls.clientCertFile | string | `""` |  |
 | haproxy.tls.verify | string | `"required"` |  |
 | haproxy.tolerations | string | `nil` |  |
@@ -651,7 +648,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
 | priorityClassName | string | `""` |  |
 | readinessProbe.customProbe | object | `{}` |  |
-| readinessProbe.enabled | bool | `false` |  |
+| readinessProbe.enabled | bool | `true` |  |
 | readinessProbe.failureThreshold | int | `3` |  |
 | readinessProbe.initialDelaySeconds | int | `0` |  |
 | readinessProbe.periodSeconds | int | `10` |  |

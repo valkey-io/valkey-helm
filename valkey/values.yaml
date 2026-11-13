@@ -153,8 +153,10 @@ initResources: {}
 # probe cannot authenticate and accepts NOAUTH instead. Set `customProbe` to a
 # full probe spec to replace the default handler and timing entirely (e.g. an
 # httpGet or tcpSocket probe).
-# The defaults below match the previous hardcoded behavior (Kubernetes probe
-# defaults); readinessProbe is opt-in since the container had none before.
+# Startup and liveness keep the Kubernetes probe defaults. Readiness is on by
+# default, so a pod that cannot answer PONG (still loading its dataset, or
+# hung) is taken out of the non-headless Services and stops receiving requests
+# through them. The headless Services still publish not-ready pods in DNS.
 startupProbe:
   enabled: true
   initialDelaySeconds: 0
@@ -170,7 +172,7 @@ livenessProbe:
   failureThreshold: 3
   customProbe: {}
 readinessProbe:
-  enabled: false
+  enabled: true
   initialDelaySeconds: 0
   periodSeconds: 10
   timeoutSeconds: 1
@@ -424,11 +426,9 @@ sentinel:
   # How often each Valkey pod mirrors the current master onto its data volume.
   # That record is what a cold start falls back on when no Sentinel answers,
   # so it bounds how stale the topology can be after an abrupt restart.
-  # A pod that finds itself named as the master has to see that twice before
-  # it is written, because a check landing inside a config rewrite sees the
-  # same thing; a pod that finds a master to follow records it at once. The
-  # check only reads a file that Valkey keeps up to date, and writes nothing
-  # when the topology has not moved.
+  # Each check reads the config file that Valkey keeps up to date, and records
+  # a change on the check that sees it. It writes nothing when the topology
+  # has not moved.
   masterRecordRefreshSeconds: 1
 
   # How often each Sentinel looks for a Valkey node that is replicating from
@@ -691,6 +691,10 @@ haproxy:
   affinity: {}
   tolerations: null # @schema type:[array, null]
   topologySpreadConstraints: []
+
+  # Deployment strategy. Set rollingUpdate.maxSurge: 0 if no node is free
+  # for an extra pod during a rollout.
+  strategy: {} # @schema type:object
 
   # Additional init containers, volumes and volume mounts. Mounts on /tls or
   # /usr/local/etc/haproxy, or below them, are refused.
