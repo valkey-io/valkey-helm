@@ -59,6 +59,7 @@ spec:
         - name: haproxy
           image: {{ include "valkey.haproxy.image" . }}
           imagePullPolicy: {{ .Values.haproxy.image.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
           securityContext:
             {{- toYaml .Values.haproxy.securityContext | nindent 12 }}
           env:

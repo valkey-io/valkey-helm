@@ -1163,6 +1163,13 @@
             "type": "integer",
             "minimum": 0
         },
+        "terminationMessagePolicy": {
+            "type": "string",
+            "enum": [
+                "File",
+                "FallbackToLogsOnError"
+            ]
+        },
         "tls": {
             "type": "object",
             "properties": {
