@@ -8,7 +8,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "valkey-operator.fullname" $ }}-manager
-  namespace: {{ tpl . $ }}
+  namespace: {{ tpl . $ | quote }}
   labels:
     {{- include "valkey-operator.labels" $ | nindent 4 }}
 rules:

@@ -212,6 +212,28 @@ tests:
           value: static-ns
         documentIndex: 1
 
+  - it: should render a numeric-looking watch namespace as a string in the manager Role
+    template: templates/manager-role.yaml
+    set:
+      rbac.namespaced: true
+      manager.watchNamespaces:
+        - "123"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: "123"
+
+  - it: should render a numeric-looking watch namespace as a string in the manager RoleBinding
+    template: templates/manager-rolebinding.yaml
+    set:
+      rbac.namespaced: true
+      manager.watchNamespaces:
+        - "123"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: "123"
+
   - it: should not render manager Roles when rbac.create is false
     template: templates/manager-role.yaml
     set:
