@@ -24,7 +24,7 @@ helm install valkey-operator valkey/valkey-operator \
   -n valkey-operator-system --create-namespace
 ```
 
-This will deploy the operator into the `valkey-operator-system` namespace. By default the operator watches for `ValkeyCluster` resources across all namespaces. Set `manager.watchNamespaces` to restrict it to specific namespaces.
+This will deploy the operator into the `valkey-operator-system` namespace. By default the operator watches for `ValkeyCluster` resources across all namespaces. Set `manager.watchNamespaces` to restrict it to specific namespaces, and `rbac.namespaced` to restrict its permissions to the same namespaces (see [Namespace-scoped RBAC](#namespace-scoped-rbac)).
 
 ## Creating a ValkeyCluster
 
@@ -52,7 +52,8 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `image.tag` | Operator image tag | `""` (uses `.Chart.AppVersion`) |
 | `replicaCount` | Number of operator replicas | `1` |
 | `serviceAccount.create` | Create a ServiceAccount | `true` |
-| `rbac.create` | Create the operator ClusterRole/ClusterRoleBinding and the aggregated admin/editor/viewer ClusterRoles | `true` |
+| `rbac.create` | Create the operator manager RBAC (ClusterRole/ClusterRoleBinding, or Roles/RoleBindings with `rbac.namespaced`) and the aggregated admin/editor/viewer ClusterRoles | `true` |
+| `rbac.namespaced` | Grant the manager permissions through a Role and RoleBinding in each namespace in `manager.watchNamespaces`, and omit the manager ClusterRole/ClusterRoleBinding. Requires a non-empty `manager.watchNamespaces` | `false` |
 | `manager.leaderElection.enabled` | Enable leader election | `true` |
 | `manager.watchNamespaces` | Restrict cache to these namespaces (cluster-wide if empty) | `[]` |
 | `manager.defaultImages.valkey` | Valkey image for a ValkeyCluster that does not set `spec.image` (passes `--default-valkey-image`). Changing it rolls those clusters | `valkey/valkey:9.0.0` |
@@ -124,6 +125,27 @@ networkPolicy:
   # Any extra egress here is merged with the default operator egress rules.
   extraEgress: []
 ```
+
+### Namespace-scoped RBAC
+
+`manager.watchNamespaces` limits which namespaces the operator watches. Kubernetes authorizes the operator ServiceAccount through RBAC, so with the default manager ClusterRoleBinding the ServiceAccount keeps its permissions in every namespace. Set `rbac.namespaced: true` to grant them only in the watched namespaces:
+
+```yaml
+rbac:
+  namespaced: true
+manager:
+  watchNamespaces:
+    - team-a
+    - team-b
+```
+
+With this setting the chart:
+
+- renders a `*-manager` Role and RoleBinding in each namespace in `manager.watchNamespaces`, bound to the operator ServiceAccount in the release namespace. The Role carries the same rules as the cluster-wide manager ClusterRole;
+- omits the manager ClusterRole and ClusterRoleBinding;
+- keeps the leader-election Role and RoleBinding in the release namespace.
+
+Rendering fails when `manager.watchNamespaces` is empty or an entry renders as an empty name. Each watched namespace must exist before you install or upgrade the release. When you switch an existing release to `rbac.namespaced: true`, `helm upgrade` removes the release's manager ClusterRole and ClusterRoleBinding. The aggregated ClusterRoles below and the metrics RBAC keep their current behavior.
 
 ### Aggregated ClusterRoles
 

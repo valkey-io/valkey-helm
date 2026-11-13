@@ -65,6 +65,105 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+Rules for the operator manager, shared by the cluster-wide ClusterRole and the
+per-namespace Roles. Keep in sync with config/rbac/role.yaml in the operator
+release this chart bundles.
+*/}}
+{{- define "valkey-operator.managerRules" -}}
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - persistentvolumeclaims
+  - secrets
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - valkey.io
+  resources:
+  - valkeyclusters
+  - valkeynodes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - valkey.io
+  resources:
+  - valkeyclusters/finalizers
+  - valkeynodes/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - valkey.io
+  resources:
+  - valkeyclusters/status
+  - valkeynodes/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
+
+{{/*
 Returns the operator container image
 */}}
 {{- define "valkey-operator.image" -}}

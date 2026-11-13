@@ -1,0 +1,20 @@
+{{- if and .Values.rbac.create .Values.rbac.namespaced }}
+{{- if empty .Values.manager.watchNamespaces }}
+{{- fail "rbac.namespaced requires at least one namespace in manager.watchNamespaces" }}
+{{- end }}
+{{- range .Values.manager.watchNamespaces }}
+{{- if empty (tpl . $) }}
+{{- fail "rbac.namespaced requires every entry in manager.watchNamespaces to name a namespace" }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "valkey-operator.fullname" $ }}-manager
+  namespace: {{ tpl . $ | quote }}
+  labels:
+    {{- include "valkey-operator.labels" $ | nindent 4 }}
+rules:
+{{ include "valkey-operator.managerRules" $ }}
+{{- end }}
+{{- end }}
