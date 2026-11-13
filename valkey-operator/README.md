@@ -145,7 +145,7 @@ With this setting the chart:
 - omits the manager ClusterRole and ClusterRoleBinding;
 - keeps the leader-election Role and RoleBinding in the release namespace.
 
-Rendering fails when `manager.watchNamespaces` is empty. Each watched namespace must exist before you install or upgrade the release. When you switch an existing release to `rbac.namespaced: true`, `helm upgrade` removes the release's manager ClusterRole and ClusterRoleBinding. The aggregated ClusterRoles below and the metrics RBAC keep their current behavior.
+Rendering fails when `manager.watchNamespaces` is empty or an entry renders as an empty name. Each watched namespace must exist before you install or upgrade the release. When you switch an existing release to `rbac.namespaced: true`, `helm upgrade` removes the release's manager ClusterRole and ClusterRoleBinding. The aggregated ClusterRoles below and the metrics RBAC keep their current behavior.
 
 ### Aggregated ClusterRoles
 

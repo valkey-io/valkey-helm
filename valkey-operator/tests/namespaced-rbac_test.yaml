@@ -212,27 +212,60 @@ tests:
           value: static-ns
         documentIndex: 1
 
-  - it: should render a numeric-looking watch namespace as a string in the manager Role
+  - it: should render scalar-looking watch namespaces as strings in the manager Roles
     template: templates/manager-role.yaml
     set:
       rbac.namespaced: true
       manager.watchNamespaces:
         - "123"
+        - "true"
     asserts:
       - equal:
           path: metadata.namespace
           value: "123"
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: "true"
+        documentIndex: 1
 
-  - it: should render a numeric-looking watch namespace as a string in the manager RoleBinding
+  - it: should render scalar-looking watch namespaces as strings in the manager RoleBindings
     template: templates/manager-rolebinding.yaml
     set:
       rbac.namespaced: true
       manager.watchNamespaces:
         - "123"
+        - "true"
     asserts:
       - equal:
           path: metadata.namespace
           value: "123"
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: "true"
+        documentIndex: 1
+
+  - it: should fail in namespaced mode when a watchNamespaces entry is empty
+    template: templates/manager-role.yaml
+    set:
+      rbac.namespaced: true
+      manager.watchNamespaces:
+        - team-a
+        - ""
+    asserts:
+      - failedTemplate:
+          errorMessage: rbac.namespaced requires every entry in manager.watchNamespaces to name a namespace
+
+  - it: should fail in namespaced mode when a templated watchNamespaces entry renders empty
+    template: templates/manager-role.yaml
+    set:
+      rbac.namespaced: true
+      manager.watchNamespaces:
+        - "{{ .Values.missing }}"
+    asserts:
+      - failedTemplate:
+          errorMessage: rbac.namespaced requires every entry in manager.watchNamespaces to name a namespace
 
   - it: should not render manager Roles when rbac.create is false
     template: templates/manager-role.yaml

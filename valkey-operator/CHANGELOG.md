@@ -4,7 +4,7 @@
 
 ### Added
 
-- Add opt-in `rbac.namespaced`. When `true`, the chart grants the manager permissions through a Role and RoleBinding in each namespace in `manager.watchNamespaces` and omits the manager ClusterRole and ClusterRoleBinding. Rendering fails if `manager.watchNamespaces` is empty. The default (`false`) keeps the cluster-wide manager RBAC.
+- Add opt-in `rbac.namespaced`. When `true`, the chart grants the manager permissions through a Role and RoleBinding in each namespace in `manager.watchNamespaces` and omits the manager ClusterRole and ClusterRoleBinding. Rendering fails if `manager.watchNamespaces` is empty or an entry renders as an empty name. The default (`false`) keeps the cluster-wide manager RBAC.
 
 ## 0.9.0
 
