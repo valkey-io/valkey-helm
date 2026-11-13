@@ -796,3 +796,67 @@ tests:
           value: valkey
       - notExists:
           path: spec.selector.matchLabels["app.kubernetes.io/component"]
+
+  - it: should request resources and limit memory, not CPU, by default
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "valkey")].resources
+          value:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+      - notExists:
+          path: spec.template.spec.containers[?(@.name == "valkey")].resources.limits.cpu
+      - equal:
+          path: spec.template.spec.initContainers[0].resources
+          value:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+
+  - it: should take the resources given in values
+    set:
+      resources:
+        requests:
+          cpu: 200m
+          memory: 1Gi
+        limits:
+          memory: 2Gi
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "valkey")].resources.limits.memory
+          value: 2Gi
+
+  - it: should drop a single default set to null and keep the others
+    set:
+      resources:
+        requests:
+          memory: 1Gi
+        limits:
+          memory: null
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name == "valkey")].resources.requests
+          value:
+            cpu: 50m
+            memory: 1Gi
+      - isNullOrEmpty:
+          path: spec.template.spec.containers[?(@.name == "valkey")].resources.limits
+
+  - it: should set no resources when they are null, as before 1.0
+    set:
+      resources: null
+      initResources: null
+    template: templates/deploy_valkey.yaml
+    asserts:
+      - isNullOrEmpty:
+          path: spec.template.spec.containers[?(@.name == "valkey")].resources
+      - notExists:
+          path: spec.template.spec.initContainers[0].resources
