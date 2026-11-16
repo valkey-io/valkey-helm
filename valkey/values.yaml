@@ -583,6 +583,12 @@ haproxy:
     loadBalancerSourceRanges: []
 
   config:
+    # Listen on IPv6 as well as IPv4. Required on IPv6-only clusters and on dual
+    # stack clusters whose primary family is IPv6, where the default IPv4-only
+    # listener leaves HAProxy unreachable and fails its probes. Leave it false on
+    # nodes whose kernel has IPv6 disabled (ipv6.disable=1): HAProxy cannot open
+    # an IPv6 socket there and fails to start.
+    listenIPv6: false
     # Maximum number of concurrent connections
     maxconn: 4096
     # Port serving /healthz for the Kubernetes probes. HAProxy answers it

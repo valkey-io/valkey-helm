@@ -481,6 +481,31 @@ tests:
           path: data["haproxy.cfg"]
           pattern: 'frontend health\n  bind \*:8404\n  mode http\n  monitor-uri /healthz'
 
+  - it: should listen on IPv4 only by default
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'frontend valkey_write\n  bind \*:6379\n'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'frontend health\n  bind \*:8404\n'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'v4v6'
+
+  - it: should listen on IPv6 and IPv4 when listenIPv6 is enabled
+    set:
+      haproxy.config.listenIPv6: true
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'frontend valkey_write\n  bind :::6379 v4v6\n'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'frontend health\n  bind :::8404 v4v6\n'
+
   - it: should point the kubernetes probes at the monitor endpoint
     template: templates/haproxy-deployment.yaml
     asserts:

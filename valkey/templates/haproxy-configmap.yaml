@@ -5,6 +5,8 @@
 {{- $sentinels := int .Values.sentinel.replicas }}
 {{- /* A majority, so that two nodes can never both have it */}}
 {{- $majority := add (div $sentinels 2) 1 }}
+{{- /* "*" is IPv4 only in HAProxy; "::" with v4v6 takes IPv6 and IPv4 on one socket */}}
+{{- $listen := ternary ":::%v v4v6" "*:%v" .Values.haproxy.config.listenIPv6 }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -42,7 +44,7 @@ data:
       option srvtcpka
 
     frontend valkey_write
-      bind *:{{ .Values.haproxy.service.port }}
+      bind {{ printf $listen .Values.haproxy.service.port }}
       default_backend valkey_master
 
     # Endpoint for the Kubernetes probes. HAProxy answers it itself, so the
@@ -50,7 +52,7 @@ data:
     # the proxy ports instead made every probe reach the master, which logged an
     # "Error accepting a client connection" for each one.
     frontend health
-      bind *:{{ .Values.haproxy.config.healthPort }}
+      bind {{ printf $listen .Values.haproxy.config.healthPort }}
       mode http
       monitor-uri /healthz
       option dontlog-normal
