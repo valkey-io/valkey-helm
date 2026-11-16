@@ -5,8 +5,9 @@
 {{- $sentinels := int .Values.sentinel.replicas }}
 {{- /* A majority, so that two nodes can never both have it */}}
 {{- $majority := add (div $sentinels 2) 1 }}
-{{- /* "*" is IPv4 only in HAProxy; "::" with v4v6 takes IPv6 and IPv4 on one socket */}}
-{{- $listen := ternary ":::%v v4v6" "*:%v" .Values.haproxy.config.listenIPv6 }}
+{{- /* "*" is IPv4 only in HAProxy; "::" with v4v6 takes IPv6 and IPv4 on one socket.
+       listenIPv6 is missing after helm upgrade --reuse-values from 1.0.0. */}}
+{{- $listen := ternary ":::%v v4v6" "*:%v" (.Values.haproxy.config.listenIPv6 | default false) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
