@@ -135,9 +135,7 @@ The exception is auth with the default user defined only in `auth.aclConfig`: th
 
 ### Listen address
 
-HAProxy listens on `*` by default, which in HAProxy is IPv4 only, so on an IPv6-only cluster the proxy and its probes are unreachable.
-`haproxy.config.listenIPv6: true` switches to `::` with `v4v6`, one socket that accepts IPv6 and IPv4 connections, which works on IPv4-only, IPv6-only and dual stack clusters, as Valkey itself does.
-It is not the default because HAProxy has no optional listener: Valkey's `bind * -::*` skips IPv6 where the kernel has it disabled (`ipv6.disable=1`), but HAProxy fails to start there instead, which would break releases on such nodes on upgrade.
+HAProxy listens on `*`, which is IPv4 only, so it is unreachable on IPv6-only clusters; `haproxy.config.listenIPv6: true` binds `::` with `v4v6`, which accepts both.
 
 ### Labels
 
