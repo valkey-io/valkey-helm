@@ -1,5 +1,20 @@
 # Upgrade
 
+## From 0.9.x to the next release
+
+The CRDs move from `crds/` into the chart's templates, so Helm upgrades them from now on. The CRDs a 0.9.x or earlier release installed from `crds/` carry no Helm ownership metadata, and the upgrade fails with `invalid ownership metadata` until they do. Add it before upgrading, with your release name and namespace:
+
+```console
+for crd in valkeyclusters.valkey.io valkeynodes.valkey.io; do
+  kubectl label crd "$crd" app.kubernetes.io/managed-by=Helm
+  kubectl annotate crd "$crd" meta.helm.sh/release-name=<release-name> meta.helm.sh/release-namespace=<release-namespace>
+done
+```
+
+Then upgrade the chart. The CRDs get `helm.sh/resource-policy: keep` (`crds.keep`), so a later `helm uninstall` leaves them and every ValkeyCluster in place.
+
+To keep managing the CRDs yourself, set `crds.enabled: false` instead. The upgrade then leaves the existing CRDs alone and needs no labels or annotations.
+
 ## From 0.8.x to 0.9.0
 
 This version updates the CRDs to match the valkey-operator release bundled in this chart.

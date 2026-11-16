@@ -68,7 +68,7 @@ Most changes touch one or more of:
 - `templates/` — the rendered Kubernetes manifests (Deployment, RBAC, NetworkPolicy, etc.)
 - `values.yaml` — the chart's configurable parameters and their defaults
 - `Chart.yaml` — chart metadata and version
-- `crds/` — the `ValkeyCluster` and `ValkeyNode` CustomResourceDefinitions
+- `crd-bases/`: the `ValkeyCluster` and `ValkeyNode` CustomResourceDefinitions, copied unchanged from the operator's `config/crd/bases`. `templates/crds.yaml` renders them.
 
 When you add or change a configurable parameter, update both `values.yaml` and
 the parameter table in [README.md](README.md) so the documentation stays in
@@ -136,8 +136,9 @@ helm install valkey-operator ./valkey-operator \
 kubectl -n valkey-operator-system get pods
 ```
 
-Note that Helm does not upgrade CRDs automatically. When testing CRD changes
-across versions, apply the CRDs manually first (see [UPGRADE.md](UPGRADE.md)).
+The chart renders the CRDs from its templates, so `helm upgrade` applies CRD
+changes. A release installed from chart 0.9.0 or earlier needs the one-off
+step in [UPGRADE.md](UPGRADE.md) first.
 
 Clean up when you're done:
 
@@ -189,7 +190,7 @@ valkey-operator/
 ├── README.md         # Chart documentation
 ├── UPGRADE.md        # Version-specific upgrade notes (CRDs)
 ├── CHANGELOG.md      # Release history
-├── crds/             # ValkeyCluster and ValkeyNode CRDs
+├── crd-bases/        # ValkeyCluster and ValkeyNode CRDs, rendered by templates/crds.yaml
 ├── templates/        # Rendered Kubernetes manifests
 │   ├── _helpers.tpl
 │   ├── deployment.yaml

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The CRDs move from `crds/` to `crd-bases/` and render from `templates/crds.yaml`, so `helm upgrade` upgrades them. New values `crds.enabled` (default `true`), `crds.keep` (default `true`, adds `helm.sh/resource-policy: keep`) and `crds.annotations`. Set `crds.annotations` to `argocd.argoproj.io/sync-options: Delete=false,Prune=false` to stop Argo CD deleting the CRDs with the Application.
+
+> **Note:** A release installed from chart 0.9.0 or earlier needs Helm ownership metadata on its CRDs before the upgrade, or the upgrade fails. See [UPGRADE.md](UPGRADE.md).
+
 ## 0.9.0
 
 - Valkey Operator version defaults to v0.9.0. See the [v0.9.0 release notes](https://github.com/valkey-io/valkey-operator/releases/tag/v0.9.0) for the upstream changes.
