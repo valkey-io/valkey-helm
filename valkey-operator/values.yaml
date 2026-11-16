@@ -39,14 +39,14 @@ serviceAccount:
   automount: true
 
 rbac:
-  # Create the operator manager RBAC (ClusterRole/ClusterRoleBinding, or
-  # Roles/RoleBindings when namespaced is true) and the aggregated
+  # Create the operator manager ClusterRole and its binding (a ClusterRoleBinding,
+  # or RoleBindings when namespaced is true) and the aggregated
   # admin/editor/viewer ClusterRoles for the Valkey CRDs
   create: true
   # Scope the manager permissions to the namespaces in manager.watchNamespaces.
-  # When true, renders a manager Role and RoleBinding in each watched namespace
-  # and omits the manager ClusterRole/ClusterRoleBinding. Requires at least one
-  # namespace in manager.watchNamespaces; each must exist before install.
+  # When true, binds the manager ClusterRole with a RoleBinding in each watched
+  # namespace instead of a ClusterRoleBinding. Requires at least one namespace
+  # in manager.watchNamespaces; each must exist before install.
   # Leader-election RBAC stays in the release namespace.
   namespaced: false
 
