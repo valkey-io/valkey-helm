@@ -29,7 +29,7 @@ annotations:
     - name: valkey
       image: docker.io/valkey/valkey:9.1.3
     - name: haproxy
-      image: docker.io/haproxy:3.2-alpine
+      image: docker.io/haproxy:3.4.7-alpine
     - name: redis-exporter
       image: ghcr.io/oliver006/redis_exporter:v1.88.0
   artifacthub.io/links: |
