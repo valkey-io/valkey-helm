@@ -106,6 +106,9 @@ Call with (dict "image" <map> "global" <map or nil> "path" "cluster.image").
 {{- $registry := $global.imageRegistry | default $image.registry | default "" }}
 {{- $tag := $image.tag | default "" | toString }}
 {{- $sha := $image.sha | default "" | toString | trimPrefix "sha256:" }}
+{{- if not $image.repository }}
+{{- fail (printf "%s: set repository" .path) }}
+{{- end }}
 {{- if and (not $tag) (not $sha) }}
 {{- fail (printf "%s: set tag or sha" .path) }}
 {{- end }}

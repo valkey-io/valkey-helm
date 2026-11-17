@@ -56,6 +56,20 @@ tests:
           path: spec.image
           value: valkey/valkey:9.0.0@sha256:abc123
 
+  - it: fails without a repository
+    set:
+      cluster.image.repository: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.image: set repository"
+
+  - it: fails for the exporter without a repository
+    set:
+      cluster.exporter.image.repository: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.exporter.image: set repository"
+
   - it: fails without a tag or sha
     set:
       cluster.image.tag: ""

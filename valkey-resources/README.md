@@ -98,7 +98,7 @@ cluster:
     shards: {{ .Values.extraValues.shards }}
 ```
 
-Maps merge and lists replace. The escape hatch wins on conflict, including `false`, `0`, `""` and `[]`, and `null` deletes the key. The chart's own logic (the `replicasPerShard` default, `serviceAccountName`, the `usersSecret` checks) runs on the merged result, so a field set through the escape hatch is handled like one in `cluster.spec`. String values in the merged spec go through `tpl`. That includes the output of `additionalSpecString`, which is rendered a second time, so a literal `{{` in it needs escaping twice. See [examples/additional-spec.yaml](examples/additional-spec.yaml).
+Maps merge and lists replace. The escape hatch wins on conflict, including `false`, `0`, `""` and `[]`, and `null` deletes the key. `image` and `exporter.image` are the exception: an empty string there counts as unset, and `cluster.image` or `cluster.exporter.image` applies. The chart's own logic (the `replicasPerShard` default, `serviceAccountName`, the `usersSecret` checks) runs on the merged result, so a field set through the escape hatch is handled like one in `cluster.spec`. String values in the merged spec go through `tpl`. That includes the output of `additionalSpecString`, which is rendered a second time, so a literal `{{` in it needs escaping twice. See [examples/additional-spec.yaml](examples/additional-spec.yaml).
 
 | Parameter | Description | Default |
 |---|---|---|
@@ -123,7 +123,7 @@ The chart sets `spec.image` and `spec.exporter.image` on the ValkeyCluster. Each
 | `cluster.image.tag` / `cluster.exporter.image.tag` | `9.0.0` | `v1.88.0` |
 | `cluster.image.sha` / `cluster.exporter.image.sha` | `""` | `""` |
 
-The parts render as `[registry/]repository[:tag][@sha256:sha]`. An empty part is left out. A `sha` with or without the `sha256:` prefix is accepted. A render with neither `tag` nor `sha` fails.
+The parts render as `[registry/]repository[:tag][@sha256:sha]`. An empty part is left out. A `sha` with or without the `sha256:` prefix is accepted. A render without `repository`, or with neither `tag` nor `sha`, fails.
 
 The registries default to empty so the string matches the images in the valkey-operator chart's `manager.defaultImages` (`valkey/valkey:9.0.0`). Adding `docker.io/` changes the string and rolls the pods.
 
@@ -138,7 +138,7 @@ This renders `registry.example.internal/valkey/valkey:9.0.0`. See [`examples/pri
 
 A non-empty `cluster.spec.image` or `cluster.spec.exporter.image` (or the same key in `cluster.additionalSpec`) is used as written. `global.imageRegistry` does not apply to it. An empty string counts as unset.
 
-The operator falls back to its own default images (`--default-valkey-image`, `--default-exporter-image`) when `spec.image` is empty. Pinning the image in each ValkeyCluster means an operator upgrade does not change a cluster's Valkey version, so the operator and each cluster upgrade separately.
+The operator falls back to its own default images (`--default-valkey-image`, `--default-exporter-image`) when `spec.image` is empty. Pinning the image in each ValkeyCluster means an operator upgrade does not change a cluster's Valkey version, so the operator and each cluster upgrade separately. To fall back to the operator's default images, set `cluster.image: null` and `cluster.exporter: null`. The chart then renders neither `spec.image` nor `spec.exporter.image`.
 
 An image pull policy is not available yet.
 

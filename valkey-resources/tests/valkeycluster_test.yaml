@@ -562,10 +562,14 @@ tests:
         exporter:
           enabled: true
         terminationGracePeriodSeconds: 30
+        scheduling:
+          priorityClassName: x
       cluster.additionalSpec:
         exporter:
           enabled: false
         terminationGracePeriodSeconds: 0
+        scheduling:
+          priorityClassName: ""
     asserts:
       - equal:
           path: spec.exporter.enabled
@@ -573,6 +577,9 @@ tests:
       - equal:
           path: spec.terminationGracePeriodSeconds
           value: 0
+      - equal:
+          path: spec.scheduling.priorityClassName
+          value: ""
 
   - it: replaces lists from additionalSpec
     set:
