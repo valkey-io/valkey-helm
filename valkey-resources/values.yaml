@@ -59,9 +59,9 @@ cluster:
   labels: {}
 
   # ValkeyCluster.spec. Every field of the operator's ValkeyCluster API is
-  # listed below, commented out, with its description. values.schema.json is
-  # generated from the pinned CRD and rejects unknown fields here; put fields
-  # this chart does not know about in cluster.additionalSpec.
+  # listed below, commented out, with its description. values.schema.json
+  # follows the CRD and rejects unknown fields here; put fields this chart
+  # does not know about in cluster.additionalSpec.
   # Tested against operator appVersion (v0.9.0): scheduling under spec.scheduling,
   # PDB as {mode: ...}, node.spread.shard|primaries|pods. See CHANGELOG.md.
   # String values are rendered via tpl, so they may use Helm templates. Example:

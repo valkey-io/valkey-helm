@@ -34,7 +34,7 @@ Further examples and helm unittest render smoke for that directory are planned a
 
 ## Configuration
 
-`cluster.spec` holds `ValkeyCluster.spec`. It is validated by `values.schema.json`, which is generated from the ValkeyCluster CRD at the chart's `appVersion`, so a misspelled or unknown key fails the render with a schema error. Kubernetes types embedded in the spec (`resources`, `affinity`, `tolerations`, `topologySpreadConstraints`, `containers`, `config` and similar) stay open and accept any content. Every field also accepts `null`. `cluster` accepts only `annotations`, `labels`, `spec`, `additionalSpec` and `additionalSpecString`. Nested under `cluster` so future CR kinds can sit beside it without a generic top-level `spec`. [values.yaml](values.yaml) documents every field as commented-out YAML.
+`cluster.spec` holds `ValkeyCluster.spec`. It is validated by `values.schema.json`, which follows the ValkeyCluster CRD at the chart's `appVersion`, so a misspelled or unknown key fails the render with a schema error. Kubernetes types embedded in the spec (`resources`, `affinity`, `tolerations`, `topologySpreadConstraints`, `containers`, `config` and similar) stay open and accept any content. Every field also accepts `null`. `cluster` accepts only `annotations`, `labels`, `spec`, `additionalSpec` and `additionalSpecString`. Nested under `cluster` so future CR kinds can sit beside it without a generic top-level `spec`. [values.yaml](values.yaml) documents every field as commented-out YAML.
 
 String values in `cluster.spec`, `cluster.labels`, and `cluster.annotations` are run through Helm `tpl`, so you can reference release metadata or `extraValues`. Validation runs before `tpl`, so a templated string on a field typed as integer, boolean or enum is rejected: use `cluster.additionalSpecString` for those (see below).
 
@@ -268,7 +268,7 @@ See [`examples/extra-objects.yaml`](examples/extra-objects.yaml).
 
 ## Updating the CRD schema
 
-When `appVersion` changes, copy the new `valkeyclusters` CRD from the operator release into `valkey-resources/schema/valkey.io_valkeyclusters.yaml`, run `just schema-resources` to regenerate `values.schema.json`, and document any new field in `values.yaml`. `just check-resources` runs the generator tests, fails when `values.schema.json` is stale and fails when a CRD field is missing from `values.yaml` and fails when `values.yaml` documents a field the CRD no longer has. A new embedded Kubernetes type (a map or a type with `x-kubernetes-preserve-unknown-fields`) makes the generator fail until you add its path to `OPEN_PATHS` in `schema/generate.py`.
+`values.schema.json` is maintained by hand. When `appVersion` changes, compare the new `valkeyclusters` CRD (`valkey-operator/crds/valkey.io_valkeyclusters.yaml`) with the `cluster.spec` part of the schema, and apply each added, removed or changed field to both the schema and the commented listing in `values.yaml`. Follow the existing rules: every type also allows `null`, enums list `null`, operator-owned objects set `"additionalProperties": false`, and Kubernetes types embedded in the spec (`resources`, `containers`, `imagePullSecrets`, `podSecurityContext`, `exporter.resources`, `exporter.securityContext`, `scheduling.affinity`, `scheduling.tolerations`, `scheduling.topologySpreadConstraints`, `scheduling.nodeSelector`, `podMetadata.labels`, `podMetadata.annotations`, `config`) stay open objects or arrays. Leave out the CRD's `pattern`s, because Helm validates templated strings before `tpl` renders them.
 
 ## Uninstall
 

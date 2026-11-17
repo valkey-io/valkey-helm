@@ -4,7 +4,7 @@
 
 ### Validated `cluster.spec`
 
-**What changed:** `cluster.spec` was a pass-through to `ValkeyCluster.spec`. It is now validated by `values.schema.json`, which is generated from the ValkeyCluster CRD at the chart's `appVersion` (v0.9.0). The schema rejects keys the CRD does not have, so `helm install`, `helm upgrade`, `helm lint` and `helm template` fail on them. Kubernetes types embedded in the spec (`resources`, `affinity`, `tolerations`, `topologySpreadConstraints`, `containers`, `config` and similar) stay open. Every field accepts `null`. `cluster` itself accepts only `annotations`, `labels`, `spec`, `additionalSpec` and `additionalSpecString`.
+**What changed:** `cluster.spec` was a pass-through to `ValkeyCluster.spec`. It is now validated by `values.schema.json`, which follows the ValkeyCluster CRD at the chart's `appVersion` (v0.9.0). The schema rejects keys the CRD does not have, so `helm install`, `helm upgrade`, `helm lint` and `helm template` fail on them. Kubernetes types embedded in the spec (`resources`, `affinity`, `tolerations`, `topologySpreadConstraints`, `containers`, `config` and similar) stay open. Every field accepts `null`. `cluster` itself accepts only `annotations`, `labels`, `spec`, `additionalSpec` and `additionalSpecString`.
 
 **Who is affected:**
 

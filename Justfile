@@ -47,19 +47,7 @@ docs:
     @echo "=== Generating valkey/README.md ==="
     cd valkey && helm-docs
 
-# Regenerate valkey-resources/values.schema.json from the pinned CRD in
-# valkey-resources/schema/.
-schema-resources:
-    @echo "=== Generating valkey-resources/values.schema.json ==="
-    uv run valkey-resources/schema/generate.py
-
-# Test the schema generator and fail when values.schema.json is stale
-check-resources:
-    @echo "=== Checking valkey-resources schema ==="
-    uv run --with pytest --with pyyaml pytest valkey-resources/schema -q
-    uv run valkey-resources/schema/generate.py --check
-
 # Run all validations
-validate: lint test check-resources
+validate: lint test
     @echo "=== All validations passed ==="
 

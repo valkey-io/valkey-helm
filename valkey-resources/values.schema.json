@@ -1,20 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": [
-    "cluster"
-  ],
+  "required": ["cluster"],
   "additionalProperties": true,
   "properties": {
-    "nameOverride": {
-      "type": "string"
-    },
-    "fullnameOverride": {
-      "type": "string"
-    },
-    "commonLabels": {
-      "type": "object"
-    },
+    "nameOverride": {"type": "string"},
+    "fullnameOverride": {"type": "string"},
+    "commonLabels": {"type": "object"},
     "extraValues": {
       "type": "object",
       "additionalProperties": true,
@@ -28,18 +20,9 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "port": {
-              "type": [
-                "string",
-                "integer"
-              ]
-            },
-            "namespace": {
-              "type": "string"
-            }
+            "enabled": {"type": "boolean"},
+            "port": {"type": ["string", "integer"]},
+            "namespace": {"type": "string"}
           }
         }
       }
@@ -48,726 +31,216 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "create": {
-          "type": "boolean"
-        },
-        "name": {
-          "type": "string"
-        },
-        "annotations": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "labels": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "automount": {
-          "type": "boolean"
-        }
+        "create": {"type": "boolean"},
+        "name": {"type": "string"},
+        "annotations": {"type": "object", "additionalProperties": true},
+        "labels": {"type": "object", "additionalProperties": true},
+        "automount": {"type": "boolean"}
       }
     },
     "cluster": {
       "type": "object",
-      "required": [
-        "spec"
-      ],
+      "required": ["spec"],
       "additionalProperties": false,
       "properties": {
-        "annotations": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "labels": {
-          "type": "object",
-          "additionalProperties": true
-        },
+        "annotations": {"type": "object", "additionalProperties": true},
+        "labels": {"type": "object", "additionalProperties": true},
         "spec": {
-          "type": [
-            "object",
-            "null"
-          ],
+          "type": ["object", "null"],
           "description": "ValkeyCluster.spec. Unknown keys are rejected: put fields this chart does not cover in cluster.additionalSpec.",
           "properties": {
             "acl": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "ACL configures the Valkey access control the operator manages.",
+              "type": ["object", "null"],
               "properties": {
                 "users": {
-                  "type": [
-                    "array",
-                    "null"
-                  ],
-                  "description": "Users managed by the operator",
+                  "type": ["array", "null"],
                   "items": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "description": "ACLUserSpec defines a Valkey ACL user.",
+                    "type": ["object", "null"],
                     "properties": {
                       "channels": {
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "description": "Channel restrictions",
+                        "type": ["object", "null"],
                         "properties": {
-                          "patterns": {
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "description": "Pub/Sub channel patterns - maps to Valkey: &pattern",
-                            "items": {
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            }
-                          }
+                          "patterns": {"type": ["array", "null"], "items": {"type": ["string", "null"]}}
                         },
                         "additionalProperties": false
                       },
                       "commands": {
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "description": "Valkey command categories, commands, and subcommands restrictions for this user",
+                        "type": ["object", "null"],
                         "properties": {
-                          "allow": {
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "description": "Allowed commands for this user",
-                            "items": {
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            }
-                          },
-                          "deny": {
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "description": "Denied commands for this user",
-                            "items": {
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            }
-                          }
+                          "allow": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                          "deny": {"type": ["array", "null"], "items": {"type": ["string", "null"]}}
                         },
                         "additionalProperties": false
                       },
                       "keys": {
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "description": "Key restrictions",
+                        "type": ["object", "null"],
                         "properties": {
-                          "readOnly": {
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "description": "Keys restricted to read-only; maps to Valkey: %R~pattern",
-                            "items": {
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            }
-                          },
-                          "readWrite": {
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "description": "Keys on which this user can read, and write; maps to Valkey: ~pattern",
-                            "items": {
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            }
-                          },
-                          "writeOnly": {
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "description": "Keys restricted to write-only; maps to Valkey: %W~pattern",
-                            "items": {
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            }
-                          }
+                          "readOnly": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                          "readWrite": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                          "writeOnly": {"type": ["array", "null"], "items": {"type": ["string", "null"]}}
                         },
                         "additionalProperties": false
                       },
-                      "name": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "description": "Username"
-                      },
+                      "name": {"type": ["string", "null"]},
                       "password": {
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "description": "Password authentication; defaults to the passwords in the Secret <cluster>-users",
+                        "type": ["object", "null"],
                         "properties": {
                           "secret": {
-                            "type": [
-                              "object",
-                              "null"
-                            ],
-                            "description": "Reference information to a Secret containing user passwords",
+                            "type": ["object", "null"],
                             "properties": {
-                              "keys": {
-                                "type": [
-                                  "array",
-                                  "null"
-                                ],
-                                "description": "An array of keys inside the referencing Secret to find passwords; defaults to username\nValkey supports multiple passwords per user for rotation",
-                                "items": {
-                                  "type": [
-                                    "string",
-                                    "null"
-                                  ]
-                                }
-                              },
-                              "name": {
-                                "type": [
-                                  "string",
-                                  "null"
-                                ],
-                                "description": "Name of the referencing Secret; Defaults to clustername-users"
-                              }
+                              "keys": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                              "name": {"type": ["string", "null"]}
                             },
                             "additionalProperties": false
                           },
-                          "type": {
-                            "type": [
-                              "string",
-                              "null"
-                            ],
-                            "description": "How the user authenticates with a password",
-                            "enum": [
-                              "Secret",
-                              "Any",
-                              "Disabled",
-                              null
-                            ]
-                          }
+                          "type": {"type": ["string", "null"], "enum": ["Secret", "Any", "Disabled", null]}
                         },
                         "additionalProperties": false
                       },
-                      "permissions": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "description": "Raw ACL for (additional) permissions. Appended to anything generated."
-                      },
-                      "state": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "description": "Whether the user can authenticate",
-                        "enum": [
-                          "Enabled",
-                          "Disabled",
-                          null
-                        ]
-                      }
+                      "permissions": {"type": ["string", "null"]},
+                      "state": {"type": ["string", "null"], "enum": ["Enabled", "Disabled", null]}
                     },
                     "additionalProperties": false,
-                    "required": [
-                      "name"
-                    ]
+                    "required": ["name"]
                   }
                 }
               },
               "additionalProperties": false
             },
-            "config": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "Additional Valkey configuration parameters"
-            },
-            "containers": {
-              "type": [
-                "array",
-                "null"
-              ],
-              "description": "Additional containers or overrides for existing containers, applied using strategic merge patch"
-            },
+            "config": {"type": ["object", "null"]},
+            "containers": {"type": ["array", "null"]},
             "exporter": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "Metrics exporter options",
+              "type": ["object", "null"],
               "properties": {
-                "args": {
-                  "type": [
-                    "array",
-                    "null"
-                  ],
-                  "description": "Additional cmdline arguments passed to exporter sidecar container.",
-                  "items": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "enabled": {
-                  "type": [
-                    "boolean",
-                    "null"
-                  ],
-                  "description": "Enable or disable the exporter sidecar container. Unset means enabled\non a ValkeyCluster; a ValkeyNode runs the sidecar only on an explicit\ntrue, which the cluster controller propagates when enabled."
-                },
-                "image": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "Override the default exporter image"
-                },
-                "resources": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "Override resource requirements for the exporter container in each pod"
-                },
-                "securityContext": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "Override the SecurityContext applied to the exporter sidecar container."
-                }
+                "args": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                "enabled": {"type": ["boolean", "null"]},
+                "image": {"type": ["string", "null"]},
+                "resources": {"type": ["object", "null"]},
+                "securityContext": {"type": ["object", "null"]}
               },
               "additionalProperties": false
             },
-            "image": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "Override the default Valkey image"
-            },
-            "imagePullSecrets": {
-              "type": [
-                "array",
-                "null"
-              ],
-              "description": "ImagePullSecrets is a list of references to Secrets in the same namespace used for\npulling any of the images (Valkey server, metrics exporter, and any additional\ncontainers) from private registries."
-            },
+            "image": {"type": ["string", "null"]},
+            "imagePullSecrets": {"type": ["array", "null"]},
             "networking": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "Networking groups how clients and peers reach cluster nodes (TLS,\nin-cluster discovery announce, per-node Services, and later external access).",
+              "type": ["object", "null"],
               "properties": {
-                "clusterDomain": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "ClusterDomain is the DNS suffix kubelet publishes Service DNS under\n(kubelet --cluster-domain). Used when building Hostname announce FQDNs\nand the default TLS ServerName. Must match the cluster. Default cluster.local."
-                },
+                "clusterDomain": {"type": ["string", "null"]},
                 "discovery": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "Discovery configures in-cluster endpoint announcement after CLUSTER SLOTS.",
+                  "type": ["object", "null"],
                   "properties": {
-                    "preferredEndpointType": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "PreferredEndpointType selects IP (default) or Hostname announcement.\nHostname uses per-pod DNS under the cluster headless Service\n(<pod>.<headless>.<namespace>.svc.<clusterDomain>) and requires\nworkloadType StatefulSet (or the default).",
-                      "enum": [
-                        "IP",
-                        "Hostname",
-                        null
-                      ]
-                    }
+                    "preferredEndpointType": {"type": ["string", "null"], "enum": ["IP", "Hostname", null]}
                   },
                   "additionalProperties": false
                 },
-                "perNodeServices": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "PerNodeServices opts in to one ClusterIP Service per node.\nOmit it to create none. Each Service selects that one pod.\nAnnounce settings are unchanged.",
-                  "additionalProperties": false
-                },
+                "perNodeServices": {"type": ["object", "null"], "additionalProperties": false},
                 "tls": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "TLS configuration for the cluster.",
+                  "type": ["object", "null"],
                   "properties": {
                     "certificates": {
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "description": "Certificates holds the certificate slots used by the cluster.",
+                      "type": ["object", "null"],
                       "properties": {
                         "server": {
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "description": "Server is the node identity presented to clients and peers, and the\ntrust root for the cluster. The referenced secret must contain:\n\n- `ca.crt`: The certificate authority.\n- `tls.crt`: The certificate (or a chain).\n- `tls.key`: The private key to the first certificate in the certificate chain.",
-                          "properties": {
-                            "secretName": {
-                              "type": [
-                                "string",
-                                "null"
-                              ],
-                              "description": "SecretName is the name of the secret."
-                            }
-                          },
+                          "type": ["object", "null"],
+                          "properties": {"secretName": {"type": ["string", "null"]}},
                           "additionalProperties": false,
-                          "required": [
-                            "secretName"
-                          ]
+                          "required": ["secretName"]
                         }
                       },
                       "additionalProperties": false,
-                      "required": [
-                        "server"
-                      ]
+                      "required": ["server"]
                     },
                     "clientAuth": {
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "description": "ClientAuth configures client certificate authentication. When omitted,\nmode defaults to `Optional` and certificateUser defaults to `Disabled`.",
+                      "type": ["object", "null"],
                       "properties": {
                         "ca": {
-                          "type": [
-                            "array",
-                            "null"
-                          ],
-                          "description": "CA lists additional trust roots for verifying client certificates, for\nclients whose certificates are issued by a different CA than the server\ncertificate. Each entry names a Secret or a ConfigMap, and the key in it\nholding the roots (default `ca.crt`) as PEM certificates or a SPIFFE\ntrust bundle.\n\nThe operator merges the server secret's `ca.crt` with the roots under\neach entry's key, in list order and without duplicates, into the\noperator-managed `valkey-<cluster>-tls-trust` Secret, and nodes verify clients\nand peers against that bundle. The server root always stays in the\nbundle, since peers present the server certificate on the cluster bus\nand replication links.\n\nThe operator re-reads these sources on every reconcile, and nodes reload\na changed bundle live, without a restart. SPIRE's\nbundle ConfigMap can be referenced as is, with its key (`bundle.spiffe`\nor `bundle.crt`).",
+                          "type": ["array", "null"],
                           "items": {
-                            "type": [
-                              "object",
-                              "null"
-                            ],
-                            "description": "TrustSource references CA certificates held in a Secret or a ConfigMap.\nExactly one of secretName and configMapName must be set.",
+                            "type": ["object", "null"],
                             "properties": {
-                              "configMapName": {
-                                "type": [
-                                  "string",
-                                  "null"
-                                ],
-                                "description": "ConfigMapName is the name of a ConfigMap holding the roots, as SPIRE and\ntrust-manager publish bundles."
-                              },
-                              "key": {
-                                "type": [
-                                  "string",
-                                  "null"
-                                ],
-                                "description": "Key is the key holding the roots. Defaults to `ca.crt`. Its contents are\neither PEM certificates or a SPIFFE trust bundle (a JWK Set, as SPIRE\npublishes under `bundle.spiffe`); the operator tells them apart by their\ncontent and, for a SPIFFE bundle, uses the `x5c` certificate of every\nkey whose `use` is `x509-svid`."
-                              },
-                              "secretName": {
-                                "type": [
-                                  "string",
-                                  "null"
-                                ],
-                                "description": "SecretName is the name of a Secret holding the roots. The Secret type\ndoes not matter."
-                              }
+                              "configMapName": {"type": ["string", "null"]},
+                              "key": {"type": ["string", "null"]},
+                              "secretName": {"type": ["string", "null"]}
                             },
                             "additionalProperties": false
                           }
                         },
-                        "certificateUser": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "description": "CertificateUser configures how Valkey maps an authenticated client\ncertificate to an ACL user. Set to `CN` to use the certificate's Common Name\n(requires Valkey >= 9.0), or `URI` to use the first matching URI from the\ncertificate's Subject Alternative Name (SAN) (requires Valkey >= 9.1).\nDefaults to `Disabled`, which leaves the directive unset.",
-                          "enum": [
-                            "CN",
-                            "URI",
-                            "Disabled",
-                            null
-                          ]
-                        },
+                        "certificateUser": {"type": ["string", "null"], "enum": ["CN", "URI", "Disabled", null]},
                         "mode": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "description": "Mode controls whether clients must authenticate with a TLS certificate.\n`Required` enforces mTLS, `Optional` allows both authenticated and\nunauthenticated clients, and `Disabled` turns client certificate processing\noff entirely.\nDefaults to `Optional`.",
-                          "enum": [
-                            "Required",
-                            "Optional",
-                            "Disabled",
-                            null
-                          ]
+                          "type": ["string", "null"],
+                          "enum": ["Required", "Optional", "Disabled", null]
                         }
                       },
                       "additionalProperties": false
                     },
-                    "serverName": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "ServerName is the hostname used for TLS verification when the operator\nconnects to a node by pod IP. When unset, the operator uses\nvalkey-<name>.<namespace>.svc.<clusterDomain> (default cluster.local)."
-                    }
+                    "serverName": {"type": ["string", "null"]}
                   },
                   "additionalProperties": false,
-                  "required": [
-                    "certificates"
-                  ]
+                  "required": ["certificates"]
                 }
               },
               "additionalProperties": false
             },
             "persistence": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "Persistence defines durable storage that is propagated to each ValkeyNode.",
+              "type": ["object", "null"],
               "properties": {
-                "reclaimPolicy": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "ReclaimPolicy controls whether the managed PVC is retained or deleted when\nthe ValkeyNode is deleted. Defaults to Retain.",
-                  "enum": [
-                    "Retain",
-                    "Delete",
-                    null
-                  ]
-                },
-                "size": {
-                  "type": [
-                    "integer",
-                    "string",
-                    "null"
-                  ],
-                  "description": "Size is the requested PVC size."
-                },
-                "storageClassName": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "StorageClassName is the storage class to use for the PVC."
-                }
+                "reclaimPolicy": {"type": ["string", "null"], "enum": ["Retain", "Delete", null]},
+                "size": {"type": ["integer", "string", "null"]},
+                "storageClassName": {"type": ["string", "null"]}
               },
               "additionalProperties": false,
-              "required": [
-                "size"
-              ]
+              "required": ["size"]
             },
             "podDisruptionBudget": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "PodDisruptionBudget configures the operator-managed PodDisruptionBudget(s)\nfor this cluster. When unset, the operator applies the default (Cluster) mode.",
-              "properties": {
-                "mode": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "Mode selects the PDB strategy. Defaults to Cluster.",
-                  "enum": [
-                    "Cluster",
-                    "Disabled",
-                    null
-                  ]
-                }
-              },
+              "type": ["object", "null"],
+              "properties": {"mode": {"type": ["string", "null"], "enum": ["Cluster", "Disabled", null]}},
               "additionalProperties": false
             },
             "podMetadata": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "PodMetadata adds labels and annotations to every Valkey pod of the cluster.\nThey are not part of the workload selector, so they can be changed at any\ntime; a change rolls the pods. Keys the operator sets itself are rejected.",
-              "properties": {
-                "annotations": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "Annotations added to the object. Values have no format rule, but keys and\nvalues together are limited to 256 KiB less the operator's own annotation.\nKeys under valkey.io/ are reserved for the operator."
-                },
-                "labels": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "Labels added to the object. Keys under valkey.io/ and the\napp.kubernetes.io/ name, instance, component, part-of and managed-by keys\nare reserved for the operator."
-                }
-              },
+              "type": ["object", "null"],
+              "properties": {"annotations": {"type": ["object", "null"]}, "labels": {"type": ["object", "null"]}},
               "additionalProperties": false
             },
-            "podSecurityContext": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "Override the PodSecurityContext applied to each ValkeyNode pod of the cluster.\nWhen set, this overrides the default PodSecurityContext."
-            },
-            "replicas": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "description": "Deprecated: use replicasPerShard, which has the same meaning. A spec\ncannot set both. This field is removed in v1beta1.",
-              "minimum": 0
-            },
-            "replicasPerShard": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "description": "The number of replicas in each shard, in addition to its primary.",
-              "minimum": 0
-            },
-            "resources": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "Override resource requirements for the Valkey container in each pod"
-            },
+            "podSecurityContext": {"type": ["object", "null"]},
+            "replicas": {"type": ["integer", "null"], "minimum": 0},
+            "replicasPerShard": {"type": ["integer", "null"], "minimum": 0},
+            "resources": {"type": ["object", "null"]},
             "scheduling": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "Scheduling groups pod placement configuration (affinity, node selector,\ntolerations, topology spread constraints, priority class) for the\ncluster's pods.",
+              "type": ["object", "null"],
               "properties": {
-                "affinity": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "Affinity to apply to the pods. Kubernetes ANDs nodeAffinity with\nNodeSelector rather than one overriding the other: a node must satisfy\nboth for the pod to be scheduled there."
-                },
+                "affinity": {"type": ["object", "null"]},
                 "node": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "Node groups scheduling constraints on the node axis\n(topologyKey kubernetes.io/hostname). When unset, every node spread is\nDisabled and no scheduling primitives are emitted.",
+                  "type": ["object", "null"],
                   "properties": {
                     "spread": {
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "description": "Spread distributes the cluster's pods across nodes.",
+                      "type": ["object", "null"],
                       "properties": {
                         "pods": {
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "description": "Pods balances all of the cluster's pods across nodes, rendered as a\ntopology spread constraint. Defaults to Disabled when unset. Enabling this\nalongside an explicit primaries spread of the same strength is rejected\n(only one topology spread constraint per strength is permitted per node).",
+                          "type": ["object", "null"],
                           "properties": {
                             "mode": {
-                              "type": [
-                                "string",
-                                "null"
-                              ],
-                              "description": "Mode selects the strength of the constraint. When unset, the dimension's\ndocumented default applies.",
-                              "enum": [
-                                "Disabled",
-                                "Preferred",
-                                "Required",
-                                null
-                              ]
+                              "type": ["string", "null"],
+                              "enum": ["Disabled", "Preferred", "Required", null]
                             }
                           },
                           "additionalProperties": false
                         },
                         "primaries": {
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "description": "Primaries balances each shard's node-index-0 pod across nodes, rendered as\na topology spread constraint.\nDefaults to Disabled when unset.",
+                          "type": ["object", "null"],
                           "properties": {
                             "mode": {
-                              "type": [
-                                "string",
-                                "null"
-                              ],
-                              "description": "Mode selects the strength of the constraint. When unset, the dimension's\ndocumented default applies.",
-                              "enum": [
-                                "Disabled",
-                                "Preferred",
-                                "Required",
-                                null
-                              ]
+                              "type": ["string", "null"],
+                              "enum": ["Disabled", "Preferred", "Required", null]
                             }
                           },
                           "additionalProperties": false
                         },
                         "shard": {
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "description": "Shard keeps pods of the same shard on distinct nodes, rendered as pod\nanti-affinity. Defaults to Disabled when unset.",
+                          "type": ["object", "null"],
                           "properties": {
                             "mode": {
-                              "type": [
-                                "string",
-                                "null"
-                              ],
-                              "description": "Mode selects the strength of the constraint. When unset, the dimension's\ndocumented default applies.",
-                              "enum": [
-                                "Disabled",
-                                "Preferred",
-                                "Required",
-                                null
-                              ]
+                              "type": ["string", "null"],
+                              "enum": ["Disabled", "Preferred", "Required", null]
                             }
                           },
                           "additionalProperties": false
@@ -778,139 +251,48 @@
                   },
                   "additionalProperties": false
                 },
-                "nodeSelector": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "NodeSelector to apply to the pods"
-                },
-                "priorityClassName": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "PriorityClassName is the name of an existing PriorityClass applied to\nevery pod in the cluster, protecting them from eviction under resource\npressure. Pod priority is a scheduling concern (preemption, scheduling-queue\norder), so it lives alongside the other placement fields."
-                },
-                "tolerations": {
-                  "type": [
-                    "array",
-                    "null"
-                  ],
-                  "description": "Tolerations to apply to the pods"
-                },
-                "topologySpreadConstraints": {
-                  "type": [
-                    "array",
-                    "null"
-                  ],
-                  "description": "TopologySpreadConstraints to apply to the pods"
-                },
+                "nodeSelector": {"type": ["object", "null"]},
+                "priorityClassName": {"type": ["string", "null"]},
+                "tolerations": {"type": ["array", "null"]},
+                "topologySpreadConstraints": {"type": ["array", "null"]},
                 "zone": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "description": "Zone groups scheduling constraints on the zone axis\n(topologyKey topology.kubernetes.io/zone). When unset, every zone spread is\nDisabled and no scheduling primitives are emitted.",
+                  "type": ["object", "null"],
                   "properties": {
                     "pinning": {
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "description": "Pinning assigns every pod a deterministic zone by round-robin over an\nordered zone list. Mutually exclusive with any non-Disabled Spread field\non this axis: pinning already fixes each pod's zone, so a zone spread\nconstraint can only contradict it. Unset means no pinning.",
-                      "properties": {
-                        "zones": {
-                          "type": [
-                            "array",
-                            "null"
-                          ],
-                          "description": "Zones is the ordered round-robin sequence. A pod's zone is\nzones[(shardIndex + nodeIndex) % len(zones)], so each shard's pods walk\nthe list from a different starting point, and while there are at least\nas many zones as shards, primaries land in distinct zones as a side\neffect. When replicasPerShard+1 exceeds the zone count, some members of\na shard necessarily share a zone.\n\nAdding shards or replicas never moves an existing pod, because a pod's\nindices never change. Changing this list would move nearly all of them,\nso it is immutable while set: remove pinning, reconcile, then re-add it\nwith the new sequence. On a cluster with persistence, note that zonal\nvolumes cannot follow a pod to a new zone.\n\nThe list is ordered, so it is atomic rather than a set: a set list is\nunordered under server-side apply, which would scramble the assignment.\nUniqueness is enforced by CEL for the same reason.\n\nEach entry must be a valid Kubernetes label value, because it is rendered\nas the value of a topology.kubernetes.io/zone nodeSelector entry. Without\nthat constraint an entry such as \"eu-west-1a!\" is accepted here and then\nrejected when the StatefulSet is created, surfacing on the ValkeyNode\nrather than on the ValkeyCluster the user edited.",
-                          "items": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          }
-                        }
-                      },
+                      "type": ["object", "null"],
+                      "properties": {"zones": {"type": ["array", "null"], "items": {"type": ["string", "null"]}}},
                       "additionalProperties": false,
-                      "required": [
-                        "zones"
-                      ]
+                      "required": ["zones"]
                     },
                     "spread": {
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "description": "Spread distributes the cluster's pods across zones.",
+                      "type": ["object", "null"],
                       "properties": {
                         "pods": {
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "description": "Pods balances all of the cluster's pods across zones, rendered as a\ntopology spread constraint. Defaults to Disabled when unset. Enabling this\nalongside an explicit shard or primaries spread of the same strength is\nrejected (only one topology spread constraint per strength is permitted per\nzone).",
+                          "type": ["object", "null"],
                           "properties": {
                             "mode": {
-                              "type": [
-                                "string",
-                                "null"
-                              ],
-                              "description": "Mode selects the strength of the constraint. When unset, the dimension's\ndocumented default applies.",
-                              "enum": [
-                                "Disabled",
-                                "Preferred",
-                                "Required",
-                                null
-                              ]
+                              "type": ["string", "null"],
+                              "enum": ["Disabled", "Preferred", "Required", null]
                             }
                           },
                           "additionalProperties": false
                         },
                         "primaries": {
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "description": "Primaries balances each shard's node-index-0 pod across zones, rendered as\na topology spread constraint. Defaults to Disabled when unset.",
+                          "type": ["object", "null"],
                           "properties": {
                             "mode": {
-                              "type": [
-                                "string",
-                                "null"
-                              ],
-                              "description": "Mode selects the strength of the constraint. When unset, the dimension's\ndocumented default applies.",
-                              "enum": [
-                                "Disabled",
-                                "Preferred",
-                                "Required",
-                                null
-                              ]
+                              "type": ["string", "null"],
+                              "enum": ["Disabled", "Preferred", "Required", null]
                             }
                           },
                           "additionalProperties": false
                         },
                         "shard": {
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "description": "Shard balances the pods of each shard across zones, rendered as a topology\nspread constraint. Defaults to Disabled when unset.",
+                          "type": ["object", "null"],
                           "properties": {
                             "mode": {
-                              "type": [
-                                "string",
-                                "null"
-                              ],
-                              "description": "Mode selects the strength of the constraint. When unset, the dimension's\ndocumented default applies.",
-                              "enum": [
-                                "Disabled",
-                                "Preferred",
-                                "Required",
-                                null
-                              ]
+                              "type": ["string", "null"],
+                              "enum": ["Disabled", "Preferred", "Required", null]
                             }
                           },
                           "additionalProperties": false
@@ -924,316 +306,92 @@
               },
               "additionalProperties": false
             },
-            "serviceAccountName": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "ServiceAccountName specifies the name of the ServiceAccount to use for\nValkeyCluster pods. If unset, the namespace's default ServiceAccount is used."
-            },
-            "shards": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "description": "The number of shards groups. Each shard group contains one primary and N replicas.",
-              "minimum": 1
-            },
-            "terminationGracePeriodSeconds": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "description": "TerminationGracePeriodSeconds is the pod termination grace period for the\nValkey nodes. It must give the graceful CLUSTER FAILOVER triggered on\nSIGTERM (shutdown-on-sigterm) enough time to hand the shard off to a\nreplica before SIGKILL. When unset, the operator derives a safe default\nfrom cluster-manual-failover-timeout. A value below that derived minimum\nis honoured but reported as a warning.",
-              "minimum": 1
-            },
+            "serviceAccountName": {"type": ["string", "null"]},
+            "shards": {"type": ["integer", "null"], "minimum": 1},
+            "terminationGracePeriodSeconds": {"type": ["integer", "null"], "minimum": 1},
             "users": {
-              "type": [
-                "array",
-                "null"
-              ],
-              "description": "Valkey users managed by the operator.\n\nDeprecated: use spec.acl.users; removed in v1beta1.",
+              "type": ["array", "null"],
               "items": {
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "description": "An UserAclSpec contains user, authorization, and permissions-related configurations.\nIt is the legacy spec.users entry, replaced by ACLUserSpec and removed in v1beta1.",
+                "type": ["object", "null"],
                 "properties": {
                   "channels": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "description": "Channel restrictions",
-                    "properties": {
-                      "patterns": {
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "description": "Pub/Sub channel patterns - maps to Valkey: &pattern",
-                        "items": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      }
-                    },
+                    "type": ["object", "null"],
+                    "properties": {"patterns": {"type": ["array", "null"], "items": {"type": ["string", "null"]}}},
                     "additionalProperties": false
                   },
                   "commands": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "description": "Valkey command categories, commands, and subcommands restrictions for this user",
+                    "type": ["object", "null"],
                     "properties": {
-                      "allow": {
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "description": "Allowed commands for this user",
-                        "items": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "deny": {
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "description": "Denied commands for this user",
-                        "items": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      }
+                      "allow": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                      "deny": {"type": ["array", "null"], "items": {"type": ["string", "null"]}}
                     },
                     "additionalProperties": false
                   },
-                  "enabled": {
-                    "type": [
-                      "boolean",
-                      "null"
-                    ],
-                    "description": "If the user is enabled or not"
-                  },
+                  "enabled": {"type": ["boolean", "null"]},
                   "keys": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "description": "Key restrictions",
+                    "type": ["object", "null"],
                     "properties": {
-                      "readOnly": {
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "description": "Keys restricted to read-only; maps to Valkey: %R~pattern",
-                        "items": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "readWrite": {
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "description": "Keys on which this user can read, and write; maps to Valkey: ~pattern",
-                        "items": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "writeOnly": {
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "description": "Keys restricted to write-only; maps to Valkey: %W~pattern",
-                        "items": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      }
+                      "readOnly": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                      "readWrite": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                      "writeOnly": {"type": ["array", "null"], "items": {"type": ["string", "null"]}}
                     },
                     "additionalProperties": false
                   },
-                  "name": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "description": "Username"
-                  },
-                  "nopass": {
-                    "type": [
-                      "boolean",
-                      "null"
-                    ],
-                    "description": "Do not apply a password to this user"
-                  },
+                  "name": {"type": ["string", "null"]},
+                  "nopass": {"type": ["boolean", "null"]},
                   "passwordSecret": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "description": "Reference information to a Secret containing user passwords",
+                    "type": ["object", "null"],
                     "properties": {
-                      "keys": {
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "description": "An array of keys inside the referencing Secret to find passwords; defaults to username\nValkey supports multiple passwords per user for rotation",
-                        "items": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "name": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "description": "Name of the referencing Secret; Defaults to clustername-users"
-                      }
+                      "keys": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                      "name": {"type": ["string", "null"]}
                     },
                     "additionalProperties": false
                   },
-                  "permissions": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "description": "Raw ACL for (additional) permissions. Appended to anything generated."
-                  },
-                  "resetpass": {
-                    "type": [
-                      "boolean",
-                      "null"
-                    ],
-                    "description": "Apply the resetpass flag to this user"
-                  }
+                  "permissions": {"type": ["string", "null"]},
+                  "resetpass": {"type": ["boolean", "null"]}
                 },
                 "additionalProperties": false,
-                "required": [
-                  "name"
-                ]
+                "required": ["name"]
               }
             },
-            "workloadType": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "WorkloadType specifies whether ValkeyNodes create StatefulSets or Deployments.",
-              "enum": [
-                "StatefulSet",
-                "Deployment",
-                null
-              ]
-            }
+            "workloadType": {"type": ["string", "null"], "enum": ["StatefulSet", "Deployment", null]}
           },
           "additionalProperties": false,
-          "required": [
-            "shards"
-          ]
+          "required": ["shards"]
         },
         "additionalSpec": {
           "type": "object",
           "additionalProperties": true,
           "description": "ValkeyCluster.spec fields not covered by cluster.spec, deep-merged over it (passed through tpl)."
         },
-        "additionalSpecString": {
-          "type": "string"
-        }
+        "additionalSpecString": {"type": "string"}
       }
     },
     "networkPolicy": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "operator": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "allowExternal": {
-          "type": "boolean"
-        },
-        "allowExternalEgress": {
-          "type": "boolean"
-        },
-        "dnsNamespace": {
-          "type": "string"
-        },
-        "extraIngress": {
-          "type": "array"
-        },
-        "extraEgress": {
-          "type": "array"
-        },
-        "labels": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "annotations": {
-          "type": "object",
-          "additionalProperties": true
-        }
+        "enabled": {"type": "boolean"},
+        "operator": {"type": "object", "additionalProperties": true},
+        "allowExternal": {"type": "boolean"},
+        "allowExternalEgress": {"type": "boolean"},
+        "dnsNamespace": {"type": "string"},
+        "extraIngress": {"type": "array"},
+        "extraEgress": {"type": "array"},
+        "labels": {"type": "object", "additionalProperties": true},
+        "annotations": {"type": "object", "additionalProperties": true}
       }
     },
     "usersSecret": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "create": {
-          "type": "boolean"
-        },
-        "name": {
-          "type": "string"
-        },
-        "annotations": {
-          "type": "object"
-        },
-        "passwords": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
+        "create": {"type": "boolean"},
+        "name": {"type": "string"},
+        "annotations": {"type": "object"},
+        "passwords": {"type": "object", "additionalProperties": {"type": "string"}}
       }
     },
-    "extraObjects": {
-      "type": "object",
-      "additionalProperties": {
-        "type": [
-          "object",
-          "string",
-          "null"
-        ]
-      }
-    }
+    "extraObjects": {"type": "object", "additionalProperties": {"type": ["object", "string", "null"]}}
   }
 }
