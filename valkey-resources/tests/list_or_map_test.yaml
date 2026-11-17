@@ -37,6 +37,20 @@ tests:
             - name: RETRIES
               value: "3"
 
+  - it: renders whole numbers from a values file without an exponent
+    values:
+      - values/list-or-map-env-numbers.yaml
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: BIG
+              value: "12345678"
+            - name: MAXMEM
+              value: "1000000"
+            - name: RATIO
+              value: "0.5"
+
   - it: skips null entries
     set:
       cluster.spec.containers.server.env:
@@ -182,6 +196,30 @@ tests:
       - equal:
           path: spec.acl.users
           value:
+            - name: ops
+
+  - it: a map in additionalSpec replaces a list
+    set:
+      cluster.spec.acl.users:
+        - name: app
+      cluster.additionalSpec.acl.users:
+        ops: {}
+    asserts:
+      - equal:
+          path: spec.acl.users
+          value:
+            - name: ops
+
+  - it: merges a map from additionalSpecString
+    set:
+      cluster.spec.acl.users:
+        app: {}
+      cluster.additionalSpecString: "acl:\n  users:\n    ops: {}\n"
+    asserts:
+      - equal:
+          path: spec.acl.users
+          value:
+            - name: app
             - name: ops
 
   - it: overrides one entry across values files

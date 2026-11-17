@@ -101,7 +101,9 @@ nothing. A missing key or a list stays as it is. The list is sorted by map key.
 A null entry is skipped, an empty one is kept. With "named", a map entry is
 copied and gets name: <key> unless it has a non-empty name. A non-map entry is
 used as it is, unless "scalarKey" is set: then it becomes
-{name: <key>, <scalarKey>: <value as string>}.
+{name: <key>, <scalarKey>: <value as string>}. Helm reads numbers in values
+files as float64, so a whole number is converted to int64 first: 1000000
+renders as "1000000", not "1e+06".
 Call with (dict "parent" <map> "key" "env" "named" true "scalarKey" "value").
 */}}
 {{- define "valkey-resources.listOrMap" -}}
@@ -118,6 +120,9 @@ Call with (dict "parent" <map> "key" "env" "named" true "scalarKey" "value").
 {{- $_ := set $entry "name" $name }}
 {{- end }}
 {{- else if and $.named $.scalarKey (not (kindIs "map" $entry)) }}
+{{- if and (kindIs "float64" $entry) (eq $entry (float64 (int64 $entry))) }}
+{{- $entry = int64 $entry }}
+{{- end }}
 {{- $entry = dict "name" $name $.scalarKey (toString $entry) }}
 {{- end }}
 {{- $list = append $list $entry }}
