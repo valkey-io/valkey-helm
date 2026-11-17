@@ -95,7 +95,6 @@ cluster:
   # templates. Helm validates values against the schema before tpl runs, so an
   # enum, integer or boolean field cannot hold a template: set it through
   # cluster.additionalSpecString instead. Example:
-  #   image: "valkey/valkey:{{ .Chart.AppVersion }}"
   #   networking.tls.certificates.server.secretName: "{{ .Release.Name }}-tls"
   # API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
   spec:
@@ -118,7 +117,8 @@ cluster:
     # cannot set both. Removed in v1beta1.
     # replicas: 1
 
-    # Override the default Valkey image.
+    # Valkey image, used as written. Overrides cluster.image and
+    # global.imageRegistry.
     # image: valkey/valkey:9.0.0
 
     # Durable storage for each ValkeyNode. Requires workloadType StatefulSet.
@@ -152,8 +152,9 @@ cluster:
     # exporter:
     #   # Enable or disable the sidecar. Enabled when unset.
     #   enabled: true
-    #   # Override the default exporter image.
-    #   image: oliver006/redis_exporter:v1.67.0
+    #   # Exporter image, used as written. Overrides cluster.exporter.image
+    #   # and global.imageRegistry.
+    #   image: oliver006/redis_exporter:v1.88.0
     #   # Additional command-line arguments for the exporter container.
     #   args:
     #     - --include-system-metrics
