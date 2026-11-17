@@ -13,142 +13,15 @@ metadata:
     {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
 {{- $spec := deepCopy .Values.cluster.spec }}
-{{- include "valkey-resources.deepMerge" (dict "dst" $spec "src" (deepCopy (.Values.cluster.additionalSpec | default dict))) }}
-{{- if .Values.cluster.additionalSpecString }}
-{{- $extra := fromYaml (tpl .Values.cluster.additionalSpecString .) }}
-{{- if hasKey $extra "Error" }}
-{{- fail (printf "cluster.additionalSpecString is not valid YAML: %s" $extra.Error) }}
-{{- end }}
-{{- include "valkey-resources.deepMerge" (dict "dst" $spec "src" $extra) }}
-{{- end }}
-{{- /* Fields that take a list also take a map; convert the maps to the CRD's list form */}}
-{{- include "valkey-resources.listOrMap" (dict "parent" $spec "key" "containers" "named" true) }}
-{{- range $container := ($spec.containers | default list) }}
-{{- if kindIs "map" $container }}
-{{- include "valkey-resources.listOrMap" (dict "parent" $container "key" "env" "named" true "scalarKey" "value") }}
-{{- end }}
-{{- end }}
-{{- include "valkey-resources.listOrMap" (dict "parent" $spec "key" "imagePullSecrets" "named" true) }}
-{{- if kindIs "map" $spec.acl }}
-{{- include "valkey-resources.listOrMap" (dict "parent" $spec.acl "key" "users" "named" true) }}
-{{- end }}
-{{- if kindIs "map" $spec.scheduling }}
-{{- include "valkey-resources.listOrMap" (dict "parent" $spec.scheduling "key" "tolerations") }}
-{{- include "valkey-resources.listOrMap" (dict "parent" $spec.scheduling "key" "topologySpreadConstraints") }}
-{{- end }}
-{{- $tls := ($spec.networking | default dict).tls }}
-{{- if kindIs "map" $tls }}
-{{- if kindIs "map" $tls.clientAuth }}
-{{- include "valkey-resources.listOrMap" (dict "parent" $tls.clientAuth "key" "ca") }}
-{{- end }}
-{{- end }}
-{{- /* Pin the images so an operator upgrade does not change them; cluster.spec and additionalSpec win */}}
-{{- if and (kindIs "map" .Values.cluster.image) .Values.cluster.image (not $spec.image) }}
-{{- $_ := set $spec "image" (include "valkey-resources.image" (dict "image" .Values.cluster.image "global" .Values.global "path" "cluster.image")) }}
-{{- end }}
-{{- $exporterImage := (.Values.cluster.exporter | default dict).image }}
-{{- if and (kindIs "map" $exporterImage) $exporterImage }}
-{{- $exporter := $spec.exporter }}
-{{- if not (kindIs "map" $exporter) }}
-{{- $exporter = dict }}
-{{- end }}
-{{- if not $exporter.image }}
-{{- $_ := set $exporter "image" (include "valkey-resources.image" (dict "image" $exporterImage "global" .Values.global "path" "cluster.exporter.image")) }}
-{{- $_ := set $spec "exporter" $exporter }}
-{{- end }}
-{{- end }}
-{{- /* global.imagePullSecrets adds to the cluster's own list; a name already there is kept once */}}
-{{- $globalSecrets := ((.Values.global | default dict).imagePullSecrets | default list) }}
-{{- if $globalSecrets }}
-{{- $secrets := list }}
-{{- if kindIs "slice" $spec.imagePullSecrets }}
-{{- $secrets = $spec.imagePullSecrets }}
-{{- end }}
-{{- $have := dict }}
-{{- range $secret := $secrets }}
-{{- if kindIs "map" $secret }}
-{{- $_ := set $have (toString $secret.name) true }}
-{{- end }}
-{{- end }}
-{{- range $secret := $globalSecrets }}
-{{- $entry := ternary $secret (dict "name" $secret) (kindIs "map" $secret) }}
-{{- if not (hasKey $have (toString $entry.name)) }}
-{{- $secrets = append $secrets $entry }}
-{{- $_ := set $have (toString $entry.name) true }}
-{{- end }}
-{{- end }}
-{{- $_ := set $spec "imagePullSecrets" $secrets }}
-{{- end }}
-{{- /* ValkeyCluster has no pull policy field; the containers patch reaches the operator's containers by name */}}
-{{- $pullPolicies := list (list "server" ((.Values.cluster.image | default dict).pullPolicy | default "")) (list "metrics-exporter" (((.Values.cluster.exporter | default dict).image | default dict).pullPolicy | default "")) }}
-{{- range $pair := $pullPolicies }}
-{{- $containerName := index $pair 0 }}
-{{- $policy := index $pair 1 }}
-{{- /* A disabled exporter has no base container, so a patch entry for it would become an image-less container */}}
-{{- $exporterOff := and (eq $containerName "metrics-exporter") (kindIs "map" $spec.exporter) (kindIs "bool" $spec.exporter.enabled) (not $spec.exporter.enabled) }}
-{{- if and $policy (not $exporterOff) }}
-{{- $containers := list }}
-{{- if kindIs "slice" $spec.containers }}
-{{- $containers = $spec.containers }}
-{{- end }}
-{{- $found := false }}
-{{- range $container := $containers }}
-{{- if and (kindIs "map" $container) (eq (toString $container.name) $containerName) }}
-{{- $found = true }}
-{{- if not $container.imagePullPolicy }}
-{{- $_ := set $container "imagePullPolicy" $policy }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- if not $found }}
-{{- $containers = append $containers (dict "name" $containerName "imagePullPolicy" $policy) }}
-{{- end }}
-{{- $_ := set $spec "containers" $containers }}
-{{- end }}
-{{- end }}
-{{- /* null means unset: it drops a value reused from an earlier release and lets the default below apply */}}
-{{- range $field := list "replicas" "replicasPerShard" }}
-{{- if and (hasKey $spec $field) (kindIs "invalid" (get $spec $field)) }}
-{{- $_ := unset $spec $field }}
-{{- end }}
-{{- end }}
-{{- /* Without either field the operator runs no replicas */}}
-{{- if not (or (hasKey $spec "replicas") (hasKey $spec "replicasPerShard")) }}
-{{- $_ := set $spec "replicasPerShard" 1 }}
-{{- end }}
-{{- if and (or .Values.serviceAccount.create .Values.serviceAccount.name) (not (hasKey $spec "serviceAccountName")) }}
-{{- $_ := set $spec "serviceAccountName" (include "valkey-resources.serviceAccountName" .) }}
-{{- else if and .Values.serviceAccount.create (ne (tpl (toString $spec.serviceAccountName) .) (include "valkey-resources.serviceAccountName" .)) }}
-{{- fail (printf "cluster.spec.serviceAccountName is %q, so the ServiceAccount %q that serviceAccount.create renders would go unused: remove one of them, or set serviceAccount.name to match" (tpl (toString $spec.serviceAccountName) .) (include "valkey-resources.serviceAccountName" .)) }}
-{{- end }}
-{{- if .Values.usersSecret.create }}
-{{- $secretName := include "valkey-resources.usersSecretName" . }}
-{{- $users := list }}
-{{- range $user := ($spec.users | default list) }}
-{{- $user = deepCopy $user }}
-{{- /* The operator reads no password for these users */}}
-{{- if not (or $user.nopass $user.resetpass (and (kindIs "bool" $user.enabled) (not $user.enabled))) }}
-{{- $ref := deepCopy (default dict $user.passwordSecret) }}
-{{- $refName := tpl (toString (default "" $ref.name)) $ }}
-{{- if or (eq $refName "") (eq $refName $secretName) }}
-{{- if and $.Values.usersSecret.name (eq $refName "") }}
-{{- $_ := set $ref "name" $secretName }}
-{{- $_ := set $user "passwordSecret" $ref }}
-{{- end }}
-{{- $userName := tpl (toString $user.name) $ }}
-{{- range $key := (default (list $userName) $ref.keys) }}
-{{- $key = tpl (toString $key) $ }}
-{{- if not (hasKey $.Values.usersSecret.passwords $key) }}
-{{- fail (printf "cluster.spec.users %q reads password key %q, but usersSecret.passwords has no entry for it" $userName $key) }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- $users = append $users $user }}
-{{- end }}
-{{- if $spec.users }}
-{{- $_ := set $spec "users" $users }}
-{{- end }}
-{{- end }}
+{{- $ctx := dict "spec" $spec "root" . }}
+{{- /* Order matters: see templates/_valkeycluster.tpl */}}
+{{- include "valkey-resources.spec.additional" $ctx }}
+{{- include "valkey-resources.spec.mapsToLists" $ctx }}
+{{- include "valkey-resources.spec.images" $ctx }}
+{{- include "valkey-resources.spec.pullSecrets" $ctx }}
+{{- include "valkey-resources.spec.pullPolicies" $ctx }}
+{{- include "valkey-resources.spec.replicas" $ctx }}
+{{- include "valkey-resources.spec.serviceAccount" $ctx }}
+{{- include "valkey-resources.spec.usersSecret" $ctx }}
 spec:
   {{- tpl (toYaml $spec) . | nindent 2 }}

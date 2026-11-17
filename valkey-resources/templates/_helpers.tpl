@@ -96,19 +96,26 @@ else replaces, including false, 0, "" and lists, which mergeOverwrite would skip
 {{- end }}
 
 {{/*
-Convert dict "parent" key "key" from a map to a list, in place, and output
-nothing. A missing key or a list stays as it is. The list is sorted by map key.
+Convert the value at "path" under dict "parent" from a map to a list, in
+place, and output nothing. A missing key, a list, or a path through something
+that is not a map stays as it is. The list is sorted by map key.
 A null entry is skipped, an empty one is kept. With "named", a map entry is
 copied and gets name: <key> unless it has a non-empty name. A non-map entry is
 used as it is, unless "scalarKey" is set: then it becomes
 {name: <key>, <scalarKey>: <value as string>}. Helm reads numbers in values
 files as float64, so a whole number is converted to int64 first: 1000000
 renders as "1000000", not "1e+06".
-Call with (dict "parent" <map> "key" "env" "named" true "scalarKey" "value").
+Call with (dict "parent" <map> "path" (list "acl" "users") "named" true), or
+add "scalarKey" "value" for env.
 */}}
 {{- define "valkey-resources.listOrMap" -}}
 {{- $parent := .parent }}
-{{- $value := get $parent .key }}
+{{- range $step := initial .path }}
+{{- $next := get $parent $step }}
+{{- $parent = ternary $next dict (kindIs "map" $next) }}
+{{- end }}
+{{- $key := last .path }}
+{{- $value := get $parent $key }}
 {{- if kindIs "map" $value }}
 {{- $list := list }}
 {{- range $name := keys $value | sortAlpha }}
@@ -128,7 +135,7 @@ Call with (dict "parent" <map> "key" "env" "named" true "scalarKey" "value").
 {{- $list = append $list $entry }}
 {{- end }}
 {{- end }}
-{{- $_ := set $parent .key $list }}
+{{- $_ := set $parent $key $list }}
 {{- end }}
 {{- end }}
 
