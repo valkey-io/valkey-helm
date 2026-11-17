@@ -34,6 +34,7 @@ helm install my-cluster valkey/valkey-resources -n valkey \
 | [users-secret.yaml](users-secret.yaml) | ACL users with a chart-rendered users Secret |
 | [network-policy.yaml](network-policy.yaml) | NetworkPolicy with client and Prometheus rules in `extraIngress` |
 | [additional-spec.yaml](additional-spec.yaml) | `cluster.additionalSpec` for a CRD field newer than the chart |
+| [private-registry.yaml](private-registry.yaml) | `global.imageRegistry` for the Valkey and exporter images |
 
 ## Notes
 

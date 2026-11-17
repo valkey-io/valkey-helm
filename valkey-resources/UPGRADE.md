@@ -36,6 +36,28 @@ cluster:
 
 The rendered spec then passes through `tpl` a second time with the rest of the spec, so a literal `{{` in `additionalSpecString` needs escaping twice.
 
+### Images in the ValkeyCluster
+
+**What changed:** the chart now renders `spec.image` and `spec.exporter.image` from `cluster.image` and `cluster.exporter.image`. Before, both were empty and the operator used its default images.
+
+**Who is affected:**
+
+- With the valkey-operator chart's default images (`valkey/valkey:9.0.0` and `oliver006/redis_exporter:v1.88.0`), nothing rolls. The chart defaults produce the same strings.
+- With other operator default images, the new `spec.image` differs from what the pods run, and the pods roll. Before upgrading, set `cluster.image` and `cluster.exporter.image` to the images the cluster runs now.
+- Releases upgraded with `helm upgrade --reuse-values` keep the old behaviour: `cluster.image` is absent, so no `spec.image` is rendered. Add `cluster.image` to opt in.
+
+**How to configure:**
+
+```yaml
+cluster:
+  image:
+    repository: valkey/valkey
+    tag: "8.1.0"
+  exporter:
+    image:
+      tag: v1.80.0
+```
+
 ## From 0.4.x
 
 ### Objects named after the release

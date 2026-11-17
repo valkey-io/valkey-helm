@@ -12,6 +12,8 @@
 
 - `cluster.additionalSpec` is deep-merged over `cluster.spec`, and `cluster.additionalSpecString` (a string rendered with `tpl` and parsed as YAML) over that. Maps merge, lists replace, and the escape hatch wins, including `false`, `0`, `""` and `[]`. `null` deletes the key. The chart's own logic (`replicasPerShard` default, `serviceAccountName`, `usersSecret`) runs on the merged result. See [`examples/additional-spec.yaml`](examples/additional-spec.yaml).
 - `values.yaml` documents every ValkeyCluster field as commented-out YAML.
+- `cluster.image` and `cluster.exporter.image` (`registry`, `repository`, `tag`, `sha`) set `spec.image` and `spec.exporter.image`, rendered as `[registry/]repository[:tag][@sha256:sha]`. The defaults are `valkey/valkey:9.0.0` and `oliver006/redis_exporter:v1.88.0`, the images in the operator chart's `manager.defaultImages`. `global.imageRegistry` replaces the registry of both. A non-empty `cluster.spec.image` or `cluster.spec.exporter.image` wins over these values and over `global.imageRegistry`.
+- A chart release that bumps the default image tag upgrades Valkey for users who do not set `cluster.image.tag`.
 
 ## 0.6.0
 

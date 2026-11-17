@@ -112,6 +112,36 @@ Maps merge and lists replace. The escape hatch wins on conflict, including `fals
 | `fullnameOverride` | ValkeyCluster name | release name |
 | `nameOverride` | `app.kubernetes.io/name` label | chart name |
 
+### Images
+
+The chart sets `spec.image` and `spec.exporter.image` on the ValkeyCluster. Each image is built from four parts:
+
+| Value | Default (Valkey) | Default (exporter) |
+|---|---|---|
+| `cluster.image.registry` / `cluster.exporter.image.registry` | `""` | `""` |
+| `cluster.image.repository` / `cluster.exporter.image.repository` | `valkey/valkey` | `oliver006/redis_exporter` |
+| `cluster.image.tag` / `cluster.exporter.image.tag` | `9.0.0` | `v1.88.0` |
+| `cluster.image.sha` / `cluster.exporter.image.sha` | `""` | `""` |
+
+The parts render as `[registry/]repository[:tag][@sha256:sha]`. An empty part is left out. A `sha` with or without the `sha256:` prefix is accepted. A render with neither `tag` nor `sha` fails.
+
+The registries default to empty so the string matches the images in the valkey-operator chart's `manager.defaultImages` (`valkey/valkey:9.0.0`). Adding `docker.io/` changes the string and rolls the pods.
+
+`global.imageRegistry` replaces the registry of both images:
+
+```yaml
+global:
+  imageRegistry: registry.example.internal
+```
+
+This renders `registry.example.internal/valkey/valkey:9.0.0`. See [`examples/private-registry.yaml`](examples/private-registry.yaml).
+
+A non-empty `cluster.spec.image` or `cluster.spec.exporter.image` (or the same key in `cluster.additionalSpec`) is used as written. `global.imageRegistry` does not apply to it. An empty string counts as unset.
+
+The operator falls back to its own default images (`--default-valkey-image`, `--default-exporter-image`) when `spec.image` is empty. Pinning the image in each ValkeyCluster means an operator upgrade does not change a cluster's Valkey version, so the operator and each cluster upgrade separately.
+
+An image pull policy is not available yet.
+
 ### Naming
 
 The ValkeyCluster is named after the release, or `fullnameOverride` when set. The operator prefixes what it creates with `valkey-`, so `helm install cache ...` gives the ValkeyCluster `cache`, the headless Service `valkey-cache` and pods `valkey-cache-<shard>-<node>-0`. The other objects this chart renders use the same name.
@@ -269,6 +299,8 @@ See [`examples/extra-objects.yaml`](examples/extra-objects.yaml).
 ## Updating the CRD schema
 
 `values.schema.json` is maintained by hand. When `appVersion` changes, compare the new `valkeyclusters` CRD (`valkey-operator/crds/valkey.io_valkeyclusters.yaml`) with the `cluster.spec` part of the schema, and apply each added, removed or changed field to both the schema and the commented listing in `values.yaml`. Follow the existing rules: every type also allows `null`, enums list `null`, operator-owned objects set `"additionalProperties": false`, and Kubernetes types embedded in the spec (`resources`, `containers`, `imagePullSecrets`, `podSecurityContext`, `exporter.resources`, `exporter.securityContext`, `scheduling.affinity`, `scheduling.tolerations`, `scheduling.topologySpreadConstraints`, `scheduling.nodeSelector`, `podMetadata.labels`, `podMetadata.annotations`, `config`) stay open objects or arrays. Leave out the CRD's `pattern`s, because Helm validates templated strings before `tpl` renders them.
+
+When the `valkey-operator` chart's `manager.defaultImages` changes, decide whether to bump `cluster.image` and `cluster.exporter.image` to match. A release that raises the default tag upgrades Valkey for every user who does not pin it.
 
 ## Uninstall
 
