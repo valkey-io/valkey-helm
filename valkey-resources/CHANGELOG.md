@@ -5,7 +5,7 @@
 ### Changed
 
 - **Breaking:** `cluster.spec` is validated against the ValkeyCluster CRD at the chart's `appVersion` (v0.9.0). A key the CRD does not have, at any level the operator owns, now fails the render with a schema error instead of being pruned by the API server. Move CRD fields newer than the chart to `cluster.additionalSpec`. A templated string on a field typed as integer, boolean or enum also fails now, because validation runs before `tpl`: set that field through `additionalSpec` or `additionalSpecString`. Values that use only v0.9.0 fields render byte-identical to 0.6.0. See [UPGRADE.md](UPGRADE.md).
-- `cluster` accepts only `annotations`, `labels`, `spec`, `additionalSpec` and `additionalSpecString`.
+- `cluster` accepts only `annotations`, `labels`, `image`, `exporter`, `spec`, `additionalSpec` and `additionalSpecString`.
 - Kubernetes types embedded in the spec (`resources`, `affinity`, `tolerations`, `topologySpreadConstraints`, `containers`, `config` and similar) stay open and accept any content. Every field also accepts `null`.
 
 ### Added
