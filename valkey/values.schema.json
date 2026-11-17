@@ -894,6 +894,14 @@
                 "affinity": {
                     "type": "object"
                 },
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        }
+                    }
+                },
                 "downAfterMilliseconds": {
                     "type": "integer"
                 },

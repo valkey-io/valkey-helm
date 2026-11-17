@@ -144,8 +144,10 @@ data:
     sentinel_cli() {
       peer="$1"
       shift
+      {{- if .Values.sentinel.auth.enabled }}
       sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
-      out=$(REDISCLI_AUTH="$sentinel_password" timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+      {{- end }}
+      out=$({{ if .Values.sentinel.auth.enabled }}REDISCLI_AUTH="$sentinel_password" {{ end }}timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }}{{ if .Values.sentinel.auth.enabled }} --user sentinel{{ end }} \
         -t 2 -h "$peer" -p {{ .Values.sentinel.port }} --raw "$@" 2>/dev/null) || return 1
       printf '%s\n' "$out" | tr -d '\r'
     }
@@ -453,9 +455,11 @@ data:
     # connect, and a peer that accepts and never answers would otherwise hold
     # this init container, which no probe restarts, forever.
     master_from_sentinels() {
+      {{- if .Values.sentinel.auth.enabled }}
       sentinel_password=$(cat /sentinel-auth/password 2>/dev/null) || return 1
+      {{- end }}
       peer="{{ include "valkey.sentinel.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-      addr=$(REDISCLI_AUTH="$sentinel_password" timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+      addr=$({{ if .Values.sentinel.auth.enabled }}REDISCLI_AUTH="$sentinel_password" {{ end }}timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }}{{ if .Values.sentinel.auth.enabled }} --user sentinel{{ end }} \
         -t 2 -h "$peer" -p {{ .Values.sentinel.port }} \
         sentinel get-master-addr-by-name {{ .Values.sentinel.masterSet }} 2>/dev/null || true)
       host=$(echo "$addr" | sed -n 1p)

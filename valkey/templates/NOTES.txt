@@ -28,13 +28,13 @@ ask Sentinel for the current master instead of connecting to a fixed pod:
 {{- $sentinelHost := include "valkey.sentinel.fullname" . }}
 {{- $sentinelPort := .Values.sentinel.service.port }}
 
-  $ valkey-cli -h {{ $sentinelHost }} -p {{ $sentinelPort }}{{ include "valkey.cli.tlsFlagsHint" . }} --user sentinel -a <sentinel password> \
+  $ valkey-cli -h {{ $sentinelHost }} -p {{ $sentinelPort }}{{ include "valkey.cli.tlsFlagsHint" . }}{{ if .Values.sentinel.auth.enabled }} --user sentinel -a <sentinel password>{{ end }} \
       SENTINEL get-master-addr-by-name {{ .Values.sentinel.masterSet }}
 
 Most client libraries do this for you, e.g. in Python:
 
   Sentinel([("{{ $sentinelHost }}", {{ $sentinelPort }})],
-           sentinel_kwargs={"username": "sentinel", "password": "<sentinel password>"{{ include "valkey.python.tlsDictItems" . }}}{{ include "valkey.python.tlsKwargs" . }}
+           sentinel_kwargs={ {{- if .Values.sentinel.auth.enabled }}"username": "sentinel", "password": "<sentinel password>"{{ include "valkey.python.tlsDictItems" . }}{{ else }}{{ include "valkey.python.tlsDictItems" . | trimPrefix ", " }}{{ end }}}{{ include "valkey.python.tlsKwargs" . }}
            ).master_for("{{ .Values.sentinel.masterSet }}"{{ if .Values.auth.enabled }}, username="<Valkey user>", password="<Valkey password>"{{ end }})
 {{- if .Values.tls.enabled }}
 
@@ -58,6 +58,12 @@ forwards to the node Sentinel promoted:
   Reads and writes: {{ include "valkey.fullnameWithSuffix" (list . "haproxy") }}:{{ .Values.haproxy.service.port }}
 
   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullnameWithSuffix" (list . "haproxy") }} 6379:{{ .Values.haproxy.service.port }}
+{{- end }}
+
+{{- if not .Values.sentinel.auth.enabled }}
+
+Sentinel authentication is off (sentinel.auth.enabled): the client
+certificate presented at the TLS handshake is the credential.
 {{- end }}
 
 ⚠️  The {{ include "valkey.fullname" . }} service load balances across ALL pods in this mode,
@@ -113,14 +119,14 @@ Direct Pod Access:
 WRITE Operations (resolve the master via Sentinel first):
 
 1) In-cluster access:
-  $ MASTER=$(valkey-cli -h {{ include "valkey.sentinel.fullname" . }} -p {{ .Values.sentinel.service.port }}{{ include "valkey.cli.tlsFlagsHint" . }} --user sentinel -a <sentinel password> --raw \
+  $ MASTER=$(valkey-cli -h {{ include "valkey.sentinel.fullname" . }} -p {{ .Values.sentinel.service.port }}{{ include "valkey.cli.tlsFlagsHint" . }}{{ if .Values.sentinel.auth.enabled }} --user sentinel -a <sentinel password>{{ end }} --raw \
       SENTINEL get-master-addr-by-name {{ .Values.sentinel.masterSet }} | tr '\n' ' ')
   $ set -- $MASTER
   $ valkey-cli -h "$1" -p "$2"{{ include "valkey.cli.tlsFlagsHint" . }}{{ if .Values.auth.enabled }} --user <Valkey user> -a <Valkey password>{{ end }} PING
 
 2) Local access:
   $ MASTER=$(kubectl -n {{ .Release.Namespace }} exec {{ include "valkey.sentinel.fullname" . }}-0 -- \
-      env REDISCLI_AUTH=<sentinel password> valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel -p {{ .Values.sentinel.port }} --raw \
+      {{ if .Values.sentinel.auth.enabled }}env REDISCLI_AUTH=<sentinel password> {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }}{{ if .Values.sentinel.auth.enabled }} --user sentinel{{ end }} -p {{ .Values.sentinel.port }} --raw \
       SENTINEL get-master-addr-by-name {{ .Values.sentinel.masterSet }} | tr '\n' ' ')
   $ set -- $MASTER
   $ kubectl -n {{ .Release.Namespace }} port-forward "pod/${1%%.*}" "6379:$2"

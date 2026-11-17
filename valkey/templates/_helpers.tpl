@@ -137,7 +137,7 @@ Check if there are any users with inline passwords
     {{- $hasInlinePasswords = true -}}
   {{- end -}}
 {{- end -}}
-{{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.password -}}
+{{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.auth.enabled .Values.sentinel.password -}}
   {{- $hasInlinePasswords = true -}}
 {{- end -}}
 {{- $hasInlinePasswords -}}
@@ -151,7 +151,7 @@ Returns "true" or "false".
 */}}
 {{- define "valkey.renderAuthSecret" -}}
 {{- $userSecret := and .Values.auth.enabled (or (include "valkey.hasInlinePasswords" . | eq "true") .Values.auth.aclConfig) -}}
-{{- $sentinelSecret := and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.password -}}
+{{- $sentinelSecret := and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.auth.enabled .Values.sentinel.password -}}
 {{- if or $userSecret $sentinelSecret -}}
 true
 {{- else -}}
@@ -238,7 +238,7 @@ characters at most for the same reason.
 The Sentinel password, as the single file /sentinel-auth/password. Mounted by
 the Sentinel pods and by the Valkey pods, which ask Sentinel for the master
 on startup and for a failover before shutting down. The Valkey server itself
-never uses it. Not optional: a missing Secret or key keeps the pod from
+never uses it. Not rendered with sentinel.auth.enabled false. Not optional: a missing Secret or key keeps the pod from
 starting, with the reason in its events, rather than leaving it without one.
 */}}
 {{- define "valkey.sentinel.authVolume" -}}
@@ -468,11 +468,20 @@ Validate sentinel configuration
   {{- if lt $bootstrapWait (add $sentinelStartup 30) }}
     {{- fail (printf "sentinel.initialTopologyWaitSeconds (%d) must be at least 30s above sentinel.startupTimeoutSeconds (%d), which is %d. A pod with no recorded topology has nothing to be told until the Sentinels finish that discovery and bootstrap a master, so a shorter wait leaves the init container exiting just before the answer arrives." $bootstrapWait $sentinelStartup (add $sentinelStartup 30)) }}
   {{- end }}
+  {{- if .Values.sentinel.auth.enabled }}
   {{- if and .Values.sentinel.password .Values.sentinel.existingSecret }}
     {{- fail "Set either sentinel.password or sentinel.existingSecret, not both." }}
   {{- end }}
   {{- if not (or .Values.sentinel.password .Values.sentinel.existingSecret) }}
-    {{- fail "Sentinel requires its own password: set sentinel.password, or sentinel.existingSecret with the password under sentinel.passwordKey." }}
+    {{- fail "Sentinel requires its own password: set sentinel.password, or sentinel.existingSecret with the password under sentinel.passwordKey. To run Sentinel without a password behind mutual TLS, set sentinel.auth.enabled=false." }}
+  {{- end }}
+  {{- else }}
+  {{- if not (and .Values.tls.enabled .Values.tls.requireClientCertificate) }}
+    {{- fail "sentinel.auth.enabled is false, which requires tls.enabled and tls.requireClientCertificate so that a client certificate authenticates every connection to the Sentinel port instead of a password." }}
+  {{- end }}
+  {{- if or .Values.sentinel.password .Values.sentinel.existingSecret }}
+    {{- fail "sentinel.password or sentinel.existingSecret is set but sentinel.auth.enabled is false, so it would never be used. Remove it or enable Sentinel authentication." }}
+  {{- end }}
   {{- end }}
   {{- if .Values.auth.enabled }}
     {{- $monitorUser := .Values.sentinel.monitorUser | default .Values.replica.replicationUser }}

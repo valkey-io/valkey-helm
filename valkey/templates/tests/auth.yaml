@@ -57,7 +57,7 @@ spec:
           # through the client service, which routes only to ready Sentinels.
           # Without it, the headless service also lists Sentinels that are not
           # ready, and valkey-cli tries only the first address.
-          MASTER=$(REDISCLI_AUTH="$(cat /sentinel-auth/password)" valkey-cli $TLS_FLAGS --user sentinel --raw \
+          MASTER=$({{ if .Values.sentinel.auth.enabled }}REDISCLI_AUTH="$(cat /sentinel-auth/password)" {{ end }}valkey-cli $TLS_FLAGS{{ if .Values.sentinel.auth.enabled }} --user sentinel{{ end }} --raw \
             {{- if .Values.sentinel.service.enabled }}
             -h {{ include "valkey.sentinel.fullname" . }} -p {{ .Values.sentinel.service.port }} \
             {{- else }}
@@ -111,7 +111,7 @@ spec:
         - name: valkey-auth
           mountPath: /valkey-auth
           readOnly: true
-        {{- if and .Values.replica.enabled .Values.sentinel.enabled }}
+        {{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.auth.enabled }}
         - name: sentinel-auth
           mountPath: /sentinel-auth
           readOnly: true
@@ -125,7 +125,7 @@ spec:
     - name: valkey-auth
       secret:
         secretName: {{ include "valkey.fullname" . }}-auth
-    {{- if and .Values.replica.enabled .Values.sentinel.enabled }}
+    {{- if and .Values.replica.enabled .Values.sentinel.enabled .Values.sentinel.auth.enabled }}
     {{- include "valkey.sentinel.authVolume" . | nindent 4 }}
     {{- end }}
     {{- if .Values.tls.enabled }}
