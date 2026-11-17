@@ -181,13 +181,14 @@ cluster:
     #       # than the server certificate. The operator merges them with the
     #       # server ca.crt. Each entry names a Secret or a ConfigMap, not both.
     #       ca:
+    #         # Name of a Secret holding the roots.
     #         - secretName: client-ca
-    #           # Name of a ConfigMap holding the roots, as SPIRE and
-    #           # trust-manager publish bundles. Use instead of secretName.
-    #           configMapName: spiffe-bundle
     #           # Key holding the roots, as PEM certificates or a SPIFFE trust
     #           # bundle. Defaults to ca.crt.
     #           key: ca.crt
+    #         # Name of a ConfigMap holding the roots, as SPIRE and trust-manager
+    #         # publish bundles.
+    #         - configMapName: spiffe-bundle
 
     # Valkey access control managed by the operator.
     # acl:
@@ -260,7 +261,7 @@ cluster:
     #   # validation.
     #   topologySpreadConstraints:
     #     - maxSkew: 1
-    #       topologyKey: topology.kubernetes.io/zone
+    #       topologyKey: topology.example.com/rack
     #       whenUnsatisfiable: ScheduleAnyway
     #       labelSelector:
     #         matchLabels:
@@ -284,9 +285,9 @@ cluster:
     #         mode: Preferred
     #       # Balance all pods across nodes, as a topology spread constraint.
     #       # Disabled when unset. Rejected alongside a primaries spread of the
-    #       # same strength.
+    #       # same strength, so this example uses Required.
     #       pods:
-    #         mode: Preferred
+    #         mode: Required
     #   # Constraints on the zone axis (topologyKey topology.kubernetes.io/zone).
     #   # With this unset, every zone spread is Disabled.
     #   zone:
@@ -298,14 +299,15 @@ cluster:
     #         mode: Preferred
     #       # Balance each shard's first pod across zones. Disabled when unset.
     #       primaries:
-    #         mode: Preferred
-    #       # Balance all pods across zones. Disabled when unset. Rejected
-    #       # alongside a shard or primaries spread of the same strength.
+    #         mode: Disabled
+    #       # Balance all pods across zones. Disabled when unset. At most one of
+    #       # shard, primaries and pods may use each of Preferred and Required.
     #       pods:
-    #         mode: Preferred
+    #         mode: Required
     #     # Give every pod a fixed zone by round-robin over an ordered list.
-    #     # Cannot be combined with a zone spread that is not Disabled. Unset
-    #     # means no pinning.
+    #     # Cannot be combined with a zone spread that is not Disabled, so remove
+    #     # the spread block above to use it. The nodeSelector must not
+    #     # set topology.kubernetes.io/zone. Unset means no pinning.
     #     pinning:
     #       # A pod's zone is zones[(shardIndex + nodeIndex) % len(zones)].
     #       # Entries must be unique. Immutable while set: remove pinning,
