@@ -44,11 +44,10 @@ tests:
       cluster.spec.exporter:
         enabled: null
     asserts:
-      - exists:
-          path: spec.exporter.enabled
       - equal:
-          path: spec.exporter.enabled
-          value: null
+          path: spec.exporter
+          value:
+            enabled: null
 
   - it: accepts persistence.size as a string
     set:
