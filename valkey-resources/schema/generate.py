@@ -22,6 +22,10 @@ import yaml
 
 CRD_NAME = "valkey.io_valkeyclusters.yaml"
 
+# The CRD version the schema is built from. It must match the apiVersion in
+# templates/valkeycluster.yaml.
+CRD_VERSION = "v1alpha1"
+
 # Paths whose content the chart passes through unvalidated. Dotted, with no
 # segment for array items.
 OPEN_PATHS: frozenset[str] = frozenset(
@@ -108,8 +112,17 @@ def convert(node: dict, path: str) -> dict:
     return out
 
 
+def spec_root(crd: dict) -> dict:
+    """The spec schema of CRD_VERSION."""
+    for version in crd["spec"]["versions"]:
+        if version.get("name") == CRD_VERSION:
+            return version["schema"]["openAPIV3Schema"]["properties"]["spec"]
+    names = [v.get("name") for v in crd["spec"]["versions"]]
+    raise ValueError(f"CRD has no version {CRD_VERSION!r} (found {names})")
+
+
 def build_spec_schema(crd: dict) -> dict:
-    root = crd["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"]
+    root = spec_root(crd)
     schema = convert(root, "")
     schema["required"] = ["shards"]
     schema["description"] = SPEC_DESCRIPTION
@@ -124,7 +137,7 @@ def render_schema(crd: dict, schema: dict) -> str:
 
 def required_doc_paths(crd: dict) -> set[str]:
     """Dotted paths values.yaml must document under cluster.spec."""
-    root = crd["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"]
+    root = spec_root(crd)
     found: set[str] = set()
 
     def walk(node: dict, path: str) -> None:
@@ -138,6 +151,16 @@ def required_doc_paths(crd: dict) -> set[str]:
 
     walk(root, "")
     return found
+
+
+def stale_doc_paths(required: set[str], documented: set[str]) -> set[str]:
+    """Documented paths the CRD no longer has.
+
+    Paths below an open or shallow path are skipped: their content is free-form
+    (examples of Kubernetes types) or deliberately not listed.
+    """
+    prefixes = tuple(f"{p}." for p in OPEN_PATHS | SHALLOW_DOC_PATHS)
+    return {p for p in documented - required if not p.startswith(prefixes)}
 
 
 _KEY_LINE = re.compile(r"^(\s*)(- )?([a-z][A-Za-z0-9]*):(\s|$)")
@@ -212,10 +235,18 @@ def main(argv: list[str]) -> int:
         if target.read_text() != expected:
             print(f"{target} is out of date: run `just schema-resources`")
             status = 1
-        missing = required_doc_paths(crd) - documented_paths((chart_dir / "values.yaml").read_text())
+        required = required_doc_paths(crd)
+        documented = documented_paths((chart_dir / "values.yaml").read_text())
+        missing = required - documented
         if missing:
             print("values.yaml does not document these cluster.spec paths:")
             for path in sorted(missing):
+                print(f"  {path}")
+            status = 1
+        stale = stale_doc_paths(required, documented)
+        if stale:
+            print("values.yaml documents these paths, which the CRD does not have:")
+            for path in sorted(stale):
                 print(f"  {path}")
             status = 1
         return status

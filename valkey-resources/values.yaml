@@ -375,8 +375,10 @@ cluster:
     # workloadType: StatefulSet
 
     # Deprecated: use acl.users. It cannot be combined with acl.users and is
-    # removed in v1beta1. Items take the same fields as acl.users, so only the
-    # top-level key is listed here.
+    # removed in v1beta1. Items take the acl.users fields name, permissions,
+    # commands, keys and channels. In place of state and password they take
+    # enabled, nopass, resetpass and passwordSecret. Only the top-level key is
+    # listed here.
     # users: []
 
   # ValkeyCluster.spec fields not covered by cluster.spec (passed through tpl).

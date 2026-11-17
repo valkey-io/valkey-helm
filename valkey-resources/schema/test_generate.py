@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import generate  # noqa: E402
 from generate import (  # noqa: E402
+    OPEN_PATHS,
     SPEC_DESCRIPTION,
     UnclassifiedFieldError,
     build_spec_schema,
@@ -16,13 +17,16 @@ from generate import (  # noqa: E402
     main,
     render_schema,
     required_doc_paths,
+    stale_doc_paths,
 )
 
 CHART_DIR = Path(__file__).resolve().parent.parent
 CRD_FILE = CHART_DIR / "schema" / "valkey.io_valkeyclusters.yaml"
 
 
-def crd(spec_props: dict, required: list[str] | None = None) -> dict:
+def crd(
+    spec_props: dict, required: list[str] | None = None, version: str = "v1alpha1"
+) -> dict:
     spec: dict = {"type": "object", "properties": spec_props}
     if required is not None:
         spec["required"] = required
@@ -30,6 +34,7 @@ def crd(spec_props: dict, required: list[str] | None = None) -> dict:
         "spec": {
             "versions": [
                 {
+                    "name": version,
                     "schema": {
                         "openAPIV3Schema": {"type": "object", "properties": {"spec": spec}}
                     }
@@ -215,3 +220,51 @@ def test_check_reports_undocumented_paths(tmp_path, capsys):
     (tmp_path / "values.yaml").write_text("".join(kept))
     assert main(["--check", "--chart-dir", str(tmp_path)]) == 1
     assert "persistence.size" in capsys.readouterr().out
+
+
+def test_builds_from_v1alpha1_when_another_version_is_listed_first():
+    v1beta1 = crd({"replicas": {"type": "integer"}}, version="v1beta1")["spec"]["versions"][0]
+    v1alpha1 = crd({"users": {"type": "string"}}, version="v1alpha1")["spec"]["versions"][0]
+    fake = {"spec": {"versions": [v1beta1, v1alpha1]}}
+    result = build_spec_schema(fake)
+    assert set(result["properties"]) == {"users"}
+    assert required_doc_paths(fake) == {"users"}
+
+
+def test_missing_v1alpha1_raises():
+    with pytest.raises(ValueError, match="v1alpha1"):
+        build_spec_schema(crd({"a": {"type": "string"}}, version="v1beta1"))
+    with pytest.raises(ValueError, match="v1alpha1"):
+        required_doc_paths(crd({"a": {"type": "string"}}, version="v1beta1"))
+
+
+def _field(node: dict, path: str) -> dict:
+    for name in path.split("."):
+        if node.get("type") == "array":
+            node = node["items"]
+        node = node["properties"][name]
+    return node
+
+
+@pytest.mark.parametrize("path", sorted(OPEN_PATHS))
+def test_open_paths_resolve_in_the_real_crd(path):
+    root = generate.spec_root(yaml.safe_load(CRD_FILE.read_text()))
+    assert _field(root, path)
+
+
+def test_stale_doc_paths_skips_paths_below_open_and_shallow_paths():
+    required = {"shards", "resources", "users"}
+    documented = {"shards", "old", "resources.limits", "users.name", "old.child"}
+    assert stale_doc_paths(required, documented) == {"old", "old.child"}
+
+
+def test_check_reports_stale_documentation(tmp_path, capsys):
+    (tmp_path / "schema").mkdir()
+    (tmp_path / "schema" / CRD_FILE.name).write_text(CRD_FILE.read_text())
+    (tmp_path / "values.schema.json").write_text((CHART_DIR / "values.schema.json").read_text())
+    text = (CHART_DIR / "values.yaml").read_text()
+    anchor = "    # workloadType: StatefulSet\n"
+    assert anchor in text
+    (tmp_path / "values.yaml").write_text(text.replace(anchor, anchor + "    # removedField: 1\n"))
+    assert main(["--check", "--chart-dir", str(tmp_path)]) == 1
+    assert "removedField" in capsys.readouterr().out

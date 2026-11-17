@@ -268,7 +268,7 @@ See [`examples/extra-objects.yaml`](examples/extra-objects.yaml).
 
 ## Updating the CRD schema
 
-When `appVersion` changes, copy the new `valkeyclusters` CRD from the operator release into `valkey-resources/schema/valkey.io_valkeyclusters.yaml`, run `just schema-resources` to regenerate `values.schema.json`, and document any new field in `values.yaml`. `just check-resources` runs the generator tests, fails when `values.schema.json` is stale and fails when a CRD field is missing from `values.yaml`.
+When `appVersion` changes, copy the new `valkeyclusters` CRD from the operator release into `valkey-resources/schema/valkey.io_valkeyclusters.yaml`, run `just schema-resources` to regenerate `values.schema.json`, and document any new field in `values.yaml`. `just check-resources` runs the generator tests, fails when `values.schema.json` is stale and fails when a CRD field is missing from `values.yaml` and fails when `values.yaml` documents a field the CRD no longer has. A new embedded Kubernetes type (a map or a type with `x-kubernetes-preserve-unknown-fields`) makes the generator fail until you add its path to `OPEN_PATHS` in `schema/generate.py`.
 
 ## Uninstall
 
