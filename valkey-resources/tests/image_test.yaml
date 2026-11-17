@@ -1,0 +1,136 @@
+suite: images
+templates:
+  - templates/valkeycluster.yaml
+tests:
+  - it: renders the default images
+    asserts:
+      - equal:
+          path: spec.image
+          value: valkey/valkey:9.0.0
+      - equal:
+          path: spec.exporter.image
+          value: oliver006/redis_exporter:v1.88.0
+
+  - it: prefixes the image registry
+    set:
+      cluster.image.registry: quay.io
+    asserts:
+      - equal:
+          path: spec.image
+          value: quay.io/valkey/valkey:9.0.0
+
+  - it: global registry overrides per-image registry
+    set:
+      global.imageRegistry: registry.corp.internal
+      cluster.image.registry: quay.io
+    asserts:
+      - equal:
+          path: spec.image
+          value: registry.corp.internal/valkey/valkey:9.0.0
+      - equal:
+          path: spec.exporter.image
+          value: registry.corp.internal/oliver006/redis_exporter:v1.88.0
+
+  - it: appends the sha after the tag
+    set:
+      cluster.image.sha: abc123
+    asserts:
+      - equal:
+          path: spec.image
+          value: valkey/valkey:9.0.0@sha256:abc123
+
+  - it: renders a sha without a tag
+    set:
+      cluster.image.tag: ""
+      cluster.image.sha: abc123
+    asserts:
+      - equal:
+          path: spec.image
+          value: valkey/valkey@sha256:abc123
+
+  - it: accepts a sha with its sha256 prefix
+    set:
+      cluster.image.sha: "sha256:abc123"
+    asserts:
+      - equal:
+          path: spec.image
+          value: valkey/valkey:9.0.0@sha256:abc123
+
+  - it: fails without a tag or sha
+    set:
+      cluster.image.tag: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.image: set tag or sha"
+
+  - it: fails for the exporter without a tag or sha
+    set:
+      cluster.exporter.image.tag: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.exporter.image: set tag or sha"
+
+  - it: cluster.spec.image wins
+    set:
+      cluster.spec.image: my/valkey:1
+      global.imageRegistry: x.io
+    asserts:
+      - equal:
+          path: spec.image
+          value: my/valkey:1
+
+  - it: additionalSpec image wins
+    set:
+      cluster.additionalSpec.image: my/valkey:2
+    asserts:
+      - equal:
+          path: spec.image
+          value: my/valkey:2
+
+  - it: cluster.spec.exporter.image wins and other exporter fields stay
+    set:
+      cluster.spec.exporter:
+        enabled: false
+        image: my/exp:1
+    asserts:
+      - equal:
+          path: spec.exporter
+          value:
+            enabled: false
+            image: my/exp:1
+
+  - it: adds the exporter image beside other exporter fields
+    set:
+      cluster.spec.exporter.enabled: false
+    asserts:
+      - equal:
+          path: spec.exporter
+          value:
+            enabled: false
+            image: oliver006/redis_exporter:v1.88.0
+
+  - it: fills a null exporter
+    set:
+      cluster.spec.exporter: null
+    asserts:
+      - equal:
+          path: spec.exporter.image
+          value: oliver006/redis_exporter:v1.88.0
+
+  - it: renders no image when cluster.image is absent
+    set:
+      cluster.image: null
+      cluster.exporter: null
+    asserts:
+      - notExists:
+          path: spec.image
+      - notExists:
+          path: spec.exporter
+
+  - it: treats an empty cluster.spec.image as unset
+    set:
+      cluster.spec.image: ""
+    asserts:
+      - equal:
+          path: spec.image
+          value: valkey/valkey:9.0.0

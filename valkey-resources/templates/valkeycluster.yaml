@@ -21,6 +21,21 @@ metadata:
 {{- end }}
 {{- include "valkey-resources.deepMerge" (dict "dst" $spec "src" $extra) }}
 {{- end }}
+{{- /* Pin the images so an operator upgrade does not change them; cluster.spec and additionalSpec win */}}
+{{- if and (kindIs "map" .Values.cluster.image) .Values.cluster.image (not $spec.image) }}
+{{- $_ := set $spec "image" (include "valkey-resources.image" (dict "image" .Values.cluster.image "global" .Values.global "path" "cluster.image")) }}
+{{- end }}
+{{- $exporterImage := (.Values.cluster.exporter | default dict).image }}
+{{- if and (kindIs "map" $exporterImage) $exporterImage }}
+{{- $exporter := $spec.exporter }}
+{{- if not (kindIs "map" $exporter) }}
+{{- $exporter = dict }}
+{{- end }}
+{{- if not $exporter.image }}
+{{- $_ := set $exporter "image" (include "valkey-resources.image" (dict "image" $exporterImage "global" .Values.global "path" "cluster.exporter.image")) }}
+{{- $_ := set $spec "exporter" $exporter }}
+{{- end }}
+{{- end }}
 {{- /* null means unset: it drops a value reused from an earlier release and lets the default below apply */}}
 {{- range $field := list "replicas" "replicasPerShard" }}
 {{- if and (hasKey $spec $field) (kindIs "invalid" (get $spec $field)) }}

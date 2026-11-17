@@ -48,6 +48,7 @@ tests:
           path: spec.exporter
           value:
             enabled: null
+            image: oliver006/redis_exporter:v1.88.0
 
   - it: accepts persistence.size as a string
     set:
@@ -99,3 +100,25 @@ tests:
     asserts:
       - notExists:
           path: spec.persistence
+
+  - it: rejects a numeric image tag
+    set:
+      cluster.image.tag: 9.0
+    asserts:
+      - failedTemplate:
+          errorPattern: "tag"
+
+  - it: rejects an unknown key in cluster.image
+    set:
+      cluster.image.tagg: x
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional propert.*'tagg'"
+
+  - it: accepts null image fields
+    set:
+      cluster.image.sha: null
+    asserts:
+      - equal:
+          path: spec.image
+          value: valkey/valkey:9.0.0
