@@ -64,7 +64,10 @@ cluster:
   # does not know about in cluster.additionalSpec.
   # Tested against operator appVersion (v0.9.0): scheduling under spec.scheduling,
   # PDB as {mode: ...}, node.spread.shard|primaries|pods. See CHANGELOG.md.
-  # String values are rendered via tpl, so they may use Helm templates. Example:
+  # String values are rendered via tpl, so free-form string fields may use Helm
+  # templates. Helm validates values against the schema before tpl runs, so an
+  # enum, integer or boolean field cannot hold a template: set it through
+  # cluster.additionalSpecString instead. Example:
   #   image: "valkey/valkey:{{ .Chart.AppVersion }}"
   #   networking.tls.certificates.server.secretName: "{{ .Release.Name }}-tls"
   # API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
