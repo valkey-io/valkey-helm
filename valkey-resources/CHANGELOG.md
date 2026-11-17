@@ -4,14 +4,16 @@
 
 ### Changed
 
-- **Breaking:** `cluster.spec` is validated against the ValkeyCluster CRD at the chart's `appVersion` (v0.9.0). A key the CRD does not have, at any level the operator owns, now fails the render with a schema error instead of being pruned by the API server. Move CRD fields newer than the chart to `cluster.additionalSpec`. A templated string on a field typed as integer, boolean or enum also fails now, because validation runs before `tpl`: set that field through `additionalSpec` or `additionalSpecString`. Values that use only v0.9.0 fields render byte-identical to 0.6.0. See [UPGRADE.md](UPGRADE.md).
-- `cluster` accepts only `annotations`, `labels`, `spec`, `additionalSpec` and `additionalSpecString`.
+- **Breaking:** `cluster.spec` is validated against the ValkeyCluster CRD at the chart's `appVersion` (v0.9.0). A key the CRD does not have, at any level the operator owns, now fails the render with a schema error instead of being pruned by the API server. Move CRD fields newer than the chart to `cluster.additionalSpec`. A templated string on a field typed as integer, boolean or enum also fails now, because validation runs before `tpl`: set that field through `additionalSpec` or `additionalSpecString`. Values that use only v0.9.0 fields render byte-identical to 0.6.0 apart from the added `spec.image` and `spec.exporter.image` (see [Images in the ValkeyCluster](UPGRADE.md#images-in-the-valkeycluster)). See [UPGRADE.md](UPGRADE.md).
+- `cluster` accepts only `annotations`, `labels`, `image`, `exporter`, `spec`, `additionalSpec` and `additionalSpecString`.
 - Kubernetes types embedded in the spec (`resources`, `affinity`, `tolerations`, `topologySpreadConstraints`, `containers`, `config` and similar) stay open and accept any content. Every field also accepts `null`.
 
 ### Added
 
-- `cluster.additionalSpec` is deep-merged over `cluster.spec`, and `cluster.additionalSpecString` (a string rendered with `tpl` and parsed as YAML) over that. Maps merge, lists replace, and the escape hatch wins, including `false`, `0`, `""` and `[]`. `null` deletes the key. The chart's own logic (`replicasPerShard` default, `serviceAccountName`, `usersSecret`) runs on the merged result. See [`examples/additional-spec.yaml`](examples/additional-spec.yaml).
+- `cluster.additionalSpec` is deep-merged over `cluster.spec`, and `cluster.additionalSpecString` (a string rendered with `tpl` and parsed as YAML) over that. Maps merge, lists replace, and the escape hatch wins, including `false`, `0`, `""` and `[]`. `image` and `exporter.image` are the exception: an empty string there counts as unset, and `cluster.image` or `cluster.exporter.image` applies. `null` deletes the key. The chart's own logic (`replicasPerShard` default, `serviceAccountName`, `usersSecret`) runs on the merged result. See [`examples/additional-spec.yaml`](examples/additional-spec.yaml).
 - `values.yaml` documents every ValkeyCluster field as commented-out YAML.
+- `cluster.image` and `cluster.exporter.image` (`registry`, `repository`, `tag`, `sha`) set `spec.image` and `spec.exporter.image`, rendered as `[registry/]repository[:tag][@sha256:sha]`. The defaults are `valkey/valkey:9.0.0` and `oliver006/redis_exporter:v1.88.0`, the images in the operator chart's `manager.defaultImages`. `global.imageRegistry` replaces the registry of both. A non-empty `cluster.spec.image` or `cluster.spec.exporter.image` wins over these values and over `global.imageRegistry`.
+- A chart release that bumps the default image tag upgrades Valkey for users who do not set `cluster.image.tag`.
 
 ## 0.6.0
 

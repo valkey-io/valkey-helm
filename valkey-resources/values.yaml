@@ -1,3 +1,8 @@
+global:
+  # Registry prefix for every image this chart renders. Overrides the
+  # registry of each image below. Parent charts can set it for all subcharts.
+  imageRegistry: ""
+
 # Override the app.kubernetes.io/name label (defaults to the chart name)
 nameOverride: ""
 # ValkeyCluster metadata.name, also used for the other rendered objects.
@@ -58,6 +63,28 @@ cluster:
   # Labels on the ValkeyCluster object (in addition to chart labels)
   labels: {}
 
+  # Valkey server image. The defaults match the valkey-operator chart's
+  # manager.defaultImages. The chart sets spec.image from this block so each
+  # cluster upgrades Valkey on its own schedule, not when the operator does.
+  # Renders [registry/]repository[:tag][@sha256:sha]. An empty registry keeps
+  # the default string identical to the operator's, so pods do not roll.
+  # cluster.spec.image overrides it.
+  image:
+    registry: ""
+    repository: valkey/valkey
+    tag: "9.0.0"
+    # Digest to pin, with or without the sha256: prefix
+    sha: ""
+
+  exporter:
+    # Metrics exporter sidecar image. Same behaviour as cluster.image, and
+    # cluster.spec.exporter.image overrides it.
+    image:
+      registry: ""
+      repository: oliver006/redis_exporter
+      tag: "v1.88.0"
+      sha: ""
+
   # ValkeyCluster.spec. Every field of the operator's ValkeyCluster API is
   # listed below, commented out, with its description. values.schema.json
   # follows the CRD and rejects unknown fields here; put fields this chart
@@ -68,7 +95,6 @@ cluster:
   # templates. Helm validates values against the schema before tpl runs, so an
   # enum, integer or boolean field cannot hold a template: set it through
   # cluster.additionalSpecString instead. Example:
-  #   image: "valkey/valkey:{{ .Chart.AppVersion }}"
   #   networking.tls.certificates.server.secretName: "{{ .Release.Name }}-tls"
   # API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
   spec:
@@ -91,7 +117,8 @@ cluster:
     # cannot set both. Removed in v1beta1.
     # replicas: 1
 
-    # Override the default Valkey image.
+    # Valkey image, used as written. Overrides cluster.image and
+    # global.imageRegistry.
     # image: valkey/valkey:9.0.0
 
     # Durable storage for each ValkeyNode. Requires workloadType StatefulSet.
@@ -125,8 +152,9 @@ cluster:
     # exporter:
     #   # Enable or disable the sidecar. Enabled when unset.
     #   enabled: true
-    #   # Override the default exporter image.
-    #   image: oliver006/redis_exporter:v1.67.0
+    #   # Exporter image, used as written. Overrides cluster.exporter.image
+    #   # and global.imageRegistry.
+    #   image: oliver006/redis_exporter:v1.88.0
     #   # Additional command-line arguments for the exporter container.
     #   args:
     #     - --include-system-metrics

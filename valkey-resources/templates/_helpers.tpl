@@ -94,3 +94,26 @@ else replaces, including false, 0, "" and lists, which mergeOverwrite would skip
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+Image reference [registry/]repository[:tag][@sha256:sha].
+global.imageRegistry overrides the per-image registry.
+Call with (dict "image" <map> "global" <map or nil> "path" "cluster.image").
+*/}}
+{{- define "valkey-resources.image" -}}
+{{- $image := .image | default dict }}
+{{- $global := .global | default dict }}
+{{- $registry := $global.imageRegistry | default $image.registry | default "" }}
+{{- $tag := $image.tag | default "" | toString }}
+{{- $sha := $image.sha | default "" | toString | trimPrefix "sha256:" }}
+{{- if not $image.repository }}
+{{- fail (printf "%s: set repository" .path) }}
+{{- end }}
+{{- if and (not $tag) (not $sha) }}
+{{- fail (printf "%s: set tag or sha" .path) }}
+{{- end }}
+{{- with $registry }}{{ . }}/{{ end }}
+{{- $image.repository }}
+{{- with $tag }}:{{ . }}{{ end }}
+{{- with $sha }}@sha256:{{ . }}{{ end }}
+{{- end }}

@@ -4,6 +4,13 @@
   "required": ["cluster"],
   "additionalProperties": true,
   "properties": {
+    "global": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "properties": {
+        "imageRegistry": {"type": ["string", "null"]}
+      }
+    },
     "nameOverride": {"type": "string"},
     "fullnameOverride": {"type": "string"},
     "commonLabels": {"type": "object"},
@@ -45,6 +52,32 @@
       "properties": {
         "annotations": {"type": "object", "additionalProperties": true},
         "labels": {"type": "object", "additionalProperties": true},
+        "image": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "registry": {"type": ["string", "null"]},
+            "repository": {"type": ["string", "null"]},
+            "tag": {"type": ["string", "null"]},
+            "sha": {"type": ["string", "null"]}
+          }
+        },
+        "exporter": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "properties": {
+                "registry": {"type": ["string", "null"]},
+                "repository": {"type": ["string", "null"]},
+                "tag": {"type": ["string", "null"]},
+                "sha": {"type": ["string", "null"]}
+              }
+            }
+          }
+        },
         "spec": {
           "type": ["object", "null"],
           "description": "ValkeyCluster.spec. Unknown keys are rejected: put fields this chart does not cover in cluster.additionalSpec.",

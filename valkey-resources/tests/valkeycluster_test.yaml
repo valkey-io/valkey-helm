@@ -25,6 +25,9 @@ tests:
           value:
             shards: 3
             replicasPerShard: 1
+            image: valkey/valkey:9.0.0
+            exporter:
+              image: oliver006/redis_exporter:v1.88.0
 
   - it: keeps the deprecated replicas field without adding replicasPerShard
     set:
@@ -559,12 +562,14 @@ tests:
         exporter:
           enabled: true
         terminationGracePeriodSeconds: 30
-        image: x
+        scheduling:
+          priorityClassName: x
       cluster.additionalSpec:
         exporter:
           enabled: false
         terminationGracePeriodSeconds: 0
-        image: ""
+        scheduling:
+          priorityClassName: ""
     asserts:
       - equal:
           path: spec.exporter.enabled
@@ -573,7 +578,7 @@ tests:
           path: spec.terminationGracePeriodSeconds
           value: 0
       - equal:
-          path: spec.image
+          path: spec.scheduling.priorityClassName
           value: ""
 
   - it: replaces lists from additionalSpec
@@ -606,7 +611,7 @@ tests:
       cluster.additionalSpec.exporter: null
     asserts:
       - notExists:
-          path: spec.exporter
+          path: spec.exporter.enabled
 
   - it: removes nested nulls from a map that cluster.spec does not set
     set:
@@ -627,6 +632,7 @@ tests:
           path: spec.exporter
           value:
             args: [--debug]
+            image: oliver006/redis_exporter:v1.88.0
 
   - it: templates strings in additionalSpec
     set:
@@ -714,6 +720,9 @@ tests:
           value:
             shards: 3
             replicasPerShard: 1
+            image: valkey/valkey:9.0.0
+            exporter:
+              image: oliver006/redis_exporter:v1.88.0
 
   - it: applies the replicasPerShard default when it is null
     set:
@@ -724,6 +733,9 @@ tests:
           value:
             shards: 3
             replicasPerShard: 1
+            image: valkey/valkey:9.0.0
+            exporter:
+              image: oliver006/redis_exporter:v1.88.0
 
   - it: drops a null replicasPerShard next to replicas
     set:

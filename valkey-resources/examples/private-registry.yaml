@@ -1,0 +1,9 @@
+# Pull the Valkey and exporter images from a private registry.
+# Renders registry.example.internal/valkey/valkey:9.0.0 and
+# registry.example.internal/oliver006/redis_exporter:v1.88.0.
+global:
+  imageRegistry: registry.example.internal
+
+cluster:
+  spec:
+    shards: 3

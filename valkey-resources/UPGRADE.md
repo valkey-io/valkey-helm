@@ -4,11 +4,11 @@
 
 ### Validated `cluster.spec`
 
-**What changed:** `cluster.spec` was a pass-through to `ValkeyCluster.spec`. It is now validated by `values.schema.json`, which follows the ValkeyCluster CRD at the chart's `appVersion` (v0.9.0). The schema rejects keys the CRD does not have, so `helm install`, `helm upgrade`, `helm lint` and `helm template` fail on them. Kubernetes types embedded in the spec (`resources`, `affinity`, `tolerations`, `topologySpreadConstraints`, `containers`, `config` and similar) stay open. Every field accepts `null`. `cluster` itself accepts only `annotations`, `labels`, `spec`, `additionalSpec` and `additionalSpecString`.
+**What changed:** `cluster.spec` was a pass-through to `ValkeyCluster.spec`. It is now validated by `values.schema.json`, which follows the ValkeyCluster CRD at the chart's `appVersion` (v0.9.0). The schema rejects keys the CRD does not have, so `helm install`, `helm upgrade`, `helm lint` and `helm template` fail on them. Kubernetes types embedded in the spec (`resources`, `affinity`, `tolerations`, `topologySpreadConstraints`, `containers`, `config` and similar) stay open. Every field accepts `null`. `cluster` itself accepts only `annotations`, `labels`, `image`, `exporter`, `spec`, `additionalSpec` and `additionalSpecString`.
 
 **Who is affected:**
 
-- Values that use only v0.9.0 fields are not affected. They render byte-identical to 0.6.0.
+- Values that use only v0.9.0 fields are not affected. They render byte-identical to 0.6.0 apart from the added `spec.image` and `spec.exporter.image`: see [Images in the ValkeyCluster](#images-in-the-valkeycluster).
 - Values with a CRD field newer than the chart. These used to pass through.
 - Values with a typo at a level the operator owns. The API server used to prune the unknown key without a message.
 - Values with a templated string on a field the schema types as integer, boolean or enum, such as `shards: "{{ .Values.extraValues.shards }}"`. Validation runs before `tpl`, so the schema sees the string.
@@ -24,7 +24,7 @@ cluster:
     someNewField: value
 ```
 
-`additionalSpec` is deep-merged over `cluster.spec`. Maps merge, lists replace, and the escape hatch wins on conflict, including `false`, `0`, `""` and `[]`. A `null` deletes the key. The chart's own logic (the `replicasPerShard` default, `serviceAccountName`, the `usersSecret` checks) runs on the merged result.
+`additionalSpec` is deep-merged over `cluster.spec`. Maps merge, lists replace, and the escape hatch wins on conflict, including `false`, `0`, `""` and `[]`. `image` and `exporter.image` are the exception: an empty string there counts as unset, and `cluster.image` or `cluster.exporter.image` applies. A `null` deletes the key. The chart's own logic (the `replicasPerShard` default, `serviceAccountName`, the `usersSecret` checks) runs on the merged result.
 
 To template a typed field, set it in `cluster.additionalSpecString`. It is rendered with `tpl` and parsed as YAML before the merge, so the result keeps its type:
 
@@ -35,6 +35,49 @@ cluster:
 ```
 
 The rendered spec then passes through `tpl` a second time with the rest of the spec, so a literal `{{` in `additionalSpecString` needs escaping twice.
+
+### Images in the ValkeyCluster
+
+**What changed:** the chart now renders `spec.image` and `spec.exporter.image` from `cluster.image` and `cluster.exporter.image`. Before, both were empty and the operator used its default images.
+
+**Who is affected:**
+
+- With the valkey-operator chart's default images (`valkey/valkey:9.0.0` and `oliver006/redis_exporter:v1.88.0`), nothing rolls. The chart defaults produce the same strings.
+- With other operator default images, the new `spec.image` differs from what the pods run, and the pods roll. Before upgrading, set `cluster.image` and `cluster.exporter.image` to the images the cluster runs now.
+- Releases upgraded with `helm upgrade --reuse-values` keep the old behaviour: `cluster.image` is absent, so no `spec.image` is rendered. The chart defaults are absent too, so to opt in, set `repository` and `tag` (or `sha`) for both `cluster.image` and `cluster.exporter.image`:
+
+  ```yaml
+  cluster:
+    image:
+      repository: valkey/valkey
+      tag: "9.0.0"
+    exporter:
+      image:
+        repository: oliver006/redis_exporter
+        tag: v1.88.0
+  ```
+
+- Releases where valkey-resources is a subchart of a parent that already sets `global.imageRegistry`. The parent's value now reaches this chart, so on upgrade `spec.image` becomes `<mirror>/valkey/valkey:9.0.0` and the pods roll. The roll stalls if the mirror lacks the image. The valkey-operator chart does not apply `global.imageRegistry` to its `manager.defaultImages`, so the pods ran the unprefixed images until now. To keep them, set `cluster.spec.image` and `cluster.spec.exporter.image` to the current image strings under the subchart's key. `global.imageRegistry` does not change these:
+
+  ```yaml
+  cluster:
+    spec:
+      image: valkey/valkey:9.0.0
+      exporter:
+        image: oliver006/redis_exporter:v1.88.0
+  ```
+
+**How to configure:**
+
+```yaml
+cluster:
+  image:
+    repository: valkey/valkey
+    tag: "8.1.0"
+  exporter:
+    image:
+      tag: v1.80.0
+```
 
 ## From 0.4.x
 
