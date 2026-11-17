@@ -3,3 +3,4 @@
 dist/
 .vscode
 temp/
+__pycache__/
