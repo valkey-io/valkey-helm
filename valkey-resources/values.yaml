@@ -316,6 +316,33 @@ cluster:
     #         - us-east-1a
     #         - us-east-1b
     #         - us-east-1c
+    #   #
+    #   # Scheduling recipes from the operator docs. Each one replaces the node
+    #   # and zone blocks above. Zone pinning is the pinning block above.
+    #   #
+    #   # Keep a shard's primary and replica off the same node, as a soft rule.
+    #   # The minimum for production availability.
+    #   # node:
+    #   #   spread:
+    #   #     shard:
+    #   #       mode: Preferred
+    #   #
+    #   # Balance each shard's pods across zones, as a soft rule.
+    #   # zone:
+    #   #   spread:
+    #   #     shard:
+    #   #       mode: Preferred
+    #   #
+    #   # Forbid a shard's pods from sharing a node and bias them across zones.
+    #   # The node and zone axes are independent, so they combine.
+    #   # node:
+    #   #   spread:
+    #   #     shard:
+    #   #       mode: Required
+    #   # zone:
+    #   #   spread:
+    #   #     shard:
+    #   #       mode: Preferred
 
     # Labels and annotations added to every Valkey pod. They are not part of
     # the workload selector and can change at any time, which rolls the pods.
