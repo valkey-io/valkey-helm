@@ -608,6 +608,26 @@ tests:
       - notExists:
           path: spec.exporter
 
+  - it: removes nested nulls from a map that cluster.spec does not set
+    set:
+      cluster.additionalSpec.config:
+        maxmemory: null
+        maxmemory-policy: allkeys-lru
+    asserts:
+      - equal:
+          path: spec.config
+          value:
+            maxmemory-policy: allkeys-lru
+
+  - it: removes nested nulls from an additionalSpecString map that cluster.spec does not set
+    set:
+      cluster.additionalSpecString: "exporter: {enabled: null, args: [--debug]}"
+    asserts:
+      - equal:
+          path: spec.exporter
+          value:
+            args: [--debug]
+
   - it: templates strings in additionalSpec
     set:
       cluster.additionalSpec.networking.tls.certificates.server.secretName: "{{ .Release.Name }}-tls"
