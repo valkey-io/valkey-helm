@@ -28,6 +28,14 @@ jobs:
       - name: Install helm-unittest plugin
         run: helm plugin install https://github.com/helm-unittest/helm-unittest --version 1.0.2
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Check generated schema
+        run: |
+          uv run --with pytest --with pyyaml pytest valkey-resources/schema -q
+          uv run valkey-resources/schema/generate.py --check
+
       - name: Lint chart
         run: helm lint ./valkey-resources
 

@@ -50,3 +50,11 @@ tests:
           path: metadata.name
           value: rel-kv
         template: charts/cache/templates/valkeycluster.yaml
+
+  - it: rejects an unknown cluster.spec key under an alias
+    set:
+      cache.cluster.spec.foo: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional propert.*'foo'"
+        template: charts/cache/templates/valkeycluster.yaml

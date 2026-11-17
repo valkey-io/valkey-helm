@@ -12,3 +12,4 @@
 *.tmproj
 .vscode/
 tests/
+schema/
