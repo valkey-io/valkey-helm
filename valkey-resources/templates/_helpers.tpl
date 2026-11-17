@@ -72,3 +72,21 @@ ACL user passwords from unless spec.users[].passwordSecret.name is set.
 {{- define "valkey-resources.usersSecretName" -}}
 {{- tpl (default (printf "%s-users" (include "valkey-resources.fullname" .)) .Values.usersSecret.name) . }}
 {{- end }}
+
+{{/*
+Deep-merge dict "src" into dict "dst", in place, and output nothing.
+A null in src deletes the key from dst. A map in both recurses. Anything else
+replaces, including false, 0, "" and lists, which mergeOverwrite would skip.
+*/}}
+{{- define "valkey-resources.deepMerge" -}}
+{{- $dst := .dst }}
+{{- range $key, $value := .src }}
+{{- if kindIs "invalid" $value }}
+{{- $_ := unset $dst $key }}
+{{- else if and (kindIs "map" $value) (kindIs "map" (get $dst $key)) }}
+{{- include "valkey-resources.deepMerge" (dict "dst" (get $dst $key) "src" $value) }}
+{{- else }}
+{{- $_ := set $dst $key (deepCopy $value) }}
+{{- end }}
+{{- end }}
+{{- end }}

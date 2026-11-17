@@ -70,6 +70,13 @@ cluster:
   spec:
     shards: 3
 
+  # ValkeyCluster.spec fields not covered by cluster.spec (passed through tpl).
+  # Deep-merged over cluster.spec; wins on conflict.
+  additionalSpec: {}
+  # Same, as a raw string rendered through tpl and parsed as YAML, for
+  # templating that has to produce structure.
+  additionalSpecString: ""
+
 # NetworkPolicy for the Valkey pods (selected by valkey.io/cluster=<ValkeyCluster name>).
 # Off by default. When enabled, ingress is limited to what the cluster needs to
 # run, plus extraIngress:

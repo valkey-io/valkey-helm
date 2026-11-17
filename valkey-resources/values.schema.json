@@ -72,7 +72,7 @@
       "required": [
         "spec"
       ],
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "annotations": {
           "type": "object",
@@ -1157,6 +1157,14 @@
           "required": [
             "shards"
           ]
+        },
+        "additionalSpec": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "ValkeyCluster.spec fields not covered by cluster.spec, deep-merged over it (passed through tpl)."
+        },
+        "additionalSpecString": {
+          "type": "string"
         }
       }
     },

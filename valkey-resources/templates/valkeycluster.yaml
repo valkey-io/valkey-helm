@@ -13,6 +13,14 @@ metadata:
     {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
 {{- $spec := deepCopy .Values.cluster.spec }}
+{{- include "valkey-resources.deepMerge" (dict "dst" $spec "src" (deepCopy .Values.cluster.additionalSpec)) }}
+{{- if .Values.cluster.additionalSpecString }}
+{{- $extra := fromYaml (tpl .Values.cluster.additionalSpecString .) }}
+{{- if hasKey $extra "Error" }}
+{{- fail (printf "cluster.additionalSpecString is not valid YAML: %s" $extra.Error) }}
+{{- end }}
+{{- include "valkey-resources.deepMerge" (dict "dst" $spec "src" $extra) }}
+{{- end }}
 {{- /* replicas: null drops a value reused from an earlier release */}}
 {{- if and (hasKey $spec "replicas") (kindIs "invalid" $spec.replicas) }}
 {{- $_ := unset $spec "replicas" }}
