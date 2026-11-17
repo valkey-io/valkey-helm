@@ -438,9 +438,11 @@ cluster:
     # strategic merge patch. The name server-init is reserved. Passed through
     # without validation. A map keyed by container name is also accepted, and
     # the CRD's list form works too. Inside a container, env also takes a map
-    # keyed by variable name (a scalar value becomes {name, value}). Map
-    # entries are sorted by name, and a $(VAR) reference only expands
-    # variables listed before it, so use the list form for env that needs one.
+    # keyed by variable name (a scalar value becomes {name, value}). Quote a
+    # value whose exact string matters: YAML reads an unquoted yes as true
+    # and 0755 as 493. Map entries are sorted by name, and a $(VAR) reference
+    # only expands variables listed before it, so use the list form for env
+    # that needs one.
     # Example:
     # containers:
     #   sidecar:

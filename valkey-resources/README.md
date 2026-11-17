@@ -151,7 +151,7 @@ Helm replaces a list across values files instead of merging it, so overriding on
 | Field | Map key | Entry |
 |---|---|---|
 | `containers` | container name | container spec |
-| `containers[].env` | variable name | a scalar becomes `{name, value}` with the value converted to a string; an object is merged with `name` |
+| `containers[].env` | variable name | a scalar becomes `{name, value}` with the value converted to a string; an object is merged with `name`. YAML 1.1 converts unquoted values first (`yes` becomes `"true"`, `0755` becomes `"493"`), so quote a value whose exact string matters |
 | `acl.users` | user name | user spec |
 | `imagePullSecrets` | Secret name | `{}` |
 | `scheduling.tolerations` | label, dropped | toleration |

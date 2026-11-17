@@ -14,7 +14,7 @@
 - `values.yaml` documents every ValkeyCluster field as commented-out YAML.
 - `cluster.image` and `cluster.exporter.image` (`registry`, `repository`, `tag`, `sha`) set `spec.image` and `spec.exporter.image`, rendered as `[registry/]repository[:tag][@sha256:sha]`. The defaults are `valkey/valkey:9.0.0` and `oliver006/redis_exporter:v1.88.0`, the images in the operator chart's `manager.defaultImages`. `global.imageRegistry` replaces the registry of both. A non-empty `cluster.spec.image` or `cluster.spec.exporter.image` wins over these values and over `global.imageRegistry`.
 - `cluster.spec` fields that take a list also take a map in the same key: `containers` and each container's `env`, `acl.users`, `imagePullSecrets`, `scheduling.tolerations`, `scheduling.topologySpreadConstraints` and `networking.tls.clientAuth.ca`. A map becomes a list sorted by key, an explicit `name` overrides the key, and a `null` entry removes the entry. Existing list values render as before. See the README section "Lists as maps".
-- `global.imagePullSecrets` is appended to `spec.imagePullSecrets`, de-duplicated by name.
+- `global.imagePullSecrets` is appended to `spec.imagePullSecrets`, de-duplicated by name. A parent chart that already sets it now rolls the pods on upgrade: see [UPGRADE.md](UPGRADE.md#globalimagepullsecrets).
 - `cluster.image.pullPolicy` and `cluster.exporter.image.pullPolicy` set `imagePullPolicy` on the `server` and `metrics-exporter` containers. An explicit `imagePullPolicy` on the container entry wins, and the exporter policy is skipped while the exporter is disabled.
 - A chart release that bumps the default image tag upgrades Valkey for users who do not set `cluster.image.tag`.
 

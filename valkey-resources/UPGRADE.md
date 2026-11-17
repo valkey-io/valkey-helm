@@ -79,6 +79,14 @@ cluster:
       tag: v1.80.0
 ```
 
+### `global.imagePullSecrets`
+
+**What changed:** the chart appends the Secrets in `global.imagePullSecrets` to `spec.imagePullSecrets`.
+
+**Who is affected:** releases where valkey-resources is a subchart of a parent that already sets `global.imagePullSecrets`. The parent's value now reaches this chart, the Secrets are appended to the pods' `imagePullSecrets`, and the pods roll on upgrade.
+
+**How to configure:** there is no per-chart opt-out. Plan the upgrade for the roll, or remove `global.imagePullSecrets` from the parent, which removes it from every subchart.
+
 ## From 0.4.x
 
 ### Objects named after the release
