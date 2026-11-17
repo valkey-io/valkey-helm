@@ -8,7 +8,11 @@
       "type": ["object", "null"],
       "additionalProperties": true,
       "properties": {
-        "imageRegistry": {"type": ["string", "null"]}
+        "imageRegistry": {"type": ["string", "null"]},
+        "imagePullSecrets": {
+          "type": ["array", "null"],
+          "items": {"type": ["string", "object"]}
+        }
       }
     },
     "nameOverride": {"type": "string"},
@@ -59,7 +63,8 @@
             "registry": {"type": ["string", "null"]},
             "repository": {"type": ["string", "null"]},
             "tag": {"type": ["string", "null"]},
-            "sha": {"type": ["string", "null"]}
+            "sha": {"type": ["string", "null"]},
+            "pullPolicy": {"type": ["string", "null"], "enum": ["Always", "IfNotPresent", "Never", "", null]}
           }
         },
         "exporter": {
@@ -73,7 +78,8 @@
                 "registry": {"type": ["string", "null"]},
                 "repository": {"type": ["string", "null"]},
                 "tag": {"type": ["string", "null"]},
-                "sha": {"type": ["string", "null"]}
+                "sha": {"type": ["string", "null"]},
+                "pullPolicy": {"type": ["string", "null"], "enum": ["Always", "IfNotPresent", "Never", "", null]}
               }
             }
           }
@@ -86,7 +92,7 @@
               "type": ["object", "null"],
               "properties": {
                 "users": {
-                  "type": ["array", "null"],
+                  "type": ["array", "object", "null"],
                   "items": {
                     "type": ["object", "null"],
                     "properties": {
@@ -135,13 +141,61 @@
                     },
                     "additionalProperties": false,
                     "required": ["name"]
+                  },
+                  "additionalProperties": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "channels": {
+                        "type": ["object", "null"],
+                        "properties": {
+                          "patterns": {"type": ["array", "null"], "items": {"type": ["string", "null"]}}
+                        },
+                        "additionalProperties": false
+                      },
+                      "commands": {
+                        "type": ["object", "null"],
+                        "properties": {
+                          "allow": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                          "deny": {"type": ["array", "null"], "items": {"type": ["string", "null"]}}
+                        },
+                        "additionalProperties": false
+                      },
+                      "keys": {
+                        "type": ["object", "null"],
+                        "properties": {
+                          "readOnly": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                          "readWrite": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                          "writeOnly": {"type": ["array", "null"], "items": {"type": ["string", "null"]}}
+                        },
+                        "additionalProperties": false
+                      },
+                      "name": {"type": ["string", "null"]},
+                      "password": {
+                        "type": ["object", "null"],
+                        "properties": {
+                          "secret": {
+                            "type": ["object", "null"],
+                            "properties": {
+                              "keys": {"type": ["array", "null"], "items": {"type": ["string", "null"]}},
+                              "name": {"type": ["string", "null"]}
+                            },
+                            "additionalProperties": false
+                          },
+                          "type": {"type": ["string", "null"], "enum": ["Secret", "Any", "Disabled", null]}
+                        },
+                        "additionalProperties": false
+                      },
+                      "permissions": {"type": ["string", "null"]},
+                      "state": {"type": ["string", "null"], "enum": ["Enabled", "Disabled", null]}
+                    },
+                    "additionalProperties": false
                   }
                 }
               },
               "additionalProperties": false
             },
             "config": {"type": ["object", "null"]},
-            "containers": {"type": ["array", "null"]},
+            "containers": {"type": ["array", "object", "null"]},
             "exporter": {
               "type": ["object", "null"],
               "properties": {
@@ -154,7 +208,7 @@
               "additionalProperties": false
             },
             "image": {"type": ["string", "null"]},
-            "imagePullSecrets": {"type": ["array", "null"]},
+            "imagePullSecrets": {"type": ["array", "object", "null"], "additionalProperties": {"type": ["object", "null"]}},
             "networking": {
               "type": ["object", "null"],
               "properties": {
@@ -187,8 +241,17 @@
                       "type": ["object", "null"],
                       "properties": {
                         "ca": {
-                          "type": ["array", "null"],
+                          "type": ["array", "object", "null"],
                           "items": {
+                            "type": ["object", "null"],
+                            "properties": {
+                              "configMapName": {"type": ["string", "null"]},
+                              "key": {"type": ["string", "null"]},
+                              "secretName": {"type": ["string", "null"]}
+                            },
+                            "additionalProperties": false
+                          },
+                          "additionalProperties": {
                             "type": ["object", "null"],
                             "properties": {
                               "configMapName": {"type": ["string", "null"]},
@@ -286,8 +349,8 @@
                 },
                 "nodeSelector": {"type": ["object", "null"]},
                 "priorityClassName": {"type": ["string", "null"]},
-                "tolerations": {"type": ["array", "null"]},
-                "topologySpreadConstraints": {"type": ["array", "null"]},
+                "tolerations": {"type": ["array", "object", "null"]},
+                "topologySpreadConstraints": {"type": ["array", "object", "null"]},
                 "zone": {
                   "type": ["object", "null"],
                   "properties": {

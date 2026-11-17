@@ -122,3 +122,34 @@ tests:
       - equal:
           path: spec.image
           value: valkey/valkey:9.0.0
+
+  - it: accepts an acl.users map entry without a name
+    set:
+      cluster.spec.acl.users.alice:
+        permissions: "+@read"
+    asserts:
+      - equal:
+          path: spec.acl.users[0].name
+          value: alice
+
+  - it: rejects an unknown key in an acl.users map entry
+    set:
+      cluster.spec.acl.users.alice.permisions: x
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional propert.*'permisions'"
+
+  - it: rejects an unknown key in a clientAuth.ca map entry
+    set:
+      cluster.spec.networking.tls.certificates.server.secretName: valkey-tls
+      cluster.spec.networking.tls.clientAuth.ca.bundle.bogus: x
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional propert.*'bogus'"
+
+  - it: rejects an unknown image pull policy
+    set:
+      cluster.image.pullPolicy: Sometimes
+    asserts:
+      - failedTemplate:
+          errorPattern: "pullPolicy"

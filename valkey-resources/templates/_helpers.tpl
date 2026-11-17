@@ -96,6 +96,43 @@ else replaces, including false, 0, "" and lists, which mergeOverwrite would skip
 {{- end }}
 
 {{/*
+Convert dict "parent" key "key" from a map to a list, in place, and output
+nothing. A missing key or a list stays as it is. The list is sorted by map key.
+A null entry is skipped, an empty one is kept. With "named", a map entry is
+copied and gets name: <key> unless it has a non-empty name. A non-map entry is
+used as it is, unless "scalarKey" is set: then it becomes
+{name: <key>, <scalarKey>: <value as string>}. Helm reads numbers in values
+files as float64, so a whole number is converted to int64 first: 1000000
+renders as "1000000", not "1e+06".
+Call with (dict "parent" <map> "key" "env" "named" true "scalarKey" "value").
+*/}}
+{{- define "valkey-resources.listOrMap" -}}
+{{- $parent := .parent }}
+{{- $value := get $parent .key }}
+{{- if kindIs "map" $value }}
+{{- $list := list }}
+{{- range $name := keys $value | sortAlpha }}
+{{- $entry := get $value $name }}
+{{- if not (kindIs "invalid" $entry) }}
+{{- if and $.named (kindIs "map" $entry) }}
+{{- $entry = deepCopy $entry }}
+{{- if not $entry.name }}
+{{- $_ := set $entry "name" $name }}
+{{- end }}
+{{- else if and $.named $.scalarKey (not (kindIs "map" $entry)) }}
+{{- if and (kindIs "float64" $entry) (eq $entry (float64 (int64 $entry))) }}
+{{- $entry = int64 $entry }}
+{{- end }}
+{{- $entry = dict "name" $name $.scalarKey (toString $entry) }}
+{{- end }}
+{{- $list = append $list $entry }}
+{{- end }}
+{{- end }}
+{{- $_ := set $parent .key $list }}
+{{- end }}
+{{- end }}
+
+{{/*
 Image reference [registry/]repository[:tag][@sha256:sha].
 global.imageRegistry overrides the per-image registry.
 Call with (dict "image" <map> "global" <map or nil> "path" "cluster.image").

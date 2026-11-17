@@ -140,7 +140,53 @@ A non-empty `cluster.spec.image` or `cluster.spec.exporter.image` (or the same k
 
 The operator falls back to its own default images (`--default-valkey-image`, `--default-exporter-image`) when `spec.image` is empty. Pinning the image in each ValkeyCluster means an operator upgrade does not change a cluster's Valkey version, so the operator and each cluster upgrade separately. To fall back to the operator's default images, set `cluster.image: null` and `cluster.exporter: null`. The chart then renders neither `spec.image` nor `spec.exporter.image`.
 
-An image pull policy is not available yet.
+`cluster.image.pullPolicy` and `cluster.exporter.image.pullPolicy` set `imagePullPolicy` on the `server` and `metrics-exporter` entries of `spec.containers`. The operator merges those entries by name. An `imagePullPolicy` written on the entry in `cluster.spec.containers` wins. The exporter policy is skipped while `cluster.spec.exporter.enabled` is false.
+
+`global.imagePullSecrets` is a list of Secret names or `{name: x}` maps. The names are appended to `spec.imagePullSecrets` after any in `cluster.spec` and are de-duplicated by name.
+
+### Lists as maps
+
+Helm replaces a list across values files instead of merging it, so overriding one entry means restating the whole list. These `cluster.spec` fields take either the CRD's list or a map in the same key. A map becomes a list sorted by key, so a values file can change one entry and leave the rest as they are.
+
+| Field | Map key | Entry |
+|---|---|---|
+| `containers` | container name | container spec |
+| `containers[].env` | variable name | a scalar becomes `{name, value}` with the value converted to a string; an object is merged with `name`. YAML 1.1 converts unquoted values first (`yes` becomes `"true"`, `0755` becomes `"493"`), so quote a value whose exact string matters |
+| `acl.users` | user name | user spec |
+| `imagePullSecrets` | Secret name | `{}` |
+| `scheduling.tolerations` | label, dropped | toleration |
+| `scheduling.topologySpreadConstraints` | label, dropped | constraint |
+| `networking.tls.clientAuth.ca` | label, dropped | `{secretName, key}` or `{configMapName}` |
+
+```yaml
+cluster:
+  spec:
+    containers:
+      sidecar:
+        image: busybox
+        env:
+          LOG_LEVEL: debug
+          RETRIES: 3
+    acl:
+      users:
+        alice:
+          permissions: "+@read"
+```
+
+An explicit `name` in an entry overrides the key. A `null` entry is skipped, so a later values file can remove an entry an earlier one set:
+
+```yaml
+cluster:
+  spec:
+    containers:
+      sidecar: null
+```
+
+The conversion runs after `cluster.additionalSpec` is merged over `cluster.spec`. Maps on both sides merge per entry. A list on one side replaces the other side, whatever it holds.
+
+These stay lists: `exporter.args`, `scheduling.zone.pinning.zones`, the deprecated `users`, and the `ports` and `volumeMounts` of a container.
+
+Kubernetes expands `$(VAR)` only from variables earlier in the list. A map sorts `env` by name, which can put a variable after one that references it. Use the list form for an `env` that has such a reference.
 
 ### Naming
 

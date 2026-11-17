@@ -1,0 +1,117 @@
+suite: pull secrets and policies
+templates:
+  - templates/valkeycluster.yaml
+tests:
+  - it: appends global pull secrets
+    set:
+      global.imagePullSecrets: [regcred]
+    asserts:
+      - equal:
+          path: spec.imagePullSecrets
+          value:
+            - name: regcred
+
+  - it: appends after the cluster's own
+    set:
+      global.imagePullSecrets: [regcred]
+      cluster.spec.imagePullSecrets:
+        own: {}
+    asserts:
+      - equal:
+          path: spec.imagePullSecrets
+          value:
+            - name: own
+            - name: regcred
+
+  - it: accepts name maps and de-duplicates
+    set:
+      global.imagePullSecrets:
+        - name: regcred
+      cluster.spec.imagePullSecrets:
+        - name: regcred
+    asserts:
+      - equal:
+          path: spec.imagePullSecrets
+          value:
+            - name: regcred
+
+  - it: sets the server pull policy
+    set:
+      cluster.image.pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.containers
+          value:
+            - name: server
+              imagePullPolicy: Always
+
+  - it: sets the exporter pull policy
+    set:
+      cluster.exporter.image.pullPolicy: Never
+    asserts:
+      - equal:
+          path: spec.containers
+          value:
+            - name: metrics-exporter
+              imagePullPolicy: Never
+
+  - it: edits an existing list entry in place
+    set:
+      cluster.spec.containers:
+        - name: server
+          env:
+            - name: A
+              value: x
+      cluster.image.pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.containers
+          value:
+            - name: server
+              env:
+                - name: A
+                  value: x
+              imagePullPolicy: Always
+
+  - it: appends after map-form containers
+    set:
+      cluster.spec.containers:
+        sidecar:
+          image: busybox
+      cluster.image.pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.containers
+          value:
+            - name: sidecar
+              image: busybox
+            - name: server
+              imagePullPolicy: Always
+
+  - it: an explicit container pull policy wins
+    set:
+      cluster.spec.containers:
+        server:
+          imagePullPolicy: Never
+      cluster.image.pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.containers
+          value:
+            - name: server
+              imagePullPolicy: Never
+
+  - it: renders no containers by default
+    asserts:
+      - notExists:
+          path: spec.containers
+      - notExists:
+          path: spec.imagePullSecrets
+
+  - it: skips the exporter pull policy when the exporter is disabled
+    set:
+      cluster.spec.exporter.enabled: false
+      cluster.exporter.image.pullPolicy: Never
+    asserts:
+      - notExists:
+          path: spec.containers

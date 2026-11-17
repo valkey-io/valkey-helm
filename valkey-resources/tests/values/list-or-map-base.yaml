@@ -1,0 +1,13 @@
+cluster:
+  spec:
+    containers:
+      server:
+        env:
+          LOG_LEVEL: info
+          API_TOKEN:
+            valueFrom:
+              secretKeyRef: {name: tokens, key: api}
+    acl:
+      users:
+        app: {permissions: "+@read", password: {type: Secret}}
+        admin: {permissions: "+@all", password: {type: Secret}}

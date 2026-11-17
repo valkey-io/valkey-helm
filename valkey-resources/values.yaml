@@ -2,6 +2,9 @@ global:
   # Registry prefix for every image this chart renders. Overrides the
   # registry of each image below. Parent charts can set it for all subcharts.
   imageRegistry: ""
+  # Pull Secrets added to the cluster's imagePullSecrets, as names or {name: x}.
+  # A name already in cluster.spec.imagePullSecrets is not added twice.
+  imagePullSecrets: []
 
 # Override the app.kubernetes.io/name label (defaults to the chart name)
 nameOverride: ""
@@ -75,6 +78,9 @@ cluster:
     tag: "9.0.0"
     # Digest to pin, with or without the sha256: prefix
     sha: ""
+    # Pull policy: Always, IfNotPresent or Never. Empty leaves the operator's
+    # default. Applied through the containers patch on the server container.
+    pullPolicy: ""
 
   exporter:
     # Metrics exporter sidecar image. Same behaviour as cluster.image, and
@@ -84,6 +90,10 @@ cluster:
       repository: oliver006/redis_exporter
       tag: "v1.88.0"
       sha: ""
+      # Pull policy: Always, IfNotPresent or Never. Empty leaves the operator's
+      # default. Applied through the containers patch on the metrics-exporter
+      # container. It has no effect while the exporter is disabled.
+      pullPolicy: ""
 
   # ValkeyCluster.spec. Every field of the operator's ValkeyCluster API is
   # listed below, commented out, with its description. values.schema.json
@@ -211,21 +221,26 @@ cluster:
     #       # Extra trust roots for client certificates issued by a different CA
     #       # than the server certificate. The operator merges them with the
     #       # server ca.crt. Each entry names a Secret or a ConfigMap, not both.
+    #       # A map is also accepted: the keys are labels that are dropped, and
+    #       # the entries are listed in key order. The CRD's list form works too.
     #       ca:
     #         # Name of a Secret holding the roots.
-    #         - secretName: client-ca
+    #         client:
+    #           secretName: client-ca
     #           # Key holding the roots, as PEM certificates or a SPIFFE trust
     #           # bundle. Defaults to ca.crt.
     #           key: ca.crt
     #         # Name of a ConfigMap holding the roots, as SPIRE and trust-manager
     #         # publish bundles.
-    #         - configMapName: spiffe-bundle
+    #         spiffe:
+    #           configMapName: spiffe-bundle
 
     # Valkey access control managed by the operator.
     # acl:
-    #   # Users managed by the operator.
+    #   # Users managed by the operator. A map keyed by user name is also
+    #   # accepted, and the CRD's list form works too.
     #   users:
-    #     - name: alice
+    #     alice:
     #       # Enabled (default) or Disabled. Whether the user can authenticate.
     #       state: Enabled
     #       # Raw ACL rules appended to anything generated from the fields below.
@@ -282,16 +297,21 @@ cluster:
     #   # Node selector for the pods. Passed through without validation.
     #   nodeSelector:
     #     disktype: ssd
-    #   # Tolerations for the pods. Passed through without validation.
+    #   # Tolerations for the pods. Passed through without validation. A map
+    #   # is also accepted: the keys are labels that are dropped, and the
+    #   # entries are listed in key order. The CRD's list form works too.
     #   tolerations:
-    #     - key: dedicated
+    #     dedicated:
+    #       key: dedicated
     #       operator: Equal
     #       value: valkey
     #       effect: NoSchedule
     #   # Topology spread constraints for the pods. Passed through without
-    #   # validation.
+    #   # validation. A map is also accepted, as for tolerations, and the
+    #   # CRD's list form works too.
     #   topologySpreadConstraints:
-    #     - maxSkew: 1
+    #     rack:
+    #       maxSkew: 1
     #       topologyKey: topology.example.com/rack
     #       whenUnsatisfiable: ScheduleAnyway
     #       labelSelector:
@@ -408,18 +428,28 @@ cluster:
 
     # Secrets in the same namespace used to pull any of the images (Valkey,
     # exporter and additional containers). Passed through without validation.
+    # A map keyed by Secret name (values {}) is also accepted, and the CRD's
+    # list form works too.
     # Example:
     # imagePullSecrets:
-    #   - name: regcred
+    #   regcred: {}
 
     # Additional containers, or overrides for existing ones, applied as a
     # strategic merge patch. The name server-init is reserved. Passed through
-    # without validation.
+    # without validation. A map keyed by container name is also accepted, and
+    # the CRD's list form works too. Inside a container, env also takes a map
+    # keyed by variable name (a scalar value becomes {name, value}). Quote a
+    # value whose exact string matters: YAML reads an unquoted yes as true
+    # and 0755 as 493. Map entries are sorted by name, and a $(VAR) reference
+    # only expands variables listed before it, so use the list form for env
+    # that needs one.
     # Example:
     # containers:
-    #   - name: sidecar
+    #   sidecar:
     #     image: busybox
     #     command: ["sleep", "infinity"]
+    #     env:
+    #       LOG_LEVEL: debug
 
     # Pod termination grace period for the Valkey nodes, in seconds. Minimum 1.
     # It must give the graceful CLUSTER FAILOVER on SIGTERM time to hand each

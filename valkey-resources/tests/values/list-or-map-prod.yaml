@@ -1,0 +1,9 @@
+cluster:
+  spec:
+    containers:
+      server:
+        env:
+          LOG_LEVEL: warn
+    acl:
+      users:
+        admin: null
