@@ -12,7 +12,7 @@
 - Values with a CRD field newer than the chart. These used to pass through.
 - Values with a typo at a level the operator owns. The API server used to prune the unknown key without a message.
 - Values with a templated string on a field the schema types as integer, boolean or enum, such as `shards: "{{ .Values.extraValues.shards }}"`. Validation runs before `tpl`, so the schema sees the string.
-- Releases upgraded with `helm upgrade --reuse-values`. Helm carries the keys of the previous release into the new schema, so an unknown key from an earlier release fails the upgrade even when your values file no longer sets it. Run `helm get values <release>`, remove or move the key, and pass the result with `-f` (or use `--reset-then-reuse-values` with `--set` overrides).
+- Releases upgraded with `helm upgrade --reuse-values`. Helm replaces the chart defaults with the values of the previous release, so `cluster.additionalSpec` is absent and the chart treats it as empty. Reused 0.6.0 values that use only v0.9.0 fields render unchanged. Helm also carries every key of the previous release into the new schema, so an unknown key from an earlier release fails the upgrade even when your values file no longer sets it. Run `helm get values <release>`, remove or move the key, and pass the result with `-f` (or use `--reset-then-reuse-values` with `--set` overrides).
 
 **How to configure:** fix a typo in place. Move a field newer than the chart to `cluster.additionalSpec`:
 

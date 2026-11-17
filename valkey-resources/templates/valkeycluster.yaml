@@ -13,7 +13,7 @@ metadata:
     {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
 {{- $spec := deepCopy .Values.cluster.spec }}
-{{- include "valkey-resources.deepMerge" (dict "dst" $spec "src" (deepCopy .Values.cluster.additionalSpec)) }}
+{{- include "valkey-resources.deepMerge" (dict "dst" $spec "src" (deepCopy (.Values.cluster.additionalSpec | default dict))) }}
 {{- if .Values.cluster.additionalSpecString }}
 {{- $extra := fromYaml (tpl .Values.cluster.additionalSpecString .) }}
 {{- if hasKey $extra "Error" }}
@@ -21,9 +21,11 @@ metadata:
 {{- end }}
 {{- include "valkey-resources.deepMerge" (dict "dst" $spec "src" $extra) }}
 {{- end }}
-{{- /* replicas: null drops a value reused from an earlier release */}}
-{{- if and (hasKey $spec "replicas") (kindIs "invalid" $spec.replicas) }}
-{{- $_ := unset $spec "replicas" }}
+{{- /* null means unset: it drops a value reused from an earlier release and lets the default below apply */}}
+{{- range $field := list "replicas" "replicasPerShard" }}
+{{- if and (hasKey $spec $field) (kindIs "invalid" (get $spec $field)) }}
+{{- $_ := unset $spec $field }}
+{{- end }}
 {{- end }}
 {{- /* Without either field the operator runs no replicas */}}
 {{- if not (or (hasKey $spec "replicas") (hasKey $spec "replicasPerShard")) }}

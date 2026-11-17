@@ -684,3 +684,34 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "additional propert.*'shards'"
+
+  - it: treats additionalSpec null as unset
+    set:
+      cluster.additionalSpec: null
+    asserts:
+      - equal:
+          path: spec
+          value:
+            shards: 3
+            replicasPerShard: 1
+
+  - it: applies the replicasPerShard default when it is null
+    set:
+      cluster.spec.replicasPerShard: null
+    asserts:
+      - equal:
+          path: spec
+          value:
+            shards: 3
+            replicasPerShard: 1
+
+  - it: drops a null replicasPerShard next to replicas
+    set:
+      cluster.spec.replicasPerShard: null
+      cluster.spec.replicas: 2
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+      - notExists:
+          path: spec.replicasPerShard
