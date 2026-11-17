@@ -92,7 +92,7 @@ cluster:
       sha: ""
       # Pull policy: Always, IfNotPresent or Never. Empty leaves the operator's
       # default. Applied through the containers patch on the metrics-exporter
-      # container.
+      # container. It has no effect while the exporter is disabled.
       pullPolicy: ""
 
   # ValkeyCluster.spec. Every field of the operator's ValkeyCluster API is

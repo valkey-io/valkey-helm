@@ -107,3 +107,11 @@ tests:
           path: spec.containers
       - notExists:
           path: spec.imagePullSecrets
+
+  - it: skips the exporter pull policy when the exporter is disabled
+    set:
+      cluster.spec.exporter.enabled: false
+      cluster.exporter.image.pullPolicy: Never
+    asserts:
+      - notExists:
+          path: spec.containers

@@ -84,7 +84,9 @@ metadata:
 {{- range $pair := $pullPolicies }}
 {{- $containerName := index $pair 0 }}
 {{- $policy := index $pair 1 }}
-{{- if $policy }}
+{{- /* A disabled exporter has no base container, so a patch entry for it would become an image-less container */}}
+{{- $exporterOff := and (eq $containerName "metrics-exporter") (kindIs "map" $spec.exporter) (kindIs "bool" $spec.exporter.enabled) (not $spec.exporter.enabled) }}
+{{- if and $policy (not $exporterOff) }}
 {{- $containers := list }}
 {{- if kindIs "slice" $spec.containers }}
 {{- $containers = $spec.containers }}
