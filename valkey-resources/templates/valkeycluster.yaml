@@ -21,6 +21,27 @@ metadata:
 {{- end }}
 {{- include "valkey-resources.deepMerge" (dict "dst" $spec "src" $extra) }}
 {{- end }}
+{{- /* Fields that take a list also take a map; convert the maps to the CRD's list form */}}
+{{- include "valkey-resources.listOrMap" (dict "parent" $spec "key" "containers" "named" true) }}
+{{- range $container := ($spec.containers | default list) }}
+{{- if kindIs "map" $container }}
+{{- include "valkey-resources.listOrMap" (dict "parent" $container "key" "env" "named" true "scalarKey" "value") }}
+{{- end }}
+{{- end }}
+{{- include "valkey-resources.listOrMap" (dict "parent" $spec "key" "imagePullSecrets" "named" true) }}
+{{- if kindIs "map" $spec.acl }}
+{{- include "valkey-resources.listOrMap" (dict "parent" $spec.acl "key" "users" "named" true) }}
+{{- end }}
+{{- if kindIs "map" $spec.scheduling }}
+{{- include "valkey-resources.listOrMap" (dict "parent" $spec.scheduling "key" "tolerations") }}
+{{- include "valkey-resources.listOrMap" (dict "parent" $spec.scheduling "key" "topologySpreadConstraints") }}
+{{- end }}
+{{- $tls := ($spec.networking | default dict).tls }}
+{{- if kindIs "map" $tls }}
+{{- if kindIs "map" $tls.clientAuth }}
+{{- include "valkey-resources.listOrMap" (dict "parent" $tls.clientAuth "key" "ca") }}
+{{- end }}
+{{- end }}
 {{- /* Pin the images so an operator upgrade does not change them; cluster.spec and additionalSpec win */}}
 {{- if and (kindIs "map" .Values.cluster.image) .Values.cluster.image (not $spec.image) }}
 {{- $_ := set $spec "image" (include "valkey-resources.image" (dict "image" .Values.cluster.image "global" .Values.global "path" "cluster.image")) }}

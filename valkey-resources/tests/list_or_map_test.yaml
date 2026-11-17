@@ -1,0 +1,205 @@
+suite: list-or-map fields
+templates:
+  - templates/valkeycluster.yaml
+tests:
+  - it: converts containers and env maps
+    set:
+      cluster.spec.containers:
+        server:
+          env:
+            LOG_LEVEL: debug
+            API_TOKEN:
+              valueFrom:
+                secretKeyRef: {name: tokens, key: api}
+    asserts:
+      - equal:
+          path: spec.containers
+          value:
+            - name: server
+              env:
+                - name: API_TOKEN
+                  valueFrom:
+                    secretKeyRef: {name: tokens, key: api}
+                - name: LOG_LEVEL
+                  value: debug
+
+  - it: stringifies scalar env values
+    set:
+      cluster.spec.containers.server.env:
+        RETRIES: 3
+        DEBUG: true
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: DEBUG
+              value: "true"
+            - name: RETRIES
+              value: "3"
+
+  - it: skips null entries
+    set:
+      cluster.spec.containers.server.env:
+        A: x
+        B: null
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: A
+              value: x
+
+  - it: converts env inside list-form containers
+    set:
+      cluster.spec.containers:
+        - name: server
+          env:
+            A: x
+    asserts:
+      - equal:
+          path: spec.containers
+          value:
+            - name: server
+              env:
+                - name: A
+                  value: x
+
+  - it: explicit name overrides the key
+    set:
+      cluster.spec.acl.users:
+        admin:
+          name: root
+          permissions: "+@all"
+    asserts:
+      - equal:
+          path: spec.acl.users
+          value:
+            - name: root
+              permissions: "+@all"
+
+  - it: keeps an empty entry
+    set:
+      cluster.spec.imagePullSecrets:
+        regcred: {}
+    asserts:
+      - equal:
+          path: spec.imagePullSecrets
+          value:
+            - name: regcred
+
+  - it: converts labelled lists without adding names
+    set:
+      cluster.spec.scheduling.tolerations:
+        b: {key: k2, operator: Exists}
+        a: {key: k1, operator: Exists}
+      cluster.spec.scheduling.topologySpreadConstraints:
+        b: {topologyKey: zone2, maxSkew: 1}
+        a: {topologyKey: zone1, maxSkew: 1}
+      cluster.spec.networking.tls.certificates.server.secretName: valkey-tls
+      cluster.spec.networking.tls.clientAuth.ca:
+        bundle: {configMapName: spiffe}
+    asserts:
+      - equal:
+          path: spec.scheduling.tolerations
+          value:
+            - {key: k1, operator: Exists}
+            - {key: k2, operator: Exists}
+      - equal:
+          path: spec.scheduling.topologySpreadConstraints
+          value:
+            - {topologyKey: zone1, maxSkew: 1}
+            - {topologyKey: zone2, maxSkew: 1}
+      - equal:
+          path: spec.networking.tls.clientAuth.ca
+          value:
+            - configMapName: spiffe
+
+  - it: leaves list forms unchanged
+    set:
+      cluster.spec.containers:
+        - name: server
+          env:
+            - {name: A, value: x}
+      cluster.spec.acl.users:
+        - {name: app, permissions: "+@read"}
+      cluster.spec.imagePullSecrets:
+        - name: regcred
+      cluster.spec.scheduling.tolerations:
+        - {key: k1, operator: Exists}
+      cluster.spec.scheduling.topologySpreadConstraints:
+        - {topologyKey: zone1, maxSkew: 1}
+      cluster.spec.networking.tls.certificates.server.secretName: valkey-tls
+      cluster.spec.networking.tls.clientAuth.ca:
+        - configMapName: spiffe
+    asserts:
+      - equal:
+          path: spec.containers
+          value:
+            - name: server
+              env:
+                - {name: A, value: x}
+      - equal:
+          path: spec.acl.users
+          value:
+            - {name: app, permissions: "+@read"}
+      - equal:
+          path: spec.imagePullSecrets
+          value:
+            - name: regcred
+      - equal:
+          path: spec.scheduling.tolerations
+          value:
+            - {key: k1, operator: Exists}
+      - equal:
+          path: spec.scheduling.topologySpreadConstraints
+          value:
+            - {topologyKey: zone1, maxSkew: 1}
+      - equal:
+          path: spec.networking.tls.clientAuth.ca
+          value:
+            - configMapName: spiffe
+
+  - it: merges maps from cluster.spec and additionalSpec
+    set:
+      cluster.spec.acl.users:
+        app: {permissions: "+@read"}
+      cluster.additionalSpec.acl.users:
+        ops: {permissions: "+@all"}
+    asserts:
+      - equal:
+          path: spec.acl.users
+          value:
+            - {name: app, permissions: "+@read"}
+            - {name: ops, permissions: "+@all"}
+
+  - it: a list in additionalSpec replaces a map
+    set:
+      cluster.spec.acl.users:
+        app: {}
+      cluster.additionalSpec.acl.users:
+        - name: ops
+    asserts:
+      - equal:
+          path: spec.acl.users
+          value:
+            - name: ops
+
+  - it: overrides one entry across values files
+    values:
+      - values/list-or-map-base.yaml
+      - values/list-or-map-prod.yaml
+    asserts:
+      - equal:
+          path: spec.containers[0].env
+          value:
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef: {name: tokens, key: api}
+            - name: LOG_LEVEL
+              value: warn
+      - equal:
+          path: spec.acl.users
+          value:
+            - name: app
+              permissions: "+@read"
+              password: {type: Secret}
