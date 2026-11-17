@@ -57,6 +57,53 @@ metadata:
 {{- $_ := set $spec "exporter" $exporter }}
 {{- end }}
 {{- end }}
+{{- /* global.imagePullSecrets adds to the cluster's own list; a name already there is kept once */}}
+{{- $globalSecrets := ((.Values.global | default dict).imagePullSecrets | default list) }}
+{{- if $globalSecrets }}
+{{- $secrets := list }}
+{{- if kindIs "slice" $spec.imagePullSecrets }}
+{{- $secrets = $spec.imagePullSecrets }}
+{{- end }}
+{{- $have := dict }}
+{{- range $secret := $secrets }}
+{{- if kindIs "map" $secret }}
+{{- $_ := set $have (toString $secret.name) true }}
+{{- end }}
+{{- end }}
+{{- range $secret := $globalSecrets }}
+{{- $entry := ternary $secret (dict "name" $secret) (kindIs "map" $secret) }}
+{{- if not (hasKey $have (toString $entry.name)) }}
+{{- $secrets = append $secrets $entry }}
+{{- $_ := set $have (toString $entry.name) true }}
+{{- end }}
+{{- end }}
+{{- $_ := set $spec "imagePullSecrets" $secrets }}
+{{- end }}
+{{- /* ValkeyCluster has no pull policy field; the containers patch reaches the operator's containers by name */}}
+{{- $pullPolicies := list (list "server" ((.Values.cluster.image | default dict).pullPolicy | default "")) (list "metrics-exporter" (((.Values.cluster.exporter | default dict).image | default dict).pullPolicy | default "")) }}
+{{- range $pair := $pullPolicies }}
+{{- $containerName := index $pair 0 }}
+{{- $policy := index $pair 1 }}
+{{- if $policy }}
+{{- $containers := list }}
+{{- if kindIs "slice" $spec.containers }}
+{{- $containers = $spec.containers }}
+{{- end }}
+{{- $found := false }}
+{{- range $container := $containers }}
+{{- if and (kindIs "map" $container) (eq (toString $container.name) $containerName) }}
+{{- $found = true }}
+{{- if not $container.imagePullPolicy }}
+{{- $_ := set $container "imagePullPolicy" $policy }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if not $found }}
+{{- $containers = append $containers (dict "name" $containerName "imagePullPolicy" $policy) }}
+{{- end }}
+{{- $_ := set $spec "containers" $containers }}
+{{- end }}
+{{- end }}
 {{- /* null means unset: it drops a value reused from an earlier release and lets the default below apply */}}
 {{- range $field := list "replicas" "replicasPerShard" }}
 {{- if and (hasKey $spec $field) (kindIs "invalid" (get $spec $field)) }}

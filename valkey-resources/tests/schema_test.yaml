@@ -146,3 +146,10 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "additional propert.*'bogus'"
+
+  - it: rejects an unknown image pull policy
+    set:
+      cluster.image.pullPolicy: Sometimes
+    asserts:
+      - failedTemplate:
+          errorPattern: "pullPolicy"

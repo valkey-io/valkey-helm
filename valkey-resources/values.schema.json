@@ -8,7 +8,11 @@
       "type": ["object", "null"],
       "additionalProperties": true,
       "properties": {
-        "imageRegistry": {"type": ["string", "null"]}
+        "imageRegistry": {"type": ["string", "null"]},
+        "imagePullSecrets": {
+          "type": ["array", "null"],
+          "items": {"type": ["string", "object"]}
+        }
       }
     },
     "nameOverride": {"type": "string"},
@@ -59,7 +63,8 @@
             "registry": {"type": ["string", "null"]},
             "repository": {"type": ["string", "null"]},
             "tag": {"type": ["string", "null"]},
-            "sha": {"type": ["string", "null"]}
+            "sha": {"type": ["string", "null"]},
+            "pullPolicy": {"type": ["string", "null"], "enum": ["Always", "IfNotPresent", "Never", "", null]}
           }
         },
         "exporter": {
@@ -73,7 +78,8 @@
                 "registry": {"type": ["string", "null"]},
                 "repository": {"type": ["string", "null"]},
                 "tag": {"type": ["string", "null"]},
-                "sha": {"type": ["string", "null"]}
+                "sha": {"type": ["string", "null"]},
+                "pullPolicy": {"type": ["string", "null"], "enum": ["Always", "IfNotPresent", "Never", "", null]}
               }
             }
           }

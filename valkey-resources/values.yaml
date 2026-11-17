@@ -2,6 +2,9 @@ global:
   # Registry prefix for every image this chart renders. Overrides the
   # registry of each image below. Parent charts can set it for all subcharts.
   imageRegistry: ""
+  # Pull Secrets added to the cluster's imagePullSecrets, as names or {name: x}.
+  # A name already in cluster.spec.imagePullSecrets is not added twice.
+  imagePullSecrets: []
 
 # Override the app.kubernetes.io/name label (defaults to the chart name)
 nameOverride: ""
@@ -75,6 +78,9 @@ cluster:
     tag: "9.0.0"
     # Digest to pin, with or without the sha256: prefix
     sha: ""
+    # Pull policy: Always, IfNotPresent or Never. Empty leaves the operator's
+    # default. Applied through the containers patch on the server container.
+    pullPolicy: ""
 
   exporter:
     # Metrics exporter sidecar image. Same behaviour as cluster.image, and
@@ -84,6 +90,10 @@ cluster:
       repository: oliver006/redis_exporter
       tag: "v1.88.0"
       sha: ""
+      # Pull policy: Always, IfNotPresent or Never. Empty leaves the operator's
+      # default. Applied through the containers patch on the metrics-exporter
+      # container.
+      pullPolicy: ""
 
   # ValkeyCluster.spec. Every field of the operator's ValkeyCluster API is
   # listed below, commented out, with its description. values.schema.json
