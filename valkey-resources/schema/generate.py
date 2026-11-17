@@ -14,6 +14,7 @@ it exits 1 when the committed file differs from what would be generated.
 import argparse
 import copy
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -40,6 +41,9 @@ OPEN_PATHS: frozenset[str] = frozenset(
         "config",
     }
 )
+
+# Deprecated paths where only the top-level key has to be documented.
+SHALLOW_DOC_PATHS: frozenset[str] = frozenset({"users"})
 
 SPEC_DESCRIPTION = (
     "ValkeyCluster.spec. Unknown keys are rejected: put fields this chart does "
@@ -118,6 +122,75 @@ def render_schema(crd: dict, schema: dict) -> str:
     return json.dumps(result, indent=2) + "\n"
 
 
+def required_doc_paths(crd: dict) -> set[str]:
+    """Dotted paths values.yaml must document under cluster.spec."""
+    root = crd["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"]
+    found: set[str] = set()
+
+    def walk(node: dict, path: str) -> None:
+        if node.get("type") == "array" and "items" in node:
+            node = node["items"]
+        for name, child in node.get("properties", {}).items():
+            child_path = f"{path}.{name}" if path else name
+            found.add(child_path)
+            if child_path not in OPEN_PATHS and child_path not in SHALLOW_DOC_PATHS:
+                walk(child, child_path)
+
+    walk(root, "")
+    return found
+
+
+_KEY_LINE = re.compile(r"^(\s*)(- )?([a-z][A-Za-z0-9]*):(\s|$)")
+
+
+def documented_paths(values_text: str) -> set[str]:
+    """Dotted paths documented under cluster.spec, live or commented out.
+
+    A commented-out field is "#", one space, then the YAML line at the
+    indentation it would have uncommented.
+    """
+    lines = values_text.splitlines()
+    in_cluster = False
+    block: list[str] = []
+    collecting = False
+    for line in lines:
+        if not collecting:
+            if re.match(r"^cluster:\s*$", line):
+                in_cluster = True
+            elif in_cluster and re.match(r"^  spec:\s*$", line):
+                collecting = True
+            elif in_cluster and re.match(r"^\S", line):
+                in_cluster = False
+            continue
+        if not line.strip():
+            continue
+        if len(line) - len(line.lstrip(" ")) <= 2:
+            break
+        block.append(line)
+
+    paths: set[str] = set()
+    stack: list[tuple[int, str]] = []
+    for line in block:
+        column = len(line) - len(line.lstrip(" "))
+        text = line.lstrip(" ")
+        if text.startswith("#"):
+            after = text[1:]
+            column += len(after) - len(after.lstrip(" ")) - 1
+            text = after.lstrip(" ")
+        match = _KEY_LINE.match(text)
+        if not match:
+            continue
+        if match.group(2):
+            column += 2
+        name = match.group(3)
+        while stack and stack[-1][0] >= column:
+            stack.pop()
+        path = f"{stack[-1][1]}.{name}" if stack else name
+        stack.append((column, path))
+        paths.add(path)
+    return paths
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if values.schema.json is stale")
@@ -135,10 +208,17 @@ def main(argv: list[str]) -> int:
     expected = render_schema(crd, json.loads(target.read_text()))
 
     if args.check:
+        status = 0
         if target.read_text() != expected:
             print(f"{target} is out of date: run `just schema-resources`")
-            return 1
-        return 0
+            status = 1
+        missing = required_doc_paths(crd) - documented_paths((chart_dir / "values.yaml").read_text())
+        if missing:
+            print("values.yaml does not document these cluster.spec paths:")
+            for path in sorted(missing):
+                print(f"  {path}")
+            status = 1
+        return status
 
     target.write_text(expected)
     return 0

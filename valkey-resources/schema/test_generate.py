@@ -12,8 +12,10 @@ from generate import (  # noqa: E402
     SPEC_DESCRIPTION,
     UnclassifiedFieldError,
     build_spec_schema,
+    documented_paths,
     main,
     render_schema,
+    required_doc_paths,
 )
 
 CHART_DIR = Path(__file__).resolve().parent.parent
@@ -137,6 +139,7 @@ def test_check_detects_drift(tmp_path, capsys):
     real = yaml.safe_load(CRD_FILE.read_text())
     (tmp_path / "schema").mkdir()
     (tmp_path / "schema" / CRD_FILE.name).write_text(CRD_FILE.read_text())
+    (tmp_path / "values.yaml").write_text((CHART_DIR / "values.yaml").read_text())
     base = json.loads((CHART_DIR / "values.schema.json").read_text())
     fresh = render_schema(real, base)
     stale = json.loads(fresh)
@@ -152,3 +155,63 @@ def test_check_detects_drift(tmp_path, capsys):
     assert target.read_text() == fresh
     assert main(["--check", "--chart-dir", str(tmp_path)]) == 0
     assert generate.OPEN_PATHS
+
+
+def test_documented_paths_reads_live_and_commented_keys():
+    text = (
+        "cluster:\n"
+        "  spec:\n"
+        "    shards: 3\n"
+        "    # persistence:\n"
+        "    #   size: 1Gi\n"
+        "    # acl:\n"
+        "    #   users:\n"
+        "    #     - name: alice\n"
+        '    #       permissions: "+@all"\n'
+        "  additionalSpec: {}\n"
+    )
+    assert documented_paths(text) == {
+        "shards",
+        "persistence",
+        "persistence.size",
+        "acl",
+        "acl.users",
+        "acl.users.name",
+        "acl.users.permissions",
+    }
+
+
+def test_documented_paths_ignores_prose_and_other_blocks():
+    text = (
+        "metrics:\n"
+        "  podMonitor:\n"
+        "    port: metrics\n"
+        "cluster:\n"
+        "  spec:\n"
+        "    # Example: something\n"
+        "    # Sizes are in bytes. See: the docs\n"
+        "    shards: 3\n"
+        "  additionalSpec: {}\n"
+        "serviceAccount:\n"
+        "  create: false\n"
+    )
+    assert documented_paths(text) == {"shards"}
+
+
+def test_required_doc_paths_stops_at_open_and_shallow_paths():
+    paths = required_doc_paths(yaml.safe_load(CRD_FILE.read_text()))
+    assert {"scheduling.affinity", "users", "acl.users.password.secret.name"} <= paths
+    for prefix in ("scheduling.affinity.", "resources.", "users."):
+        assert not any(p.startswith(prefix) for p in paths)
+
+
+def test_check_reports_undocumented_paths(tmp_path, capsys):
+    (tmp_path / "schema").mkdir()
+    (tmp_path / "schema" / CRD_FILE.name).write_text(CRD_FILE.read_text())
+    (tmp_path / "values.schema.json").write_text((CHART_DIR / "values.schema.json").read_text())
+    lines = (CHART_DIR / "values.yaml").read_text().splitlines(keepends=True)
+    kept = [line for line in lines if line.strip() != "#   size: 1Gi"]
+    assert len(kept) < len(lines)
+    (tmp_path / "values.yaml").write_text("".join(kept))
+    assert main(["--check", "--chart-dir", str(tmp_path)]) == 1
+    assert "persistence.size" in capsys.readouterr().out

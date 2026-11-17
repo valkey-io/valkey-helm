@@ -20,6 +20,11 @@ tests:
           value: 1
       - notExists:
           path: spec.replicas
+      - equal:
+          path: spec
+          value:
+            shards: 3
+            replicasPerShard: 1
 
   - it: keeps the deprecated replicas field without adding replicasPerShard
     set:
