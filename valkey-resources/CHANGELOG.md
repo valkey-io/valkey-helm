@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Optional password generation (`usersSecret.generate`). You can now automatically generate a password via Helm if none is set and you opt in. Make sure your deployment tool supports Helm's `lookup` function.
+
 ## 0.6.0
 
 ### Changed

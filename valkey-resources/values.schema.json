@@ -86,9 +86,12 @@
         "create": { "type": "boolean" },
         "name": { "type": "string" },
         "annotations": { "type": "object" },
+        "generate": { "type": "boolean" },
         "passwords": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "oneOf": [{ "type": "string" }, { "type": "null" }]
+          }
         }
       }
     },
