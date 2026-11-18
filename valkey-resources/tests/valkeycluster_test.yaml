@@ -20,6 +20,11 @@ tests:
           value: 1
       - notExists:
           path: spec.replicas
+      - equal:
+          path: spec
+          value:
+            shards: 3
+            replicasPerShard: 1
 
   - it: keeps the deprecated replicas field without adding replicasPerShard
     set:
@@ -528,3 +533,205 @@ tests:
       - equal:
           path: spec.serviceAccountName
           value: t-sa
+
+  - it: merges additionalSpec over cluster.spec
+    set:
+      cluster.spec.persistence.size: 1Gi
+      cluster.additionalSpec:
+        persistence:
+          storageClassName: fast
+        workloadType: Deployment
+    asserts:
+      - equal:
+          path: spec.persistence.size
+          value: 1Gi
+      - equal:
+          path: spec.persistence.storageClassName
+          value: fast
+      - equal:
+          path: spec.workloadType
+          value: Deployment
+
+  - it: lets false, 0 and empty string in additionalSpec win
+    set:
+      cluster.spec:
+        shards: 3
+        exporter:
+          enabled: true
+        terminationGracePeriodSeconds: 30
+        image: x
+      cluster.additionalSpec:
+        exporter:
+          enabled: false
+        terminationGracePeriodSeconds: 0
+        image: ""
+    asserts:
+      - equal:
+          path: spec.exporter.enabled
+          value: false
+      - equal:
+          path: spec.terminationGracePeriodSeconds
+          value: 0
+      - equal:
+          path: spec.image
+          value: ""
+
+  - it: replaces lists from additionalSpec
+    set:
+      cluster.spec.imagePullSecrets:
+        - name: a
+        - name: b
+      cluster.additionalSpec.imagePullSecrets:
+        - name: c
+    asserts:
+      - equal:
+          path: spec.imagePullSecrets
+          value:
+            - name: c
+
+  - it: lets an empty list in additionalSpec win
+    set:
+      cluster.spec.imagePullSecrets:
+        - name: a
+        - name: b
+      cluster.additionalSpec.imagePullSecrets: []
+    asserts:
+      - equal:
+          path: spec.imagePullSecrets
+          value: []
+
+  - it: removes a key set to null in additionalSpec
+    set:
+      cluster.spec.exporter.enabled: false
+      cluster.additionalSpec.exporter: null
+    asserts:
+      - notExists:
+          path: spec.exporter
+
+  - it: removes nested nulls from a map that cluster.spec does not set
+    set:
+      cluster.additionalSpec.config:
+        maxmemory: null
+        maxmemory-policy: allkeys-lru
+    asserts:
+      - equal:
+          path: spec.config
+          value:
+            maxmemory-policy: allkeys-lru
+
+  - it: removes nested nulls from an additionalSpecString map that cluster.spec does not set
+    set:
+      cluster.additionalSpecString: "exporter: {enabled: null, args: [--debug]}"
+    asserts:
+      - equal:
+          path: spec.exporter
+          value:
+            args: [--debug]
+
+  - it: templates strings in additionalSpec
+    set:
+      cluster.additionalSpec.networking.tls.certificates.server.secretName: "{{ .Release.Name }}-tls"
+    asserts:
+      - equal:
+          path: spec.networking.tls.certificates.server.secretName
+          value: RELEASE-NAME-tls
+
+  - it: parses additionalSpecString as templated YAML
+    set:
+      cluster.additionalSpecString: "replicasPerShard: {{ add 1 1 }}"
+    asserts:
+      - equal:
+          path: spec.replicasPerShard
+          value: 2
+
+  - it: applies additionalSpecString over additionalSpec
+    set:
+      cluster.additionalSpec.image: a
+      cluster.additionalSpecString: "image: b"
+    asserts:
+      - equal:
+          path: spec.image
+          value: b
+
+  - it: fails on additionalSpecString that is not YAML
+    set:
+      cluster.additionalSpecString: "a: [b"
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.additionalSpecString"
+
+  - it: keeps replicasPerShard from additionalSpec
+    set:
+      cluster.additionalSpec.replicasPerShard: 2
+    asserts:
+      - equal:
+          path: spec.replicasPerShard
+          value: 2
+
+  - it: keeps deprecated replicas from additionalSpec
+    set:
+      cluster.additionalSpec.replicas: 2
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+      - notExists:
+          path: spec.replicasPerShard
+
+  - it: checks users from additionalSpec against usersSecret
+    set:
+      usersSecret:
+        create: true
+        passwords:
+          alice: pw
+      cluster.additionalSpec.users:
+        - name: bob
+    asserts:
+      - failedTemplate:
+          errorMessage: 'cluster.spec.users "bob" reads password key "bob", but usersSecret.passwords has no entry for it'
+
+  - it: checks serviceAccountName from additionalSpec
+    set:
+      serviceAccount.create: true
+      cluster.additionalSpec.serviceAccountName: other
+    asserts:
+      - failedTemplate:
+          errorPattern: 'cluster.spec.serviceAccountName is "other"'
+
+  - it: rejects a spec field set directly under cluster
+    set:
+      cluster.shards: 5
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional propert.*'shards'"
+
+  - it: treats additionalSpec null as unset
+    set:
+      cluster.additionalSpec: null
+    asserts:
+      - equal:
+          path: spec
+          value:
+            shards: 3
+            replicasPerShard: 1
+
+  - it: applies the replicasPerShard default when it is null
+    set:
+      cluster.spec.replicasPerShard: null
+    asserts:
+      - equal:
+          path: spec
+          value:
+            shards: 3
+            replicasPerShard: 1
+
+  - it: drops a null replicasPerShard next to replicas
+    set:
+      cluster.spec.replicasPerShard: null
+      cluster.spec.replicas: 2
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+      - notExists:
+          path: spec.replicasPerShard

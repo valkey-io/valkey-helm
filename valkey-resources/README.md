@@ -34,9 +34,9 @@ Further examples and helm unittest render smoke for that directory are planned a
 
 ## Configuration
 
-`cluster.spec` is a drop-in for `ValkeyCluster.spec` (any CRD field). Nested under `cluster` so future CR kinds can sit beside it without a generic top-level `spec`.
+`cluster.spec` holds `ValkeyCluster.spec`. It is validated by `values.schema.json`, which follows the ValkeyCluster CRD at the chart's `appVersion`, so a misspelled or unknown key fails the render with a schema error. Kubernetes types embedded in the spec (`resources`, `affinity`, `tolerations`, `topologySpreadConstraints`, `containers`, `config` and similar) stay open and accept any content. Every field also accepts `null`. `cluster` accepts only `annotations`, `labels`, `spec`, `additionalSpec` and `additionalSpecString`. Nested under `cluster` so future CR kinds can sit beside it without a generic top-level `spec`. [values.yaml](values.yaml) documents every field as commented-out YAML.
 
-String values in `cluster.spec`, `cluster.labels`, and `cluster.annotations` are run through Helm `tpl`, so you can reference release metadata or `extraValues`:
+String values in `cluster.spec`, `cluster.labels`, and `cluster.annotations` are run through Helm `tpl`, so you can reference release metadata or `extraValues`. Validation runs before `tpl`, so a templated string on a field typed as integer, boolean or enum is rejected: use `cluster.additionalSpecString` for those (see below).
 
 ```yaml
 extraValues:
@@ -78,10 +78,34 @@ cluster:
 
 See [values.yaml](values.yaml), [CHANGELOG.md](CHANGELOG.md), and the [ValkeyCluster API](https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md).
 
+### `cluster.additionalSpec` and `cluster.additionalSpecString`
+
+A ValkeyCluster field that is newer than the chart's `appVersion` is rejected in `cluster.spec`. Set it in `cluster.additionalSpec`, which is not validated:
+
+```yaml
+cluster:
+  spec:
+    shards: 3
+  additionalSpec:
+    someNewField: value
+```
+
+`cluster.additionalSpec` is deep-merged over `cluster.spec`, then `cluster.additionalSpecString` over that. The string is rendered with `tpl` and parsed as YAML, so it can template a field the schema types as integer or boolean:
+
+```yaml
+cluster:
+  additionalSpecString: |
+    shards: {{ .Values.extraValues.shards }}
+```
+
+Maps merge and lists replace. The escape hatch wins on conflict, including `false`, `0`, `""` and `[]`, and `null` deletes the key. The chart's own logic (the `replicasPerShard` default, `serviceAccountName`, the `usersSecret` checks) runs on the merged result, so a field set through the escape hatch is handled like one in `cluster.spec`. String values in the merged spec go through `tpl`. That includes the output of `additionalSpecString`, which is rendered a second time, so a literal `{{` in it needs escaping twice. See [examples/additional-spec.yaml](examples/additional-spec.yaml).
+
 | Parameter | Description | Default |
 |---|---|---|
 | `cluster.spec.shards` | Shard groups | `3` |
 | `cluster.spec.replicasPerShard` | Replicas per shard. Set by the chart when neither it nor the deprecated `cluster.spec.replicas` is given | `1` |
+| `cluster.additionalSpec` | Map deep-merged over `cluster.spec`, for fields newer than the chart | `{}` |
+| `cluster.additionalSpecString` | String rendered with `tpl`, parsed as YAML and merged over `cluster.additionalSpec` | `""` |
 | `extraValues` | Free-form map for use inside `tpl` strings | `{}` |
 | `metrics.podMonitor.enabled` | Create a PodMonitor for ValkeyNode exporter sidecars (Prometheus Operator CRDs) | `false` |
 | `metrics.podMonitor.port` | Scrape port name on the exporter container | `metrics` |
@@ -177,9 +201,9 @@ usersSecret:
 | `usersSecret.annotations` | Annotations on the Secret | `{}` |
 | `usersSecret.passwords` | Map of username to password. Each key becomes a data key. Values must be strings | `{}` |
 
-Passwords must be strings. YAML reads unquoted values such as `0123`, `1.10`, `on` or very long digit strings as numbers or booleans and changes them before the chart sees them (`0123` becomes `83`), so the schema rejects them: quote them, or pass them with `--set-string`. `usersSecret.name` may use templates. The render fails when `passwords` is empty, when a password is an empty string, or when a user in `cluster.spec.users` reads a key that `passwords` does not have. A user reads the key named after it, or each key in its `passwordSecret.keys`. Users the operator reads no password for (`nopass: true`, `resetpass: true` or `enabled: false`), and users whose `passwordSecret.name` names another Secret, are not checked. When `usersSecret.name` is set, the chart sets `passwordSecret.name` on every other user that does not set it. Passwords in values files are stored in plain text in the release, so supply them from a secrets tool rather than committing them. See [examples/users-secret.yaml](examples/users-secret.yaml).
+Passwords must be strings. YAML reads unquoted values such as `0123`, `1.10`, `on` or very long digit strings as numbers or booleans and changes them before the chart sees them (`0123` becomes `83`), so the schema rejects them: quote them, or pass them with `--set-string`. `usersSecret.name` may use templates. The render fails when `passwords` is empty, when a password is an empty string, or when a user in `users` (from `cluster.spec` or `cluster.additionalSpec`) reads a key that `passwords` does not have. A user reads the key named after it, or each key in its `passwordSecret.keys`. Users the operator reads no password for (`nopass: true`, `resetpass: true` or `enabled: false`), and users whose `passwordSecret.name` names another Secret, are not checked. When `usersSecret.name` is set, the chart sets `passwordSecret.name` on every other user that does not set it. Passwords in values files are stored in plain text in the release, so supply them from a secrets tool rather than committing them. See [examples/users-secret.yaml](examples/users-secret.yaml).
 
-The checks above read `cluster.spec.users` only. With `cluster.spec.acl.users` (operator v0.9.0+) the rendered Secret still works under its default name, because the operator reads `<fullname>-users` with the username as the key. The chart does not check `acl.users` against `passwords`, and it does not set `password.secret.name` when `usersSecret.name` is set: name the Secret on each user yourself.
+The checks above read `users` only. With `cluster.spec.acl.users` (operator v0.9.0+) the rendered Secret still works under its default name, because the operator reads `<fullname>-users` with the username as the key. The chart does not check `acl.users` against `passwords`, and it does not set `password.secret.name` when `usersSecret.name` is set: name the Secret on each user yourself.
 
 To use a Secret you manage yourself, leave `usersSecret.create: false` and set `cluster.spec.acl.users[].password.secret.name` (see [examples/users-acl.yaml](examples/users-acl.yaml)).
 
@@ -206,7 +230,7 @@ serviceAccount:
 | `serviceAccount.labels` | Labels on the ServiceAccount, merged over the chart labels | `{}` |
 | `serviceAccount.automount` | Mount the API token into pods. Set on the ServiceAccount the chart creates; with `create: false`, the existing ServiceAccount's own setting applies | `false` |
 
-Wiring: when `serviceAccount.create` is true or `serviceAccount.name` is set, and `cluster.spec` has no `serviceAccountName`, the chart sets `spec.serviceAccountName` to the ServiceAccount name. An explicit `cluster.spec.serviceAccountName` always wins. With `create: true` it must name the chart's ServiceAccount, otherwise the render fails, because the created ServiceAccount would go unused. Set only `serviceAccount.name` (with `create: false`) to use a ServiceAccount that already exists.
+Wiring: when `serviceAccount.create` is true or `serviceAccount.name` is set, and the merged spec (`cluster.spec` plus `cluster.additionalSpec`) has no `serviceAccountName`, the chart sets `spec.serviceAccountName` to the ServiceAccount name. An explicit `serviceAccountName` in `cluster.spec` or `cluster.additionalSpec` always wins. With `create: true` it must name the chart's ServiceAccount, otherwise the render fails, because the created ServiceAccount would go unused. Set only `serviceAccount.name` (with `create: false`) to use a ServiceAccount that already exists.
 
 Setting `serviceAccount.create` back to `false` while `serviceAccount.name` still names the chart's ServiceAccount makes Helm delete it on the next upgrade, but the ValkeyCluster keeps referencing it, so new Valkey pods fail to start. To take the ServiceAccount over, add `helm.sh/resource-policy: keep` to `serviceAccount.annotations` and upgrade once before turning `create` off. If `serviceAccount.name` was empty, set it to the ServiceAccount's name in the same change: with `create: false` and no name, the chart stops setting `spec.serviceAccountName`.
 
@@ -241,6 +265,10 @@ extraObjects:
 ```
 
 See [`examples/extra-objects.yaml`](examples/extra-objects.yaml).
+
+## Updating the CRD schema
+
+`values.schema.json` is maintained by hand. When `appVersion` changes, compare the new `valkeyclusters` CRD (`valkey-operator/crds/valkey.io_valkeyclusters.yaml`) with the `cluster.spec` part of the schema, and apply each added, removed or changed field to both the schema and the commented listing in `values.yaml`. Follow the existing rules: every type also allows `null`, enums list `null`, operator-owned objects set `"additionalProperties": false`, and Kubernetes types embedded in the spec (`resources`, `containers`, `imagePullSecrets`, `podSecurityContext`, `exporter.resources`, `exporter.securityContext`, `scheduling.affinity`, `scheduling.tolerations`, `scheduling.topologySpreadConstraints`, `scheduling.nodeSelector`, `podMetadata.labels`, `podMetadata.annotations`, `config`) stay open objects or arrays. Leave out the CRD's `pattern`s, because Helm validates templated strings before `tpl` renders them.
 
 ## Uninstall
 
