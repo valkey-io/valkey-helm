@@ -3,6 +3,7 @@
   This file is rendered after `helm install` / `helm upgrade`.
 */}}
 
+{{- $scaledDown := and .Values.replica.enabled (eq (int .Values.replica.replicas) 0) }}
 ⭐ Valkey has been deployed!
 
 Release:      {{ .Release.Name }}
@@ -68,9 +69,23 @@ forwards to the node Sentinel promoted:
 ================================================================================
 
 Your Valkey deployment is running in REPLICATION mode:
+{{- if $scaledDown }}
+{{- if eq ((.Values.replica.persistentVolumeClaimRetentionPolicy | default dict).whenScaled | default "Retain") "Delete" }}
+- Scaled down to 0 pods. persistentVolumeClaimRetentionPolicy.whenScaled is
+  Delete, so the PVCs are deleted and Valkey starts empty when scaled up.
+{{- else }}
+- Scaled down to 0 pods. The PVCs are kept, so setting replica.replicas
+  to 1 or more starts Valkey again on the same volumes.
+{{- end }}
+
+No pod is running, so there is nothing to connect to. Set replica.replicas
+to 1 or more and upgrade the release to get the connection commands.
+{{- else }}
 - 1 Master  ({{ include "valkey.statefulsetName" . }}-0)
 - {{ sub (int .Values.replica.replicas) 1 }} Replica(s)
 {{- end }}
+{{- end }}
+{{- if not $scaledDown }}
 
 {{- if .Values.replica.service.enabled }}
 
@@ -138,6 +153,7 @@ WRITE Operations (Master only):
   $ kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "valkey.fullname" . }} 6379:{{ .Values.service.port }}
   $ valkey-cli -h 127.0.0.1 -p 6379{{ include "valkey.cli.tlsFlagsHint" . }} SET key value
 {{- end }}
+{{- end }}
 {{- else }}
 ================================================================================
 📦 STANDALONE MODE
@@ -156,6 +172,7 @@ Port:         {{ .Values.service.port }}
    In another terminal:
    $ valkey-cli -h 127.0.0.1 -p 6379{{ include "valkey.cli.tlsFlagsHint" . }} PING
 {{- end }}
+{{- if not $scaledDown }}
 {{ if eq .Values.service.type "LoadBalancer" }}
 3) External access (LoadBalancer)
    $ export SERVICE_IP=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "valkey.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
@@ -166,6 +183,7 @@ Port:         {{ .Values.service.port }}
    $ export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
    $ valkey-cli -h $NODE_IP -p $NODE_PORT{{ include "valkey.cli.tlsFlagsHint" . }} PING
 {{ end }}
+{{- end }}
 
 {{ if .Values.auth.enabled }}
 🔐 Authentication is ENABLED (ACL)
@@ -174,6 +192,7 @@ Port:         {{ .Values.service.port }}
 🔓 Authentication is DISABLED
 - Enable with: `--set auth.enabled=true` and provide `.auth.aclUsers`.
 {{ end }}
+{{- if not $scaledDown }}
 
 ✅ Quick test
 {{- if .Values.sentinel.enabled }}
@@ -185,7 +204,7 @@ $ valkey-cli -h {{ include "valkey.fullname" . }} -p {{ .Values.service.port }}{
 valkey> SET foo bar
 valkey> GET foo
 "bar"
-
+{{ end }}
 💾 Persistence
 {{- if .Values.replica.enabled }}
 - Persistence is ENABLED (required for replication mode). Each instance has its own volume.

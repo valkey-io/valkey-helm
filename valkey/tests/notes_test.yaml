@@ -1,0 +1,59 @@
+suite: NOTES replica count
+templates:
+  - templates/NOTES.txt
+set:
+  replica.enabled: true
+  persistence.enabled: true
+  persistence.size: "5Gi"
+tests:
+  - it: should list the master and its replicas
+    set:
+      replica.replicas: 3
+    asserts:
+      - matchRegexRaw:
+          pattern: "- 1 Master  \\(RELEASE-NAME-valkey-0\\)\\n- 2 Replica\\(s\\)"
+      - matchRegexRaw:
+          pattern: "Replica: RELEASE-NAME-valkey-2\\."
+      - matchRegexRaw:
+          pattern: "READ Operations"
+      - matchRegexRaw:
+          pattern: "WRITE Operations"
+      - matchRegexRaw:
+          pattern: "Quick test"
+
+  - it: should report zero pods with the volumes kept and no connection commands
+    set:
+      replica.replicas: 0
+      service.type: LoadBalancer
+    asserts:
+      - matchRegexRaw:
+          pattern: "Scaled down to 0 pods\\. The PVCs are kept"
+      - matchRegexRaw:
+          pattern: "No pod is running, so there is nothing to connect to"
+      - notMatchRegexRaw:
+          pattern: "Replica\\(s\\)"
+      - notMatchRegexRaw:
+          pattern: "READ Operations"
+      - notMatchRegexRaw:
+          pattern: "Direct Pod Access"
+      - notMatchRegexRaw:
+          pattern: "WRITE Operations"
+      - notMatchRegexRaw:
+          pattern: "External access"
+      - notMatchRegexRaw:
+          pattern: "Quick test"
+      - notMatchRegexRaw:
+          pattern: "valkey-cli"
+      - matchRegexRaw:
+          pattern: "Persistence is ENABLED"
+
+  - it: should warn that zero pods delete the volumes when whenScaled is Delete
+    set:
+      replica.replicas: 0
+      replica.persistentVolumeClaimRetentionPolicy:
+        whenScaled: Delete
+    asserts:
+      - matchRegexRaw:
+          pattern: "whenScaled is\\n  Delete, so the PVCs are deleted"
+      - notMatchRegexRaw:
+          pattern: "The PVCs are kept"
