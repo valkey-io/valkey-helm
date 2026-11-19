@@ -117,3 +117,19 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+  - it: should leave trafficDistribution unset by default
+    set:
+      replica.enabled: true
+    template: templates/service-read.yaml
+    asserts:
+      - notExists:
+          path: spec.trafficDistribution
+  - it: should be able to set trafficDistribution
+    set:
+      replica.enabled: true
+      replica.service.trafficDistribution: PreferClose
+    template: templates/service-read.yaml
+    asserts:
+      - equal:
+          path: spec.trafficDistribution
+          value: PreferClose

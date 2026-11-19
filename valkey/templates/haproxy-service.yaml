@@ -21,6 +21,9 @@ spec:
   loadBalancerSourceRanges:
     {{- toYaml .Values.haproxy.service.loadBalancerSourceRanges | nindent 4 }}
   {{- end }}
+  {{- with .Values.haproxy.service.trafficDistribution }}
+  trafficDistribution: {{ . }}
+  {{- end }}
   ports:
     - name: valkey-write
       port: {{ .Values.haproxy.service.port }}

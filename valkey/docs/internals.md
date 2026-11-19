@@ -137,6 +137,17 @@ The exception is auth with the default user defined only in `auth.aclConfig`: th
 
 HAProxy listens on `*`, which is IPv4 only, so it is unreachable on IPv6-only clusters; `haproxy.config.listenIPv6: true` binds `::` with `v4v6`, which accepts both.
 
+### Zone-aware routing
+
+By default the `valkey-haproxy` Service balances connections over every HAProxy pod, so with the pods spread across zones a client often reaches an HAProxy in another zone, which then forwards to the primary: up to two zone crossings where at most one is needed.
+`haproxy.service.trafficDistribution: PreferClose` sets the Service's `spec.trafficDistribution`, which prefers an HAProxy in the client's zone and falls back to the others when there is none ready.
+It is a hint, not a guarantee: Service proxies other than kube-proxy may handle it differently, and a `service.kubernetes.io/topology-mode` annotation in `haproxy.service.annotations` takes precedence over it.
+Spread the pods with `haproxy.topologySpreadConstraints` so that every client zone has one.
+`replica.service.trafficDistribution` does the same for `valkey-read`.
+
+The field needs Kubernetes 1.31 or newer (`PreferClose` is GA in 1.33; `PreferSameZone` and `PreferSameNode` came later) and is left out when empty.
+Traffic is not balanced across zones any more, so if most clients run in one zone, that zone's HAProxy takes most of the load.
+
 ### Labels
 
 The HAProxy pods are labelled `app.kubernetes.io/name: valkey-haproxy`, not `valkey`.
