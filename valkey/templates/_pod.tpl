@@ -50,6 +50,7 @@ spec:
     - name: init
       image: {{ include "valkey.image" . }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
+      terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
       {{- with .Values.securityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -119,6 +120,7 @@ spec:
     - name: valkey
       image: {{ include "valkey.image" . }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
+      terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
       {{- if $sentinel }}
       # A wrapper that keeps the credential free master record on the data
       # volume in step with the config Sentinel makes the server rewrite.
@@ -208,6 +210,7 @@ spec:
     - name: metrics
       image: {{ include "valkey.metrics.exporter.image" . }}
       imagePullPolicy: {{ .Values.metrics.exporter.image.pullPolicy | quote }}
+      terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
       {{- with .Values.metrics.exporter.securityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
