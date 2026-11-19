@@ -341,7 +341,8 @@ replica:
 # master through Sentinel (SENTINEL get-master-addr-by-name).
 sentinel:
   # Enable Sentinel (requires replica.enabled and replica.replicas of 2 or more).
-  # The Sentinel endpoint always requires its dedicated password, independently of whether authentication is enabled for the Valkey data endpoint.
+  # The Sentinel endpoint requires its dedicated password, independently of whether authentication is enabled for the Valkey data endpoint,
+  # unless mutual TLS stands in for it (see sentinel.auth).
   enabled: false
 
   # Number of Sentinel instances. Keep this at 3 or more so a majority can
@@ -387,6 +388,13 @@ sentinel:
   password: ""
   existingSecret: ""
   passwordKey: "sentinel"
+
+  # Authenticate the Sentinel endpoint with the password above. Can only be
+  # turned off with tls.enabled and tls.requireClientCertificate, where the
+  # client certificate already authenticates every connection. password and
+  # existingSecret must then stay empty.
+  auth:
+    enabled: true
 
   # Ask Sentinel to promote a replica before this pod shuts down, so that a
   # rolling update does not leave clients writing to a terminating master.
