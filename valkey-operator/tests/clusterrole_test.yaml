@@ -28,3 +28,18 @@ tests:
             - get
             - list
             - watch
+
+  - it: should grant the manager get and patch on pods/status for the initial sync readiness gate
+    set:
+      rbac.create: true
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - pods/status
+            verbs:
+              - get
+              - patch
