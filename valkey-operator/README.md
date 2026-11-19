@@ -15,7 +15,15 @@ A Helm chart for deploying the [Valkey Operator](https://github.com/valkey-io/va
 
 ## Upgrading
 
-Helm does not upgrade CRDs automatically during `helm upgrade`. When upgrading between chart versions that include CRD changes, apply the CRDs manually first. See [UPGRADE.md](UPGRADE.md) for version-specific instructions.
+The chart renders the CRDs from its templates, so `helm upgrade` upgrades them with the operator. Chart 0.9.0 and earlier installed them from `crds/`, which Helm never upgrades; a release installed from one of those charts needs a one-off step before its first upgrade. See [UPGRADE.md](UPGRADE.md) for version-specific instructions.
+
+The CRDs carry `helm.sh/resource-policy: keep` by default, so `helm uninstall` leaves them and every ValkeyCluster in place. Argo CD ignores that annotation. To stop Argo CD deleting the CRDs, and with them every ValkeyCluster, when the Application is deleted, set:
+
+```yaml
+crds:
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+```
 
 ## Installation
 
@@ -52,6 +60,9 @@ See [values.yaml](values.yaml) for the full list of configurable parameters.
 | `image.tag` | Operator image tag | `""` (uses `.Chart.AppVersion`) |
 | `replicaCount` | Number of operator replicas | `1` |
 | `serviceAccount.create` | Create a ServiceAccount | `true` |
+| `crds.enabled` | Install and upgrade the ValkeyCluster and ValkeyNode CRDs with the chart | `true` |
+| `crds.keep` | Add `helm.sh/resource-policy: keep` to the CRDs | `true` |
+| `crds.annotations` | Extra annotations for the CRDs | `{}` |
 | `rbac.create` | Create the operator ClusterRole/ClusterRoleBinding and the aggregated admin/editor/viewer ClusterRoles | `true` |
 | `manager.leaderElection.enabled` | Enable leader election | `true` |
 | `manager.watchNamespaces` | Restrict cache to these namespaces (cluster-wide if empty) | `[]` |
