@@ -417,6 +417,13 @@ data:
       log "This pod is not the master, shutting down"
       exit 0
     fi
+    {{- if lt (int .Values.replica.replicas) 2 }}
+
+    # A single Valkey pod (sentinel.allowUnsafeTopology) has no replica to hand
+    # over to, so asking would only hold up the shutdown until the deadline.
+    log "No replica to promote, shutting down"
+    exit 0
+    {{- end }}
 
     MASTER_SET="{{ $masterSet }}"
     DEADLINE=$(($(date +%s) + {{ .Values.sentinel.preStopFailoverTimeoutSeconds }}))
