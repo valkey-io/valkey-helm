@@ -22,6 +22,9 @@ spec:
   loadBalancerSourceRanges:
     {{- toYaml .Values.replica.service.loadBalancerSourceRanges | nindent 4 }}
   {{- end }}
+  {{- with .Values.replica.service.trafficDistribution }}
+  trafficDistribution: {{ . }}
+  {{- end }}
   ports:
     - name: tcp
       port: {{ .Values.replica.service.port }}
