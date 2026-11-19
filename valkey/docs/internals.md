@@ -140,7 +140,8 @@ HAProxy listens on `*`, which is IPv4 only, so it is unreachable on IPv6-only cl
 ### Zone-aware routing
 
 By default the `valkey-haproxy` Service balances connections over every HAProxy pod, so with the pods spread across zones a client often reaches an HAProxy in another zone, which then forwards to the primary: up to two zone crossings where at most one is needed.
-`haproxy.service.trafficDistribution: PreferClose` sets the Service's `spec.trafficDistribution`, so clients go to an HAProxy in their own zone when there is a ready one and fall back to the others when there is not.
+`haproxy.service.trafficDistribution: PreferClose` sets the Service's `spec.trafficDistribution`, which prefers an HAProxy in the client's zone and falls back to the others when there is none ready.
+It is a hint, not a guarantee: Service proxies other than kube-proxy may handle it differently, and a `service.kubernetes.io/topology-mode` annotation in `haproxy.service.annotations` takes precedence over it.
 Spread the pods with `haproxy.topologySpreadConstraints` so that every client zone has one.
 `replica.service.trafficDistribution` does the same for `valkey-read`.
 
