@@ -1,6 +1,6 @@
 # valkey
 
-![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.1.3](https://img.shields.io/badge/AppVersion-9.1.3-informational?style=flat-square)
+![Version: 1.1.0](https://img.shields.io/badge/Version-1.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.2.0](https://img.shields.io/badge/AppVersion-9.2.0-informational?style=flat-square)
 
 Valkey, an open source, high-performance in-memory datastore
 
@@ -40,10 +40,10 @@ helm install valkey valkey/valkey
 **OCI registry:**
 
 ```bash
-helm install valkey oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0
+helm install valkey oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.1.0
 ```
 
-The examples below use `valkey/valkey`; replace `valkey/valkey` with `oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.0.0` to install from the OCI registry.
+The examples below use `valkey/valkey`; replace `valkey/valkey` with `oci://ghcr.io/valkey-io/valkey-helm/valkey --version 1.1.0` to install from the OCI registry.
 Service names assume a release named `valkey`.
 
 These commands are the shortest way to try each mode and run without authentication.
