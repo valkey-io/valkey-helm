@@ -68,7 +68,9 @@ forwards to the node Sentinel promoted:
 
 ⚠️  Sentinel authentication is off (sentinel.auth.enabled): anyone who can
     reach the Sentinel port can read the topology and request a failover.
-    Restrict access to that port, e.g. with networkPolicy.
+    networkPolicy covers only the Valkey pods, and ClusterIP still admits
+    other pods, so restrict the Sentinel port with a NetworkPolicy that
+    selects the Sentinel pods.
 {{- end }}
 
 ⚠️  The {{ include "valkey.fullname" . }} service load balances across ALL pods in this mode,

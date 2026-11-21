@@ -394,8 +394,9 @@ sentinel:
   # off for clients that cannot send an AUTH to Sentinel; they then reach it
   # unauthenticated, as the default user. Sentinel runs with its protected mode
   # off, so anyone who can reach the port can read the topology and request a
-  # failover: restrict the port to the clients that need it, e.g. with
-  # networkPolicy or sentinel.service.type. password and existingSecret must
+  # failover. networkPolicy covers only the Valkey pods and ClusterIP still
+  # admits other pods, so restrict the Sentinel port with a NetworkPolicy of
+  # your own that selects the Sentinel pods. password and existingSecret must
   # stay empty while it is off.
   auth:
     enabled: true

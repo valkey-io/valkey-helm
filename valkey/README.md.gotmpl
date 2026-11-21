@@ -269,7 +269,8 @@ A client therefore needs both credentials: `sentinel` to look up the primary, th
 
 Clients that cannot send a Sentinel password, Harbor among them, need `sentinel.auth.enabled: false` instead.
 Sentinel then keeps its `default` user on without a password and the `sentinel` user is not created, so `sentinel.password` and `sentinel.existingSecret` must stay empty.
-Sentinel runs with its protected mode off in this mode, so anyone who can reach its port can read the topology and request a failover: restrict the port, for example with `networkPolicy` or `sentinel.service.type: ClusterIP`, and do not expose it outside the cluster.
+Sentinel runs with its protected mode off in this mode, so anyone who can reach its port can read the topology and request a failover.
+The chart's `networkPolicy` covers only the Valkey pods, and `sentinel.service.type: ClusterIP` still admits other pods in the cluster, so restrict the port with a NetworkPolicy of your own that selects the Sentinel pods, and keep `ClusterIP` so it is not exposed outside the cluster.
 
 With `auth.enabled`, Sentinel logs in to the Valkey nodes as `sentinel.monitorUser`, which defaults to `replica.replicationUser` and must be defined in `auth.aclUsers`.
 That user needs these permissions, otherwise failovers abort:
