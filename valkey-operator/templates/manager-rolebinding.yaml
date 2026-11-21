@@ -1,0 +1,26 @@
+{{- if and .Values.rbac.create .Values.rbac.namespaced }}
+{{- if empty .Values.manager.watchNamespaces }}
+{{- fail "rbac.namespaced requires at least one namespace in manager.watchNamespaces" }}
+{{- end }}
+{{- range .Values.manager.watchNamespaces }}
+{{- if empty (tpl . $) }}
+{{- fail "rbac.namespaced requires every entry in manager.watchNamespaces to name a namespace" }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "valkey-operator.fullname" $ }}-manager
+  namespace: {{ tpl . $ | quote }}
+  labels:
+    {{- include "valkey-operator.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "valkey-operator.fullname" $ }}-manager
+subjects:
+- kind: ServiceAccount
+  name: {{ include "valkey-operator.serviceAccountName" $ }}
+  namespace: {{ $.Release.Namespace }}
+{{- end }}
+{{- end }}
