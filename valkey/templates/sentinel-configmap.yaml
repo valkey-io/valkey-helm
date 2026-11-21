@@ -31,6 +31,7 @@ data:
       echo "$(date) $1" >&2
     }
 
+    {{- if .Values.sentinel.auth.enabled }}
     SENTINEL_PASSWORD=$(cat /sentinel-auth/password 2>/dev/null) || exit 1
     # This password is hashed into an ACL user that can run every Sentinel
     # command. An empty one hashes to a value that is the same in every
@@ -39,6 +40,7 @@ data:
       log "ERROR: The Sentinel password is empty"
       exit 1
     fi
+    {{- end }}
     {{- if .Values.auth.enabled }}
     {{- $monitorUserObj := index .Values.auth.aclUsers $monitorUser }}
     {{- $monitorPasswordKey := $monitorUserObj.passwordKey | default $monitorUser }}
@@ -80,9 +82,13 @@ data:
     # whole call, as -t bounds only the connect: a peer that accepts and never
     # answers would otherwise hold the startup forever.
     sentinel_cli() {
+      {{- if .Values.sentinel.auth.enabled }}
       REDISCLI_AUTH="$SENTINEL_PASSWORD" \
+      {{- end }}
       timeout 5 valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
+        {{- if .Values.sentinel.auth.enabled }}
         --user sentinel \
+        {{- end }}
         -t 2 -p "{{ $sentinelPort }}" "$@"
     }
 
@@ -192,35 +198,47 @@ data:
     sentinel parallel-syncs ${MASTER_SET} {{ .Values.sentinel.parallelSyncs }}
     EOF
 
-    # Sentinel has a dedicated identity. Valkey application credentials must
-    # never gain Sentinel administration privileges as a side effect.
+    {{- if or .Values.sentinel.auth.enabled .Values.auth.enabled }}
+
+    # Credentials are written into sentinel.conf, so escape them for the
+    # quoted strings there.
     escape_config_arg() {
       printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
     }
+    {{- end }}
+    {{- /* Sentinel has a dedicated identity: Valkey application credentials
+           must never gain Sentinel administration privileges as a side
+           effect. */}}
+    {{- if .Values.sentinel.auth.enabled }}
 
     SENTINEL_PASSHASH=$(printf '%s' "$SENTINEL_PASSWORD" | sha256sum | cut -f 1 -d " ")
     SENTINEL_PASSHASH_ESCAPED=$(escape_config_arg "$SENTINEL_PASSHASH")
     SENTINEL_PASSWORD_ESCAPED=$(escape_config_arg "$SENTINEL_PASSWORD")
+    {{- end }}
     {{- if .Values.auth.enabled }}
     MONITOR_PASSWORD_ESCAPED=$(escape_config_arg "$MONITOR_PASSWORD")
     {{- end }}
+    {{- if or .Values.sentinel.auth.enabled .Values.auth.enabled }}
     cat >> "$SENTINEL_CONF" << EOF
+    {{- if .Values.sentinel.auth.enabled }}
 
     user default off
     user sentinel on "#${SENTINEL_PASSHASH_ESCAPED}" ~* &* +@all
     sentinel sentinel-user sentinel
     sentinel sentinel-pass "${SENTINEL_PASSWORD_ESCAPED}"
+    {{- end }}
 
     {{- if .Values.auth.enabled }}
     # Credentials Sentinel uses to reach the monitored Valkey nodes.
     sentinel auth-pass ${MASTER_SET} "${MONITOR_PASSWORD_ESCAPED}"
     {{- end }}
     EOF
+    {{- end }}
     {{- if .Values.auth.enabled }}
     {{- if ne $monitorUser "default" }}
     echo "sentinel auth-user ${MASTER_SET} {{ $monitorUser }}" >> "$SENTINEL_CONF"
     {{- end }}
-    log "Configured the Sentinel ACL and the monitor credentials"
+    log "Configured the {{ if .Values.sentinel.auth.enabled }}Sentinel ACL and the {{ end }}monitor credentials"
     {{- end }}
     {{- if .Values.sentinel.extraConfig }}
 
@@ -293,13 +311,19 @@ data:
   sentinel-ping.sh: |-
     #!/bin/sh
     # Health probe for the Sentinel container. It lives here rather than inline
-    # in the pod spec so that the credentials stay in the mounted secret.
+    # in the pod spec so that the password, when Sentinel authentication is on,
+    # stays in the mounted secret.
     set -eu
+    {{- if .Values.sentinel.auth.enabled }}
 
     PASSWORD=$(cat /sentinel-auth/password 2>/dev/null)
 
     REPLY=$(REDISCLI_AUTH="$PASSWORD" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
       -t 2 -p {{ $sentinelPort }} ping)
+    {{- else }}
+
+    REPLY=$(valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} -t 2 -p {{ $sentinelPort }} ping)
+    {{- end }}
 
     [ "$REPLY" = "PONG" ]
   {{- if .Values.sentinel.preStopFailover }}
@@ -315,6 +339,8 @@ data:
       echo "$(date) $1" >&2
     }
 
+    {{- if .Values.sentinel.auth.enabled }}
+
     SENTINEL_PASSWORD=$(cat /sentinel-auth/password 2>/dev/null) || exit 0
     # Nothing to authenticate with. Leave without asking for a failover rather
     # than sending Sentinel commands with an empty credential, and without
@@ -323,6 +349,7 @@ data:
       log "No Sentinel password, skipping the failover request"
       exit 0
     fi
+    {{- end }}
     {{- if .Values.auth.enabled }}
     {{- $monitorUserObj := index .Values.auth.aclUsers $monitorUser }}
     {{- $monitorPasswordKey := $monitorUserObj.passwordKey | default $monitorUser }}
@@ -378,7 +405,7 @@ data:
     sentinel_cli() {
       host="$1"
       shift
-      REDISCLI_AUTH="$SENTINEL_PASSWORD" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+      {{ if .Values.sentinel.auth.enabled }}REDISCLI_AUTH="$SENTINEL_PASSWORD" {{ end }}valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }}{{ if .Values.sentinel.auth.enabled }} --user sentinel{{ end }} \
         -t 2 -h "$host" -p {{ .Values.sentinel.port }} "$@" 2>/dev/null | tr -d '\r'
     }
 
