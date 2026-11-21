@@ -93,9 +93,9 @@ helm template valkey-operator ./valkey-operator \
 ### Leave the chart version to the release
 
 Do not bump `version` or `appVersion` in `valkey-operator/Chart.yaml`, and do
-not add a `CHANGELOG.md` entry. The release pull request for the next chart
-version bumps both, following [Semantic Versioning](https://semver.org/), and
-lists the changes it ships.
+not add a `CHANGELOG.md` entry. The release pull request bumps `version`,
+following [Semantic Versioning](https://semver.org/), and lists the changes it
+ships. Change `appVersion` only when updating the operator.
 
 ## Testing
 
