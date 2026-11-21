@@ -341,7 +341,8 @@ replica:
 # master through Sentinel (SENTINEL get-master-addr-by-name).
 sentinel:
   # Enable Sentinel (requires replica.enabled and replica.replicas of 2 or more).
-  # The Sentinel endpoint always requires its dedicated password, independently of whether authentication is enabled for the Valkey data endpoint.
+  # The Sentinel endpoint requires its dedicated password, independently of whether authentication is enabled for the Valkey data endpoint,
+  # unless sentinel.auth.enabled is false.
   enabled: false
 
   # Number of Sentinel instances. Keep this at 3 or more so a majority can
@@ -380,13 +381,24 @@ sentinel:
 
   # Password of Sentinel's own endpoint, used by clients, by the Sentinels
   # among themselves and by the Valkey pods' scripts. The Valkey server never
-  # uses it. Required: set either password, or existingSecret with the
-  # password under passwordKey. Do not reuse a Valkey user password, Sentinel
-  # permissions are independent from Valkey ACLs. Sentinel reaches the Valkey
-  # nodes as monitorUser instead, with that user's Valkey password.
+  # uses it. Required unless sentinel.auth.enabled is false: set either
+  # password, or existingSecret with the password under passwordKey. Do not
+  # reuse a Valkey user password, Sentinel permissions are independent from
+  # Valkey ACLs. Sentinel reaches the Valkey nodes as monitorUser instead, with
+  # that user's Valkey password.
   password: ""
   existingSecret: ""
   passwordKey: "sentinel"
+
+  # Authenticate the Sentinel endpoint with the password above. Only turn this
+  # off for clients that cannot send an AUTH to Sentinel; they then reach it
+  # unauthenticated, as the default user. Sentinel runs with its protected mode
+  # off, so anyone who can reach the port can read the topology and request a
+  # failover: restrict the port to the clients that need it, e.g. with
+  # networkPolicy or sentinel.service.type. password and existingSecret must
+  # stay empty while it is off.
+  auth:
+    enabled: true
 
   # Ask Sentinel to promote a replica before this pod shuts down, so that a
   # rolling update does not leave clients writing to a terminating master.

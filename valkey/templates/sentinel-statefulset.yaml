@@ -106,9 +106,11 @@ spec:
               mountPath: /sentinel-data
             - name: sentinel-scripts
               mountPath: /sentinel-scripts
+            {{- if .Values.sentinel.auth.enabled }}
             - name: sentinel-auth
               mountPath: /sentinel-auth
               readOnly: true
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
               mountPath: /tls
@@ -137,7 +139,9 @@ spec:
           configMap:
             name: {{ include "valkey.fullname" . }}-sentinel-scripts
             defaultMode: 0555
+        {{- if .Values.sentinel.auth.enabled }}
         {{- include "valkey.sentinel.authVolume" . | nindent 8 }}
+        {{- end }}
         {{- if .Values.tls.enabled }}
         - name: {{ include "valkey.fullnameWithSuffix" (list . "tls") }}
           {{- include "valkey.tls.volumeSource" . | nindent 10 }}
