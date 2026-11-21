@@ -90,12 +90,12 @@ helm template valkey-operator ./valkey-operator \
   --set networkPolicy.enabled=true
 ```
 
-### Bump the chart version
+### Leave the chart version to the release
 
-Any change to the chart's behavior or templates requires a version bump.
-Increment `version` in `valkey-operator/Chart.yaml` following
-[Semantic Versioning](https://semver.org/). Bump `appVersion` only when the
-change targets a new release of the operator itself.
+Do not bump `version` or `appVersion` in `valkey-operator/Chart.yaml`, and do
+not add a `CHANGELOG.md` entry. The release pull request for the next chart
+version bumps both, following [Semantic Versioning](https://semver.org/), and
+lists the changes it ships.
 
 ## Testing
 
@@ -171,7 +171,7 @@ Before requesting review, confirm your PR:
 
 - [ ] Links the issue it addresses (for example, `Closes #204`)
 - [ ] Includes a clear summary of what changed and why
-- [ ] Bumps the chart `version` in `Chart.yaml`
+- [ ] Leaves the `Chart.yaml` versions and `CHANGELOG.md` to the release pull request
 - [ ] Updates `values.yaml` and `README.md` for any new or changed parameters
 - [ ] Passes `helm lint ./valkey-operator`
 - [ ] Passes `helm unittest ./valkey-operator`, with tests added or updated for the change
