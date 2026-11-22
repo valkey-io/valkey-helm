@@ -1,0 +1,6 @@
+{{- range $key, $value := .Values.extraObjects }}
+{{- if not (kindIs "invalid" $value) }}
+---
+{{ tpl (ternary $value (toYaml $value) (kindIs "string" $value)) $ }}
+{{- end }}
+{{- end }}

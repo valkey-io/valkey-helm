@@ -47,6 +47,16 @@
         "extraInitContainers": {
             "type": "array"
         },
+        "extraObjects": {
+            "type": "object",
+            "additionalProperties": {
+                "type": [
+                    "object",
+                    "string",
+                    "null"
+                ]
+            }
+        },
         "extraVolumeMounts": {
             "type": "array"
         },
