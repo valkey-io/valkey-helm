@@ -990,4 +990,5 @@ metrics:
 #         name: '{{ include "valkey.fullname" . }}-settings'
 #       data:
 #         release: '{{ .Release.Name }}'
+# @schema type:object
 extraObjects: {}
