@@ -477,6 +477,25 @@ extraConfig: |
   include /extra-conf/valkey.conf
 ```
 
+### Init Container Image
+
+In every mode the Valkey pods start with an init container that writes the configuration with a shell script, from the Valkey image (`image`) by default.
+If your Valkey image has no shell, point `initContainer.image` at one that does, such as `busybox`:
+
+```yaml
+initContainer:
+  image:
+    repository: busybox
+    tag: "1.37.0"
+```
+
+Only the init container moves. Unset, it renders exactly as before, on the Valkey image and `image.pullPolicy`.
+With a `repository` set, the image is composed like the chart's other images (`global.imageRegistry` applies); an empty `tag` defaults to the chart `appVersion`, so set a `tag` for a non-Valkey image, and an empty `pullPolicy` falls back to `image.pullPolicy`.
+
+In Sentinel mode the server container and the Sentinel pods also run shell scripts from `image`, and so do the `helm test` pods, so a Valkey image without a shell cannot be used there.
+When Sentinel is enabled the init image must also contain `valkey-cli`, which the init script uses to ask the Sentinels and the other nodes which of them is the master: the official Valkey image qualifies, `busybox` does not.
+The init script checks for the commands it needs before writing anything and exits with an error naming the missing ones.
+
 ## Cluster Mode
 
 This chart does not support Valkey cluster mode.
@@ -556,6 +575,10 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | image.repository | string | `"valkey/valkey"` |  |
 | image.tag | string | `""` |  |
 | imagePullSecrets | list | `[]` |  |
+| initContainer.image.pullPolicy | string | `""` |  |
+| initContainer.image.registry | string | `""` |  |
+| initContainer.image.repository | string | `""` |  |
+| initContainer.image.tag | string | `""` |  |
 | initResources | object | `{}` |  |
 | livenessProbe.customProbe | object | `{}` |  |
 | livenessProbe.enabled | bool | `true` |  |
