@@ -58,17 +58,365 @@ cluster:
   # Labels on the ValkeyCluster object (in addition to chart labels)
   labels: {}
 
-  # ValkeyCluster.spec drop-in (any CRD field allowed). Tested against operator
-  # appVersion (v0.9.0): scheduling under spec.scheduling, PDB as {mode: ...},
-  # node.spread.shard|primaries|pods. See CHANGELOG.md.
-  # Rendered via tpl so string values may use Helm templates, e.g.
+  # ValkeyCluster.spec. Every field of the operator's ValkeyCluster API is
+  # listed below, commented out, with its description. values.schema.json
+  # follows the CRD and rejects unknown fields here; put fields this chart
+  # does not know about in cluster.additionalSpec.
+  # Tested against operator appVersion (v0.9.0): scheduling under spec.scheduling,
+  # PDB as {mode: ...}, node.spread.shard|primaries|pods. See CHANGELOG.md.
+  # String values are rendered via tpl, so free-form string fields may use Helm
+  # templates. Helm validates values against the schema before tpl runs, so an
+  # enum, integer or boolean field cannot hold a template: set it through
+  # cluster.additionalSpecString instead. Example:
   #   image: "valkey/valkey:{{ .Chart.AppVersion }}"
   #   networking.tls.certificates.server.secretName: "{{ .Release.Name }}-tls"
   # API: https://github.com/valkey-io/valkey-operator/blob/main/docs/valkeycluster.md
-  # replicasPerShard defaults to 1 when neither it nor the deprecated replicas
-  # is set here.
   spec:
+    # Convention for the listing below: a commented-out field is "#", one space,
+    # then the YAML line at the indentation it has once uncommented. To use a
+    # field, remove "# " from its line and from the lines of its children.
+    # Notes about nested fields start with a second "#" so that they stay
+    # comments after uncommenting. Values shown are examples, with the
+    # operator default named in the sentence above where there is one.
+
+    # Number of shard groups. Each group has one primary and replicasPerShard
+    # replicas. Minimum 1.
     shards: 3
+
+    # Replicas in each shard, in addition to its primary. Minimum 0. The chart
+    # sets 1 when neither this nor the deprecated replicas is set.
+    # replicasPerShard: 1
+
+    # Deprecated: use replicasPerShard, which has the same meaning. A spec
+    # cannot set both. Removed in v1beta1.
+    # replicas: 1
+
+    # Override the default Valkey image.
+    # image: valkey/valkey:9.0.0
+
+    # Durable storage for each ValkeyNode. Requires workloadType StatefulSet.
+    # It cannot be added or removed after the cluster is created.
+    # persistence:
+    #   # Requested PVC size. It can only grow.
+    #   size: 1Gi
+    #   # Storage class for the PVC. Immutable.
+    #   storageClassName: standard
+    #   # Retain (default) keeps the PVC when the ValkeyNode is deleted. Delete
+    #   # removes it.
+    #   reclaimPolicy: Retain
+
+    # Resource requirements for the Valkey container in each pod. Passed
+    # through to Kubernetes without validation.
+    # Example:
+    # resources:
+    #   requests:
+    #     cpu: 500m
+    #     memory: 1Gi
+    #   limits:
+    #     memory: 1Gi
+
+    # Additional Valkey configuration parameters, as a map of parameter name
+    # to value. Passed through without validation.
+    # Example:
+    # config:
+    #   maxmemory-policy: allkeys-lru
+
+    # Metrics exporter sidecar options.
+    # exporter:
+    #   # Enable or disable the sidecar. Enabled when unset.
+    #   enabled: true
+    #   # Override the default exporter image.
+    #   image: oliver006/redis_exporter:v1.67.0
+    #   # Additional command-line arguments for the exporter container.
+    #   args:
+    #     - --include-system-metrics
+    #   # Resource requirements for the exporter container. Passed through
+    #   # without validation.
+    #   resources:
+    #     requests:
+    #       cpu: 50m
+    #       memory: 64Mi
+    #   # SecurityContext for the exporter container. Passed through without
+    #   # validation.
+    #   securityContext:
+    #     readOnlyRootFilesystem: true
+
+    # How clients and peers reach cluster nodes.
+    # networking:
+    #   # DNS suffix that kubelet publishes Service DNS under. Used for Hostname
+    #   # announce names and the default TLS server name. Must match the
+    #   # cluster. Defaults to cluster.local.
+    #   clusterDomain: cluster.local
+    #   # In-cluster endpoint announcement after CLUSTER SLOTS.
+    #   discovery:
+    #     # IP (default) or Hostname. Hostname announces per-pod DNS names under
+    #     # the headless Service and requires workloadType StatefulSet.
+    #     preferredEndpointType: IP
+    #   # Opt in to one ClusterIP Service per node. Omit it to create none.
+    #   # Each Service selects that one pod.
+    #   perNodeServices: {}
+    #   # TLS for the cluster.
+    #   tls:
+    #     # Hostname used for TLS verification when the operator connects to a
+    #     # node by pod IP. Defaults to
+    #     # valkey-<name>.<namespace>.svc.<clusterDomain>.
+    #     serverName: valkey.example.svc.cluster.local
+    #     # Certificate slots used by the cluster.
+    #     certificates:
+    #       # Node identity presented to clients and peers, and the trust root
+    #       # for the cluster. The Secret must contain ca.crt, tls.crt and
+    #       # tls.key.
+    #       server:
+    #         # Name of the Secret.
+    #         secretName: "{{ .Release.Name }}-tls"
+    #     # Client certificate authentication. Mode defaults to Optional and
+    #     # certificateUser to Disabled.
+    #     clientAuth:
+    #       # Required enforces mTLS. Optional allows both authenticated and
+    #       # unauthenticated clients. Disabled turns client certificate
+    #       # processing off.
+    #       mode: Optional
+    #       # How Valkey maps a client certificate to an ACL user. CN uses the
+    #       # Common Name (Valkey 9.0+). URI uses the first matching URI SAN
+    #       # (Valkey 9.1+). Disabled (default) leaves the directive unset.
+    #       certificateUser: Disabled
+    #       # Extra trust roots for client certificates issued by a different CA
+    #       # than the server certificate. The operator merges them with the
+    #       # server ca.crt. Each entry names a Secret or a ConfigMap, not both.
+    #       ca:
+    #         # Name of a Secret holding the roots.
+    #         - secretName: client-ca
+    #           # Key holding the roots, as PEM certificates or a SPIFFE trust
+    #           # bundle. Defaults to ca.crt.
+    #           key: ca.crt
+    #         # Name of a ConfigMap holding the roots, as SPIRE and trust-manager
+    #         # publish bundles.
+    #         - configMapName: spiffe-bundle
+
+    # Valkey access control managed by the operator.
+    # acl:
+    #   # Users managed by the operator.
+    #   users:
+    #     - name: alice
+    #       # Enabled (default) or Disabled. Whether the user can authenticate.
+    #       state: Enabled
+    #       # Raw ACL rules appended to anything generated from the fields below.
+    #       permissions: "+@read"
+    #       # How the user authenticates: Secret, Any or Disabled.
+    #       password:
+    #         type: Secret
+    #         # Secret holding the passwords. Defaults to the Secret
+    #         # <ValkeyCluster name>-users, with the username as the key.
+    #         secret:
+    #           # Name of the Secret.
+    #           name: my-users
+    #           # Keys in the Secret that hold passwords. Valkey supports
+    #           # several per user, for rotation. Defaults to the username.
+    #           keys:
+    #             - alice
+    #       # Command categories, commands and subcommands the user may or may
+    #       # not run.
+    #       commands:
+    #         allow:
+    #           - "@read"
+    #         deny:
+    #           - "@dangerous"
+    #       # Key patterns the user may access.
+    #       keys:
+    #         # Read-only access. Maps to %R~pattern.
+    #         readOnly:
+    #           - "cache:*"
+    #         # Read and write access. Maps to ~pattern.
+    #         readWrite:
+    #           - "app:*"
+    #         # Write-only access. Maps to %W~pattern.
+    #         writeOnly:
+    #           - "events:*"
+    #       # Pub/Sub channel restrictions.
+    #       channels:
+    #         # Channel patterns. Maps to &pattern.
+    #         patterns:
+    #           - "news:*"
+
+    # Pod placement.
+    # scheduling:
+    #   # Affinity for the pods, as in a pod spec. Kubernetes ANDs nodeAffinity
+    #   # with nodeSelector, so a node must satisfy both. Passed through without
+    #   # validation.
+    #   affinity:
+    #     nodeAffinity:
+    #       requiredDuringSchedulingIgnoredDuringExecution:
+    #         nodeSelectorTerms:
+    #           - matchExpressions:
+    #               - key: workload
+    #                 operator: In
+    #                 values: [valkey]
+    #   # Node selector for the pods. Passed through without validation.
+    #   nodeSelector:
+    #     disktype: ssd
+    #   # Tolerations for the pods. Passed through without validation.
+    #   tolerations:
+    #     - key: dedicated
+    #       operator: Equal
+    #       value: valkey
+    #       effect: NoSchedule
+    #   # Topology spread constraints for the pods. Passed through without
+    #   # validation.
+    #   topologySpreadConstraints:
+    #     - maxSkew: 1
+    #       topologyKey: topology.example.com/rack
+    #       whenUnsatisfiable: ScheduleAnyway
+    #       labelSelector:
+    #         matchLabels:
+    #           valkey.io/cluster: my-valkey
+    #   # Name of an existing PriorityClass applied to every pod, which
+    #   # protects them from eviction under resource pressure.
+    #   priorityClassName: high-priority
+    #   # Constraints on the node axis (topologyKey kubernetes.io/hostname).
+    #   # With this unset, every node spread is Disabled.
+    #   node:
+    #     # Distributes the pods across nodes.
+    #     spread:
+    #       # Keep the pods of one shard on distinct nodes, as pod
+    #       # anti-affinity. Disabled when unset.
+    #       shard:
+    #         # Disabled, Preferred or Required.
+    #         mode: Preferred
+    #       # Balance each shard's first pod across nodes, as a topology spread
+    #       # constraint. Disabled when unset.
+    #       primaries:
+    #         mode: Preferred
+    #       # Balance all pods across nodes, as a topology spread constraint.
+    #       # Disabled when unset. Rejected alongside a primaries spread of the
+    #       # same strength, so this example uses Required.
+    #       pods:
+    #         mode: Required
+    #   # Constraints on the zone axis (topologyKey topology.kubernetes.io/zone).
+    #   # With this unset, every zone spread is Disabled.
+    #   zone:
+    #     # Distributes the pods across zones.
+    #     spread:
+    #       # Balance the pods of each shard across zones. Disabled when unset.
+    #       shard:
+    #         # Disabled, Preferred or Required.
+    #         mode: Preferred
+    #       # Balance each shard's first pod across zones. Disabled when unset.
+    #       primaries:
+    #         mode: Disabled
+    #       # Balance all pods across zones. Disabled when unset. At most one of
+    #       # shard, primaries and pods may use each of Preferred and Required.
+    #       pods:
+    #         mode: Required
+    #     # Give every pod a fixed zone by round-robin over an ordered list.
+    #     # Cannot be combined with a zone spread that is not Disabled, so remove
+    #     # the spread block above to use it. The nodeSelector must not
+    #     # set topology.kubernetes.io/zone. Unset means no pinning.
+    #     pinning:
+    #       # A pod's zone is zones[(shardIndex + nodeIndex) % len(zones)].
+    #       # Entries must be unique. Immutable while set: remove pinning,
+    #       # reconcile, then add it again to change the list.
+    #       zones:
+    #         - us-east-1a
+    #         - us-east-1b
+    #         - us-east-1c
+    #   #
+    #   # Scheduling recipes from the operator docs. Each one replaces the node
+    #   # and zone blocks above. Zone pinning is the pinning block above.
+    #   #
+    #   # Keep a shard's primary and replica off the same node, as a soft rule.
+    #   # The minimum for production availability.
+    #   # node:
+    #   #   spread:
+    #   #     shard:
+    #   #       mode: Preferred
+    #   #
+    #   # Balance each shard's pods across zones, as a soft rule.
+    #   # zone:
+    #   #   spread:
+    #   #     shard:
+    #   #       mode: Preferred
+    #   #
+    #   # Forbid a shard's pods from sharing a node and bias them across zones.
+    #   # The node and zone axes are independent, so they combine.
+    #   # node:
+    #   #   spread:
+    #   #     shard:
+    #   #       mode: Required
+    #   # zone:
+    #   #   spread:
+    #   #     shard:
+    #   #       mode: Preferred
+
+    # Labels and annotations added to every Valkey pod. They are not part of
+    # the workload selector and can change at any time, which rolls the pods.
+    # Keys under valkey.io/ and the operator's app.kubernetes.io/ keys are
+    # reserved.
+    # podMetadata:
+    #   # Labels added to the pods. Passed through without validation.
+    #   labels:
+    #     team: platform
+    #   # Annotations added to the pods. Passed through without validation.
+    #   annotations:
+    #     example.com/owner: platform
+
+    # PodSecurityContext for each ValkeyNode pod. When set, it replaces the
+    # operator default. Passed through without validation.
+    # Example:
+    # podSecurityContext:
+    #   fsGroup: 1000
+    #   runAsUser: 1000
+    #   runAsGroup: 1000
+
+    # The operator-managed PodDisruptionBudget. The operator applies the
+    # Cluster mode when this is unset.
+    # podDisruptionBudget:
+    #   # Cluster (default) or Disabled.
+    #   mode: Cluster
+
+    # Name of the ServiceAccount for the pods. The namespace's default
+    # ServiceAccount is used when unset. The top-level serviceAccount value can
+    # set this instead.
+    # serviceAccountName: valkey
+
+    # Secrets in the same namespace used to pull any of the images (Valkey,
+    # exporter and additional containers). Passed through without validation.
+    # Example:
+    # imagePullSecrets:
+    #   - name: regcred
+
+    # Additional containers, or overrides for existing ones, applied as a
+    # strategic merge patch. The name server-init is reserved. Passed through
+    # without validation.
+    # Example:
+    # containers:
+    #   - name: sidecar
+    #     image: busybox
+    #     command: ["sleep", "infinity"]
+
+    # Pod termination grace period for the Valkey nodes, in seconds. Minimum 1.
+    # It must give the graceful CLUSTER FAILOVER on SIGTERM time to hand each
+    # shard to a replica before SIGKILL. When unset, the operator derives a
+    # default from cluster-manual-failover-timeout. A lower value is honoured
+    # but reported as a warning.
+    # terminationGracePeriodSeconds: 60
+
+    # StatefulSet (default) or Deployment. What each ValkeyNode creates.
+    # Immutable.
+    # workloadType: StatefulSet
+
+    # Deprecated: use acl.users. It cannot be combined with acl.users and is
+    # removed in v1beta1. Items take the acl.users fields name, permissions,
+    # commands, keys and channels. In place of state and password they take
+    # enabled, nopass, resetpass and passwordSecret. Only the top-level key is
+    # listed here.
+    # users: []
+
+  # ValkeyCluster.spec fields not covered by cluster.spec (passed through tpl).
+  # Deep-merged over cluster.spec; wins on conflict.
+  additionalSpec: {}
+  # Same, as a raw string rendered through tpl and parsed as YAML, for
+  # templating that has to produce structure.
+  additionalSpecString: ""
 
 # NetworkPolicy for the Valkey pods (selected by valkey.io/cluster=<ValkeyCluster name>).
 # Off by default. When enabled, ingress is limited to what the cluster needs to
@@ -139,6 +487,8 @@ serviceAccount:
 # a user names another Secret; the data key defaults to the
 # username. To use a Secret you manage yourself, leave create: false and set
 # cluster.spec.acl.users[].password.secret.name (see examples/users-acl.yaml).
+# The chart only points users at this Secret, and checks passwords against it,
+# for the deprecated cluster.spec.users.
 usersSecret:
   create: false
   # Defaults to "<fullname>-users" and may use templates. When set, users in

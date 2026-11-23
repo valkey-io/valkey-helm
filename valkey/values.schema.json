@@ -88,6 +88,9 @@
                         "healthPort": {
                             "type": "integer"
                         },
+                        "listenIPv6": {
+                            "type": "boolean"
+                        },
                         "maxconn": {
                             "type": "integer"
                         },

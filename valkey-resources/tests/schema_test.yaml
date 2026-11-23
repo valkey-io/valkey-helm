@@ -1,0 +1,101 @@
+suite: cluster.spec schema
+templates:
+  - templates/valkeycluster.yaml
+tests:
+  - it: rejects an unknown top-level cluster.spec key
+    set:
+      cluster.spec.foo: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional propert.*'foo'"
+
+  - it: rejects an unknown key inside an operator-owned object
+    set:
+      cluster.spec.persistence.sizee: 1Gi
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional propert.*'sizee'"
+
+  - it: rejects a value outside a CRD enum
+    set:
+      cluster.spec.persistence.reclaimPolicy: Bogus
+    asserts:
+      - failedTemplate:
+          errorPattern: "reclaimPolicy"
+
+  - it: accepts any content under an open path
+    set:
+      cluster.spec.resources:
+        limits:
+          cpu: "1"
+      cluster.spec.scheduling.affinity:
+        nodeAffinity:
+          x: y
+    asserts:
+      - equal:
+          path: spec.resources.limits.cpu
+          value: "1"
+      - equal:
+          path: spec.scheduling.affinity.nodeAffinity.x
+          value: y
+
+  - it: accepts null on a typed field
+    set:
+      cluster.spec.exporter:
+        enabled: null
+    asserts:
+      - equal:
+          path: spec.exporter
+          value:
+            enabled: null
+
+  - it: accepts persistence.size as a string
+    set:
+      cluster.spec.persistence.size: 10Gi
+    asserts:
+      - equal:
+          path: spec.persistence.size
+          value: 10Gi
+
+  - it: accepts persistence.size as an integer
+    set:
+      cluster.spec.persistence.size: 1073741824
+    asserts:
+      - equal:
+          path: spec.persistence.size
+          value: 1073741824
+
+  - it: keeps an empty perNodeServices, which turns the feature on
+    set:
+      cluster.spec.networking.perNodeServices: {}
+    asserts:
+      - equal:
+          path: spec.networking.perNodeServices
+          value: {}
+
+  - it: keeps an empty config value
+    set:
+      cluster.spec.config:
+        save: ""
+    asserts:
+      - equal:
+          path: spec.config.save
+          value: ""
+
+  - it: keeps an empty pod label value and an empty imagePullSecrets
+    set:
+      cluster.spec.podMetadata.labels:
+        x: ""
+      cluster.spec.imagePullSecrets: []
+    asserts:
+      - equal:
+          path: spec.podMetadata.labels.x
+          value: ""
+      - equal:
+          path: spec.imagePullSecrets
+          value: []
+
+  - it: renders no persistence key when unset
+    asserts:
+      - notExists:
+          path: spec.persistence

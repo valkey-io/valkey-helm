@@ -333,6 +333,7 @@ After a failover clients get connection errors until HAProxy sees the new primar
 HAProxy runs 3 pods by default (`haproxy.replicas`), labelled `app.kubernetes.io/name: valkey-haproxy` and `app.kubernetes.io/component: haproxy`.
 Like the Sentinels, they take their own `haproxy.affinity`, `haproxy.topologySpreadConstraints`, `haproxy.podLabels`, `haproxy.podAnnotations`, `haproxy.nodeSelector` and `haproxy.tolerations`, and their own `haproxy.podDisruptionBudget`.
 `haproxy.strategy` sets the Deployment's rollout strategy.
+HAProxy listens on IPv4 only by default; set `haproxy.config.listenIPv6: true` on IPv6-only clusters and on dual stack clusters whose primary family is IPv6.
 
 With authentication, HAProxy health checks Valkey as `haproxy.checkUser` (default `default`), which needs `+info` and `+ping`.
 
@@ -507,6 +508,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | haproxy.config.checkInterval | string | `"2s"` |  |
 | haproxy.config.checkTimeout | string | `"5s"` |  |
 | haproxy.config.healthPort | int | `8404` |  |
+| haproxy.config.listenIPv6 | bool | `false` |  |
 | haproxy.config.maxconn | int | `4096` |  |
 | haproxy.config.timeout.client | string | `"1m"` |  |
 | haproxy.config.timeout.connect | string | `"5s"` |  |

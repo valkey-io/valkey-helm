@@ -1,0 +1,13 @@
+# Set a ValkeyCluster field through cluster.additionalSpec. Use it for a CRD
+# field that is newer than this chart's appVersion: cluster.spec is validated
+# against the CRD at that version and rejects keys it does not know, while
+# additionalSpec is merged over cluster.spec without validation.
+# networking.perNodeServices exists in v0.9.0, so it is already valid in
+# cluster.spec. It is shown here only to illustrate the form.
+cluster:
+  spec:
+    shards: 3
+    replicasPerShard: 1
+  additionalSpec:
+    networking:
+      perNodeServices: {}

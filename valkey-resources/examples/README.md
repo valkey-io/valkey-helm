@@ -33,6 +33,7 @@ helm install my-cluster valkey/valkey-resources -n valkey \
 | [extra-objects.yaml](extra-objects.yaml) | `extraObjects` ConfigMap, as an object and as a templated string |
 | [users-secret.yaml](users-secret.yaml) | ACL users with a chart-rendered users Secret |
 | [network-policy.yaml](network-policy.yaml) | NetworkPolicy with client and Prometheus rules in `extraIngress` |
+| [additional-spec.yaml](additional-spec.yaml) | `cluster.additionalSpec` for a CRD field newer than the chart |
 
 ## Notes
 

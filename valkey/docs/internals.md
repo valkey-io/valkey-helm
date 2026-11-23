@@ -133,6 +133,10 @@ It drops a pod once the pod's readiness probe fails: the probe notices a pod tha
 The readiness probe passes only on `PONG`, so a replica that is still loading its dataset stays out of `valkey-read` until it can answer.
 The exception is auth with the default user defined only in `auth.aclConfig`: the chart cannot know its password, so the probe runs unauthenticated and also accepts `NOAUTH`, which Valkey answers before it checks whether it is loading. Such a replica counts as ready while it loads; set `readinessProbe.customProbe` to an authenticated probe if loading replicas must stay out of `valkey-read`.
 
+### Listen address
+
+HAProxy listens on `*`, which is IPv4 only, so it is unreachable on IPv6-only clusters; `haproxy.config.listenIPv6: true` binds `::` with `v4v6`, which accepts both.
+
 ### Labels
 
 The HAProxy pods are labelled `app.kubernetes.io/name: valkey-haproxy`, not `valkey`.
