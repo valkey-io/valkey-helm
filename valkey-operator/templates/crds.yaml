@@ -1,0 +1,19 @@
+{{- /*
+The CRDs live in crd-bases/, copied unchanged from the operator's
+config/crd/bases. They are rendered here instead of from crds/ so that Helm
+upgrades them and so that crds.* can add labels and annotations.
+*/}}
+{{- if .Values.crds.enabled }}
+{{- range $path, $_ := .Files.Glob "crd-bases/*.yaml" }}
+{{- $crd := $.Files.Get $path | fromYaml }}
+{{- $annotations := $crd.metadata.annotations | default dict }}
+{{- if $.Values.crds.keep }}
+{{- $_ := set $annotations "helm.sh/resource-policy" "keep" }}
+{{- end }}
+{{- $annotations = mustMergeOverwrite $annotations ($.Values.crds.annotations | default dict) }}
+{{- $_ := set $crd.metadata "annotations" $annotations }}
+{{- $_ := set $crd.metadata "labels" (include "valkey-operator.labels" $ | fromYaml) }}
+---
+{{ toYaml $crd }}
+{{- end }}
+{{- end }}

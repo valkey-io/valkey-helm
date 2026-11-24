@@ -1,0 +1,87 @@
+suite: operator CRDs
+templates:
+  - templates/crds.yaml
+tests:
+  - it: should render both CRDs by default
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: CustomResourceDefinition
+      - equal:
+          path: metadata.name
+          value: valkeyclusters.valkey.io
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: valkeynodes.valkey.io
+        documentIndex: 1
+
+  - it: should render the CRD spec unchanged
+    asserts:
+      - equal:
+          path: spec.group
+          value: valkey.io
+      - equal:
+          path: spec.names.kind
+          value: ValkeyCluster
+        documentIndex: 0
+      - equal:
+          path: spec.names.kind
+          value: ValkeyNode
+        documentIndex: 1
+      - equal:
+          path: spec.versions[0].name
+          value: v1alpha1
+      - isNotNull:
+          path: spec.versions[0].schema.openAPIV3Schema.properties.spec
+
+  - it: should keep the controller-gen annotation
+    asserts:
+      - equal:
+          path: metadata.annotations["controller-gen.kubebuilder.io/version"]
+          value: v0.22.0
+
+  - it: should not render CRDs when disabled
+    set:
+      crds.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should keep CRDs on uninstall by default
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+
+  - it: should not set the resource policy when keep is false
+    set:
+      crds.keep: false
+    asserts:
+      - notExists:
+          path: metadata.annotations["helm.sh/resource-policy"]
+
+  - it: should add custom annotations
+    set:
+      crds.annotations:
+        argocd.argoproj.io/sync-options: Delete=false,Prune=false
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: Delete=false,Prune=false
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - equal:
+          path: metadata.annotations["controller-gen.kubebuilder.io/version"]
+          value: v0.22.0
+
+  - it: should include standard labels
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: valkey-operator
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
