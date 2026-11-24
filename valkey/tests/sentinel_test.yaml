@@ -117,33 +117,70 @@ tests:
           path: spec.podManagementPolicy
           value: Parallel
 
-  - it: should keep the Kubernetes probe timeout for the sentinel probes by default
+  - it: should keep the sentinel probe timings by default
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe
+          value:
+            exec:
+              command: ["/sentinel-scripts/sentinel-ping.sh"]
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 1
+            failureThreshold: 18
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe
+          value:
+            exec:
+              command: ["/sentinel-scripts/sentinel-ping.sh"]
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe
+          value:
+            exec:
+              command: ["/sentinel-scripts/sentinel-ping.sh"]
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+
+  - it: should set each sentinel probe's timings on its own
+    set:
+      sentinel.startupProbe.timeoutSeconds: 3
+      sentinel.livenessProbe.timeoutSeconds: 4
+      sentinel.livenessProbe.failureThreshold: 5
+      sentinel.readinessProbe.periodSeconds: 7
     template: templates/sentinel-statefulset.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
-          value: 1
+          value: 3
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
-          value: 1
+          value: 4
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 7
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
           value: 1
 
-  - it: should apply sentinel.probeTimeoutSeconds to the three sentinel probes
+  - it: should keep the sentinel startup probe covering startupTimeoutSeconds when its period changes
     set:
-      sentinel.probeTimeoutSeconds: 3
+      sentinel.startupProbe.periodSeconds: 7
     template: templates/sentinel-statefulset.yaml
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
-          value: 3
-      - equal:
-          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
-          value: 3
-      - equal:
-          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
-          value: 3
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 13
 
   - it: should keep ordered startup when sentinel is disabled
     set:

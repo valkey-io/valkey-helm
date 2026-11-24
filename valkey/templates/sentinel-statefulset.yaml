@@ -89,19 +89,32 @@ spec:
           startupProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
-            periodSeconds: 5
-            timeoutSeconds: {{ .Values.sentinel.probeTimeoutSeconds }}
-            failureThreshold: {{ div (add .Values.sentinel.startupTimeoutSeconds 30) 5 }}
+            {{- with .Values.sentinel.startupProbe }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
+            periodSeconds: {{ .periodSeconds }}
+            timeoutSeconds: {{ .timeoutSeconds }}
+            {{- /* Enough failures to cover startupTimeoutSeconds plus 30s, rounded up. */}}
+            failureThreshold: {{ div (add $.Values.sentinel.startupTimeoutSeconds 29 .periodSeconds) .periodSeconds }}
+            {{- end }}
           livenessProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
-            periodSeconds: 10
-            timeoutSeconds: {{ .Values.sentinel.probeTimeoutSeconds }}
+            {{- with .Values.sentinel.livenessProbe }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
+            periodSeconds: {{ .periodSeconds }}
+            timeoutSeconds: {{ .timeoutSeconds }}
+            failureThreshold: {{ .failureThreshold }}
+            {{- end }}
           readinessProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
-            periodSeconds: 10
-            timeoutSeconds: {{ .Values.sentinel.probeTimeoutSeconds }}
+            {{- with .Values.sentinel.readinessProbe }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
+            periodSeconds: {{ .periodSeconds }}
+            timeoutSeconds: {{ .timeoutSeconds }}
+            failureThreshold: {{ .failureThreshold }}
+            successThreshold: {{ .successThreshold }}
+            {{- end }}
           resources:
             {{- toYaml .Values.sentinel.resources | nindent 12 }}
           volumeMounts:

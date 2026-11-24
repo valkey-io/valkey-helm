@@ -405,9 +405,26 @@ sentinel:
   # gives up on discovering the current master and assumes pod-0 is the master
   startupTimeoutSeconds: 60
 
-  # timeoutSeconds of the Sentinel health probes. The probe's valkey-cli waits
-  # up to 2s to connect, so use 3 or more to let that wait run its course.
-  probeTimeoutSeconds: 1 # @schema minimum:1
+  # Timings of the Sentinel health probes. Each probe pings Sentinel with
+  # valkey-cli, which waits up to 2s to connect, so a timeoutSeconds of 3 or
+  # more lets that wait run its course. The startup probe's failureThreshold
+  # is not a value: it is derived from startupTimeoutSeconds and the probe's
+  # periodSeconds, so that the probe outlasts the startup wait.
+  startupProbe:
+    initialDelaySeconds: 0
+    periodSeconds: 5 # @schema minimum:1
+    timeoutSeconds: 1
+  livenessProbe:
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
+    successThreshold: 1
 
   # How long a pod with no recorded topology waits for a Sentinel, or for
   # another node, to tell it what the topology is. This is the fresh install
