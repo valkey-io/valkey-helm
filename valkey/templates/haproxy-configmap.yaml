@@ -19,14 +19,13 @@ data:
       maxconn {{ .Values.haproxy.config.maxconn }}
 
     # Pod IPs change on every reschedule, so the backends are resolved at
-    # runtime instead of once at startup.
+    # runtime instead of once at startup. Only a name that is gone (nx) is
+    # dropped after 1s: a resolver that fails or does not answer says nothing
+    # about the server, so those holds stay at HAProxy's defaults.
     resolvers kubernetes
       parse-resolv-conf
       hold valid 1s
       hold nx 1s
-      hold other 1s
-      hold refused 1s
-      hold timeout 1s
 
     defaults
       log global

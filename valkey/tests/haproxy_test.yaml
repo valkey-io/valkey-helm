@@ -53,6 +53,16 @@ tests:
           path: data["haproxy.cfg"]
           pattern: 'fall 1 rise 1 init-addr last,libc,none init-state down .*on-marked-down shutdown-sessions'
 
+  - it: should keep a node in place when the resolver fails or does not answer
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'hold nx 1s'
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'hold (timeout|refused|other) '
+
   - it: should keep pub/sub connections open
     template: templates/haproxy-configmap.yaml
     asserts:
