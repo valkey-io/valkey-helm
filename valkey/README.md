@@ -307,6 +307,8 @@ sentinel:
 Planned restarts (upgrades, node drains) hand over to a replica first without losing acknowledged writes (`sentinel.preStopFailover`, on by default); clients see a brief `-READONLY` or connection error and should retry.
 An unplanned failure can lose the last writes acknowledged by the old primary.
 
+**Probes:** `sentinel.startupProbe`, `sentinel.livenessProbe` and `sentinel.readinessProbe` set the timings of the Sentinel health probes.
+
 Sentinel can be enabled on an existing replicated release with `helm upgrade`.
 
 #### HAProxy Front-End
@@ -733,7 +735,6 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | sentinel.service.port | int | `26379` |  |
 | sentinel.service.type | string | `"ClusterIP"` |  |
 | sentinel.startupProbe.initialDelaySeconds | int | `0` |  |
-| sentinel.startupProbe.periodSeconds | int | `5` |  |
 | sentinel.startupProbe.timeoutSeconds | int | `1` |  |
 | sentinel.startupTimeoutSeconds | int | `60` |  |
 | sentinel.tolerations | string | `nil` |  |

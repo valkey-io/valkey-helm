@@ -298,6 +298,8 @@ sentinel:
 Planned restarts (upgrades, node drains) hand over to a replica first without losing acknowledged writes (`sentinel.preStopFailover`, on by default); clients see a brief `-READONLY` or connection error and should retry.
 An unplanned failure can lose the last writes acknowledged by the old primary.
 
+**Probes:** `sentinel.startupProbe`, `sentinel.livenessProbe` and `sentinel.readinessProbe` set the timings of the Sentinel health probes.
+
 Sentinel can be enabled on an existing replicated release with `helm upgrade`.
 
 #### HAProxy Front-End

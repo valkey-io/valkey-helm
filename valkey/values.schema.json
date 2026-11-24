@@ -916,16 +916,20 @@
                     "type": "object",
                     "properties": {
                         "failureThreshold": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         },
                         "initialDelaySeconds": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 0
                         },
                         "periodSeconds": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         },
                         "timeoutSeconds": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         }
                     }
                 },
@@ -1055,19 +1059,24 @@
                     "type": "object",
                     "properties": {
                         "failureThreshold": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         },
                         "initialDelaySeconds": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 0
                         },
                         "periodSeconds": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         },
                         "successThreshold": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         },
                         "timeoutSeconds": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         }
                     }
                 },
@@ -1120,14 +1129,12 @@
                     "type": "object",
                     "properties": {
                         "initialDelaySeconds": {
-                            "type": "integer"
-                        },
-                        "periodSeconds": {
                             "type": "integer",
-                            "minimum": 1
+                            "minimum": 0
                         },
                         "timeoutSeconds": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         }
                     }
                 },

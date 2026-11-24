@@ -405,27 +405,6 @@ sentinel:
   # gives up on discovering the current master and assumes pod-0 is the master
   startupTimeoutSeconds: 60
 
-  # Timings of the Sentinel health probes. Each probe pings Sentinel with
-  # valkey-cli, which waits up to 2s to connect, so a timeoutSeconds of 3 or
-  # more lets that wait run its course. The startup probe's failureThreshold
-  # is not a value: it is derived from startupTimeoutSeconds and the probe's
-  # periodSeconds, so that the probe outlasts the startup wait.
-  startupProbe:
-    initialDelaySeconds: 0
-    periodSeconds: 5 # @schema minimum:1
-    timeoutSeconds: 1
-  livenessProbe:
-    initialDelaySeconds: 0
-    periodSeconds: 10
-    timeoutSeconds: 1
-    failureThreshold: 3
-  readinessProbe:
-    initialDelaySeconds: 0
-    periodSeconds: 10
-    timeoutSeconds: 1
-    failureThreshold: 3
-    successThreshold: 1
-
   # How long a pod with no recorded topology waits for a Sentinel, or for
   # another node, to tell it what the topology is. This is the fresh install
   # case: the Sentinels bootstrap a master once their own
@@ -473,6 +452,25 @@ sentinel:
     # requests:
     #   cpu: 10m
     #   memory: 64Mi
+
+  # Timings of the Sentinel health probes. Each probe's valkey-cli waits up to
+  # 2s to connect, so a timeoutSeconds of 3 or more covers that wait. The
+  # startup probe's period is fixed at 5s, and its failureThreshold is derived
+  # from startupTimeoutSeconds.
+  startupProbe:
+    initialDelaySeconds: 0 # @schema minimum:0
+    timeoutSeconds: 1 # @schema minimum:1
+  livenessProbe:
+    initialDelaySeconds: 0 # @schema minimum:0
+    periodSeconds: 10 # @schema minimum:1
+    timeoutSeconds: 1 # @schema minimum:1
+    failureThreshold: 3 # @schema minimum:1
+  readinessProbe:
+    initialDelaySeconds: 0 # @schema minimum:0
+    periodSeconds: 10 # @schema minimum:1
+    timeoutSeconds: 1 # @schema minimum:1
+    failureThreshold: 3 # @schema minimum:1
+    successThreshold: 1 # @schema minimum:1
 
   # Security context for the Sentinel container, defaults to securityContext
   securityContext: {}

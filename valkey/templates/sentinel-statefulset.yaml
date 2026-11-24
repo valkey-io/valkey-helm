@@ -89,31 +89,22 @@ spec:
           startupProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
-            {{- with .Values.sentinel.startupProbe }}
-            initialDelaySeconds: {{ .initialDelaySeconds }}
-            periodSeconds: {{ .periodSeconds }}
-            timeoutSeconds: {{ .timeoutSeconds }}
-            {{- /* Enough failures to cover startupTimeoutSeconds plus 30s, rounded up. */}}
-            failureThreshold: {{ div (add $.Values.sentinel.startupTimeoutSeconds 29 .periodSeconds) .periodSeconds }}
+            {{- with pick (.Values.sentinel.startupProbe | default dict) "initialDelaySeconds" "timeoutSeconds" }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
+            periodSeconds: 5
+            failureThreshold: {{ div (add .Values.sentinel.startupTimeoutSeconds 30) 5 }}
           livenessProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
-            {{- with .Values.sentinel.livenessProbe }}
-            initialDelaySeconds: {{ .initialDelaySeconds }}
-            periodSeconds: {{ .periodSeconds }}
-            timeoutSeconds: {{ .timeoutSeconds }}
-            failureThreshold: {{ .failureThreshold }}
+            {{- with pick (.Values.sentinel.livenessProbe | default dict) "initialDelaySeconds" "periodSeconds" "timeoutSeconds" "failureThreshold" }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           readinessProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
-            {{- with .Values.sentinel.readinessProbe }}
-            initialDelaySeconds: {{ .initialDelaySeconds }}
-            periodSeconds: {{ .periodSeconds }}
-            timeoutSeconds: {{ .timeoutSeconds }}
-            failureThreshold: {{ .failureThreshold }}
-            successThreshold: {{ .successThreshold }}
+            {{- with pick (.Values.sentinel.readinessProbe | default dict) "initialDelaySeconds" "periodSeconds" "timeoutSeconds" "failureThreshold" "successThreshold" }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           resources:
             {{- toYaml .Values.sentinel.resources | nindent 12 }}
