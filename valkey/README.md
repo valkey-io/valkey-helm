@@ -492,7 +492,28 @@ initContainer:
 Only the init container moves. Unset, it renders exactly as before, on the Valkey image and `image.pullPolicy`.
 With a `repository` set, the image is composed like the chart's other images (`global.imageRegistry` applies); an empty `tag` defaults to the chart `appVersion`, so set a `tag` for a non-Valkey image, and an empty `pullPolicy` falls back to `image.pullPolicy`.
 
-In Sentinel mode the server container and the Sentinel pods also run shell scripts from `image`, and so do the `helm test` pods, so a Valkey image without a shell cannot be used there.
+Moving the init container is not on its own enough to run a server image that has no shell.
+In standalone and replica mode the server container runs `valkey-server` directly, but the default startup, liveness and readiness probes call `valkey-cli` through `sh -c`, and all three are on by default, so a shell-less server image fails them and the pod never becomes ready.
+Give each probe a shell-free `customProbe`:
+
+```yaml
+startupProbe:
+  customProbe:
+    tcpSocket:
+      port: tcp
+livenessProbe:
+  customProbe:
+    tcpSocket:
+      port: tcp
+readinessProbe:
+  customProbe:
+    tcpSocket:
+      port: tcp
+```
+
+`tcpSocket` only checks that the port is open. For a probe that confirms the server answers, use an `exec` of `valkey-cli` (the Valkey image has it) instead, and pass its auth flags yourself when auth is enabled.
+
+In Sentinel mode the server container and the Sentinel pods also run shell scripts from `image`, and so do the `helm test` pods, so a Valkey image without a shell cannot be used there at all, regardless of the probes.
 When Sentinel is enabled the init image must also contain `valkey-cli`, which the init script uses to ask the Sentinels and the other nodes which of them is the master: the official Valkey image qualifies, `busybox` does not.
 The init script checks for the commands it needs before writing anything and exits with an error naming the missing ones.
 
