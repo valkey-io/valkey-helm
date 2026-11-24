@@ -111,8 +111,10 @@ data:
     backend sentinel_master_{{ $i }}
       option tcp-check
       tcp-check connect{{ if $.Values.tls.enabled }} ssl{{ end }}
+      {{- if $.Values.sentinel.auth.enabled }}
       tcp-check send AUTH\ sentinel\ "${SENTINEL_CHECK_PASSWORD}"\r\n
       tcp-check expect string +OK
+      {{- end }}
       tcp-check send SENTINEL\ get-master-addr-by-name\ {{ $.Values.sentinel.masterSet }}\r\n
       # Sentinel has no QUIT and keeps the connection open, and an expect that
       # does not match waits for more data until "timeout check". So first wait

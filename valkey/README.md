@@ -271,10 +271,15 @@ Sentinel requires `replica.enabled`, at least 2 Valkey pods and at least 3 Senti
 | Clients → Sentinel | `sentinel`                                        | `sentinel.password` or `sentinel.existingSecret` |
 | Sentinel → Valkey  | `sentinel.monitorUser` (only with `auth.enabled`) | That user's password from `auth.aclUsers`        |
 
-Every Sentinel has a single ACL user, `sentinel`, which clients, HAProxy and the Sentinels themselves log in as.
+With Sentinel authentication on, which is the default, every Sentinel has a single ACL user, `sentinel`, which clients, HAProxy and the Sentinels themselves log in as.
 Its password is required even when `auth.enabled` is off: set `sentinel.password`, or point `sentinel.existingSecret` at a Secret holding it under `sentinel.passwordKey` (default `sentinel`).
 The `default` user is disabled on Sentinel, and the users in `auth.aclUsers` do not exist there.
 A client therefore needs both credentials: `sentinel` to look up the primary, then its own Valkey user to connect to it.
+
+Clients that cannot send a Sentinel password, Harbor among them, need `sentinel.auth.enabled: false` instead.
+Sentinel then keeps its `default` user on without a password and the `sentinel` user is not created, so `sentinel.password` and `sentinel.existingSecret` must stay empty.
+Sentinel runs with its protected mode off in this mode, so anyone who can reach its port can read the topology and request a failover.
+The chart's `networkPolicy` covers only the Valkey pods, and `sentinel.service.type: ClusterIP` still admits other pods in the cluster, so restrict the port with a NetworkPolicy of your own that selects the Sentinel pods, and keep `ClusterIP` so it is not exposed outside the cluster.
 
 With `auth.enabled`, Sentinel logs in to the Valkey nodes as `sentinel.monitorUser`, which defaults to `replica.replicationUser` and must be defined in `auth.aclUsers`.
 That user needs these permissions, otherwise failovers abort:
@@ -680,6 +685,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | securityContext.runAsNonRoot | bool | `true` |  |
 | securityContext.runAsUser | int | `1000` |  |
 | sentinel.affinity | object | `{}` |  |
+| sentinel.auth.enabled | bool | `true` |  |
 | sentinel.downAfterMilliseconds | int | `5000` |  |
 | sentinel.enabled | bool | `false` |  |
 | sentinel.existingSecret | string | `""` |  |
