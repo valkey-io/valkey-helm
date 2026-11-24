@@ -738,6 +738,21 @@ tests:
           path: spec.loadBalancerSourceRanges
           value: ["10.0.0.1/32", "192.168.0.0/16"]
 
+  - it: should leave trafficDistribution unset on the service by default
+    template: templates/haproxy-service.yaml
+    asserts:
+      - notExists:
+          path: spec.trafficDistribution
+
+  - it: should set trafficDistribution on the service
+    set:
+      haproxy.service.trafficDistribution: PreferClose
+    template: templates/haproxy-service.yaml
+    asserts:
+      - equal:
+          path: spec.trafficDistribution
+          value: PreferClose
+
   - it: should use the top level runtimeClassName like the Valkey and Sentinel pods
     set:
       runtimeClassName: gvisor

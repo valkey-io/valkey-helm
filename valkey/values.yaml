@@ -326,6 +326,8 @@ replica:
     # will be restricted to the specified client IPs.
     # This field will be ignored if the cloud-provider does not support the feature.
     loadBalancerSourceRanges: []
+    # Prefer endpoints close to the client, e.g. PreferClose (Kubernetes 1.31+)
+    trafficDistribution: ""
 
   # Persistence configuration (required for replicas)
   # PersistentVolumeClaim retention policy for StatefulSet
@@ -581,6 +583,8 @@ haproxy:
     loadBalancerClass: ""
     # Restricts traffic through the cloud-provider load balancer to these client IPs
     loadBalancerSourceRanges: []
+    # Prefer HAProxy pods close to the client, e.g. PreferClose (Kubernetes 1.31+)
+    trafficDistribution: ""
 
   config:
     # Listen on IPv6 as well as IPv4, required on IPv6-only clusters

@@ -278,6 +278,9 @@
                         "port": {
                             "type": "integer"
                         },
+                        "trafficDistribution": {
+                            "type": "string"
+                        },
                         "type": {
                             "type": "string"
                         }
@@ -846,6 +849,9 @@
                         },
                         "port": {
                             "type": "integer"
+                        },
+                        "trafficDistribution": {
+                            "type": "string"
                         },
                         "type": {
                             "type": "string"

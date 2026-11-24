@@ -333,6 +333,7 @@ After a failover clients get connection errors until HAProxy sees the new primar
 HAProxy runs 3 pods by default (`haproxy.replicas`), labelled `app.kubernetes.io/name: valkey-haproxy` and `app.kubernetes.io/component: haproxy`.
 Like the Sentinels, they take their own `haproxy.affinity`, `haproxy.topologySpreadConstraints`, `haproxy.podLabels`, `haproxy.podAnnotations`, `haproxy.nodeSelector` and `haproxy.tolerations`, and their own `haproxy.podDisruptionBudget`.
 `haproxy.strategy` sets the Deployment's rollout strategy.
+`haproxy.service.trafficDistribution: PreferClose` prefers HAProxy pods in the client's zone, and `replica.service.trafficDistribution` does the same for reads; see [internals](docs/internals.md#zone-aware-routing).
 HAProxy listens on IPv4 only by default; set `haproxy.config.listenIPv6: true` on IPv6-only clusters and on dual stack clusters whose primary family is IPv6.
 
 With authentication, HAProxy health checks Valkey as `haproxy.checkUser` (default `default`), which needs `+info` and `+ping`.
@@ -545,6 +546,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | haproxy.service.loadBalancerSourceRanges | list | `[]` |  |
 | haproxy.service.nodePort | int | `0` |  |
 | haproxy.service.port | int | `6379` |  |
+| haproxy.service.trafficDistribution | string | `""` |  |
 | haproxy.service.type | string | `"ClusterIP"` |  |
 | haproxy.strategy | object | `{}` |  |
 | haproxy.tls.clientCertFile | string | `""` |  |
@@ -671,6 +673,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | replica.service.loadBalancerSourceRanges | list | `[]` |  |
 | replica.service.nodePort | int | `0` |  |
 | replica.service.port | int | `6379` |  |
+| replica.service.trafficDistribution | string | `""` |  |
 | replica.service.type | string | `"ClusterIP"` |  |
 | resources | object | `{}` |  |
 | runtimeClassName | string | `""` |  |
