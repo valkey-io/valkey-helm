@@ -521,7 +521,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | haproxy.image.pullPolicy | string | `"IfNotPresent"` |  |
 | haproxy.image.registry | string | `"docker.io"` |  |
 | haproxy.image.repository | string | `"haproxy"` |  |
-| haproxy.image.tag | string | `"3.2-alpine"` |  |
+| haproxy.image.tag | string | `"3.4.7-alpine"` |  |
 | haproxy.nodeSelector | string | `nil` |  |
 | haproxy.podAnnotations | object | `{}` |  |
 | haproxy.podDisruptionBudget.enabled | bool | `false` |  |
