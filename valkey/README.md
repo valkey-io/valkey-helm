@@ -307,6 +307,8 @@ sentinel:
 Planned restarts (upgrades, node drains) hand over to a replica first without losing acknowledged writes (`sentinel.preStopFailover`, on by default); clients see a brief `-READONLY` or connection error and should retry.
 An unplanned failure can lose the last writes acknowledged by the old primary.
 
+**Probes:** `sentinel.startupProbe`, `sentinel.livenessProbe` and `sentinel.readinessProbe` set the timings of the Sentinel health probes.
+
 Sentinel can be enabled on an existing replicated release with `helm upgrade`.
 
 #### HAProxy Front-End
@@ -686,6 +688,10 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | sentinel.extraConfig | string | `""` |  |
 | sentinel.failoverTimeout | int | `60000` |  |
 | sentinel.initialTopologyWaitSeconds | int | `180` |  |
+| sentinel.livenessProbe.failureThreshold | int | `3` |  |
+| sentinel.livenessProbe.initialDelaySeconds | int | `0` |  |
+| sentinel.livenessProbe.periodSeconds | int | `10` |  |
+| sentinel.livenessProbe.timeoutSeconds | int | `1` |  |
 | sentinel.masterRecordRefreshSeconds | int | `1` |  |
 | sentinel.masterSet | string | `"mymaster"` |  |
 | sentinel.minReadySeconds | int | `15` |  |
@@ -710,6 +716,11 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | sentinel.preStopFailover | bool | `true` |  |
 | sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
 | sentinel.quorum | int | `2` |  |
+| sentinel.readinessProbe.failureThreshold | int | `3` |  |
+| sentinel.readinessProbe.initialDelaySeconds | int | `0` |  |
+| sentinel.readinessProbe.periodSeconds | int | `10` |  |
+| sentinel.readinessProbe.successThreshold | int | `1` |  |
+| sentinel.readinessProbe.timeoutSeconds | int | `1` |  |
 | sentinel.replicas | int | `3` |  |
 | sentinel.resources | object | `{}` |  |
 | sentinel.restartFailoverWaitSeconds | int | `120` |  |
@@ -723,6 +734,8 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | sentinel.service.nodePort | int | `0` |  |
 | sentinel.service.port | int | `26379` |  |
 | sentinel.service.type | string | `"ClusterIP"` |  |
+| sentinel.startupProbe.initialDelaySeconds | int | `0` |  |
+| sentinel.startupProbe.timeoutSeconds | int | `1` |  |
 | sentinel.startupTimeoutSeconds | int | `60` |  |
 | sentinel.tolerations | string | `nil` |  |
 | sentinel.topologySpreadConstraints | list | `[]` |  |

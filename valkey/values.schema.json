@@ -912,6 +912,27 @@
                 "initialTopologyWaitSeconds": {
                     "type": "integer"
                 },
+                "livenessProbe": {
+                    "type": "object",
+                    "properties": {
+                        "failureThreshold": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "initialDelaySeconds": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "periodSeconds": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "timeoutSeconds": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                },
                 "masterRecordRefreshSeconds": {
                     "type": "integer"
                 },
@@ -1034,6 +1055,31 @@
                 "quorum": {
                     "type": "integer"
                 },
+                "readinessProbe": {
+                    "type": "object",
+                    "properties": {
+                        "failureThreshold": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "initialDelaySeconds": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "periodSeconds": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "successThreshold": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "timeoutSeconds": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                },
                 "replicas": {
                     "type": "integer"
                 },
@@ -1076,6 +1122,19 @@
                         },
                         "type": {
                             "type": "string"
+                        }
+                    }
+                },
+                "startupProbe": {
+                    "type": "object",
+                    "properties": {
+                        "initialDelaySeconds": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "timeoutSeconds": {
+                            "type": "integer",
+                            "minimum": 1
                         }
                     }
                 },

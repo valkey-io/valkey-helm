@@ -117,6 +117,88 @@ tests:
           path: spec.podManagementPolicy
           value: Parallel
 
+  - it: should keep the sentinel probe timings by default
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe
+          value:
+            exec:
+              command: ["/sentinel-scripts/sentinel-ping.sh"]
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 1
+            failureThreshold: 18
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe
+          value:
+            exec:
+              command: ["/sentinel-scripts/sentinel-ping.sh"]
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe
+          value:
+            exec:
+              command: ["/sentinel-scripts/sentinel-ping.sh"]
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+
+  - it: should set each sentinel probe's timings on its own
+    set:
+      sentinel.startupProbe.timeoutSeconds: 3
+      sentinel.livenessProbe.timeoutSeconds: 4
+      sentinel.livenessProbe.failureThreshold: 5
+      sentinel.readinessProbe.periodSeconds: 7
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 4
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 7
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 1
+
+  # helm upgrade --reuse-values keeps the 1.0.0 chart's values, which have no
+  # probe timings, so a probe has only the timings set on that upgrade.
+  - it: should render only the sentinel probe timings that are set
+    set:
+      sentinel.startupProbe: null
+      sentinel.livenessProbe:
+        initialDelaySeconds: null
+        periodSeconds: null
+        timeoutSeconds: 5
+        failureThreshold: null
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe
+          value:
+            exec:
+              command: ["/sentinel-scripts/sentinel-ping.sh"]
+            periodSeconds: 5
+            failureThreshold: 18
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe
+          value:
+            exec:
+              command: ["/sentinel-scripts/sentinel-ping.sh"]
+            timeoutSeconds: 5
+
   - it: should keep ordered startup when sentinel is disabled
     set:
       sentinel.enabled: false

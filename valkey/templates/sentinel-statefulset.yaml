@@ -89,16 +89,23 @@ spec:
           startupProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
+            {{- with pick (.Values.sentinel.startupProbe | default dict) "initialDelaySeconds" "timeoutSeconds" }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
             periodSeconds: 5
             failureThreshold: {{ div (add .Values.sentinel.startupTimeoutSeconds 30) 5 }}
           livenessProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
-            periodSeconds: 10
+            {{- with pick (.Values.sentinel.livenessProbe | default dict) "initialDelaySeconds" "periodSeconds" "timeoutSeconds" "failureThreshold" }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           readinessProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
-            periodSeconds: 10
+            {{- with pick (.Values.sentinel.readinessProbe | default dict) "initialDelaySeconds" "periodSeconds" "timeoutSeconds" "failureThreshold" "successThreshold" }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           resources:
             {{- toYaml .Values.sentinel.resources | nindent 12 }}
           volumeMounts:
