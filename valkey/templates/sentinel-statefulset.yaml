@@ -90,15 +90,18 @@ spec:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
             periodSeconds: 5
+            timeoutSeconds: {{ .Values.sentinel.probeTimeoutSeconds }}
             failureThreshold: {{ div (add .Values.sentinel.startupTimeoutSeconds 30) 5 }}
           livenessProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
             periodSeconds: 10
+            timeoutSeconds: {{ .Values.sentinel.probeTimeoutSeconds }}
           readinessProbe:
             exec:
               command: [ "/sentinel-scripts/sentinel-ping.sh" ]
             periodSeconds: 10
+            timeoutSeconds: {{ .Values.sentinel.probeTimeoutSeconds }}
           resources:
             {{- toYaml .Values.sentinel.resources | nindent 12 }}
           volumeMounts:

@@ -709,6 +709,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | sentinel.port | int | `26379` |  |
 | sentinel.preStopFailover | bool | `true` |  |
 | sentinel.preStopFailoverTimeoutSeconds | int | `20` |  |
+| sentinel.probeTimeoutSeconds | int | `1` |  |
 | sentinel.quorum | int | `2` |  |
 | sentinel.replicas | int | `3` |  |
 | sentinel.resources | object | `{}` |  |

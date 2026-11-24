@@ -117,6 +117,34 @@ tests:
           path: spec.podManagementPolicy
           value: Parallel
 
+  - it: should keep the Kubernetes probe timeout for the sentinel probes by default
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 1
+
+  - it: should apply sentinel.probeTimeoutSeconds to the three sentinel probes
+    set:
+      sentinel.probeTimeoutSeconds: 3
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 3
+
   - it: should keep ordered startup when sentinel is disabled
     set:
       sentinel.enabled: false

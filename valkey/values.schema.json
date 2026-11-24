@@ -1031,6 +1031,10 @@
                 "preStopFailoverTimeoutSeconds": {
                     "type": "integer"
                 },
+                "probeTimeoutSeconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
                 "quorum": {
                     "type": "integer"
                 },
