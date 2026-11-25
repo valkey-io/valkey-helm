@@ -912,6 +912,10 @@
                 "initialTopologyWaitSeconds": {
                     "type": "integer"
                 },
+                "masterLookupRetrySeconds": {
+                    "type": "integer",
+                    "minimum": 0
+                },
                 "masterRecordRefreshSeconds": {
                     "type": "integer"
                 },

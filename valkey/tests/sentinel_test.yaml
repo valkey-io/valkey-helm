@@ -702,6 +702,33 @@ tests:
           path: data["init.sh"]
           pattern: 'No Sentinel answered and no recorded topology; refusing to start'
 
+  # The record naming this pod the master is what a restart right after a
+  # failover looks like too, until Sentinel or a running node confirms
+  # otherwise: trusting it on the first failed lookup risks exactly the
+  # write loss the retry above guards the restart guard against.
+  - it: should retry Sentinel and the running nodes before trusting a record that names this pod
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'while \[ "\$RETRIED" -lt 10 \]; do\n        sleep 2\n        RETRIED=\$\(\(RETRIED \+ 2\)\)\n        CONFIRMED=\$\(master_from_sentinels \|\| true\)\n        \[ -n "\$CONFIRMED" \] \|\| CONFIRMED=\$\(master_from_running_nodes \|\| true\)\n        \[ -n "\$CONFIRMED" \] && break\n      done'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'Sentinel reports \$FOUND_HOST:\$FOUND_PORT as the master, starting as REPLICA'
+
+  - it: should bound that retry on its own value, not reuse initialTopologyWaitSeconds
+    set:
+      sentinel.masterLookupRetrySeconds: 4
+      sentinel.initialTopologyWaitSeconds: 210
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'while \[ "\$RETRIED" -lt 4 \]; do'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'while \[ "\$WAITED" -lt "210" \]; do'
+
   - it: should record the master without writing a credential
     template: templates/init_config.yaml
     asserts:
@@ -831,6 +858,33 @@ tests:
       - matchRegex:
           path: data["master-restart-guard.sh"]
           pattern: '\[ -f "\$SINCE_FILE" \] && WAITING="yes"'
+
+  # A NetworkPolicy can admit this pod's own address only a little after it
+  # starts, so the very first query can find every Sentinel unreachable even
+  # though they are all healthy. Without a retry here the guard let the pod
+  # start as the master on that one failed query alone.
+  - it: should retry briefly before giving up on an unreachable Sentinel
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'LOOKUP_DEADLINE=\$\(\( \$\(date \+%s\) \+ 10 \)\)'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'elif \[ -z "\$WAITING" \] && \[ "\$\(date \+%s\)" -ge "\$LOOKUP_DEADLINE" \]; then\s+break'
+
+  - it: should bound the Sentinel-unreachable retry on its own, not on restartFailoverWaitSeconds
+    set:
+      sentinel.masterLookupRetrySeconds: 7
+      sentinel.restartFailoverWaitSeconds: 180
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'LOOKUP_DEADLINE=\$\(\( \$\(date \+%s\) \+ 7 \)\)'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '\$\(\( \$\(date \+%s\) - SINCE \)\) -ge 180 \]'
 
   - it: should bound every Sentinel query and drop the wait before following
     template: templates/init_config.yaml

@@ -307,6 +307,8 @@ sentinel:
 Planned restarts (upgrades, node drains) hand over to a replica first without losing acknowledged writes (`sentinel.preStopFailover`, on by default); clients see a brief `-READONLY` or connection error and should retry.
 An unplanned failure can lose the last writes acknowledged by the old primary.
 
+**Restarts:** a restarted pod confirms the current master with a Sentinel, or with a running node, before trusting its own recorded topology; a lookup that finds nothing reachable yet, for example while a NetworkPolicy is still admitting the pod's own address, is retried for `sentinel.masterLookupRetrySeconds` before the record is trusted.
+
 Sentinel can be enabled on an existing replicated release with `helm upgrade`.
 
 #### HAProxy Front-End
@@ -686,6 +688,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | sentinel.extraConfig | string | `""` |  |
 | sentinel.failoverTimeout | int | `60000` |  |
 | sentinel.initialTopologyWaitSeconds | int | `180` |  |
+| sentinel.masterLookupRetrySeconds | int | `10` |  |
 | sentinel.masterRecordRefreshSeconds | int | `1` |  |
 | sentinel.masterSet | string | `"mymaster"` |  |
 | sentinel.minReadySeconds | int | `15` |  |
