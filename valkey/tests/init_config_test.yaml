@@ -214,3 +214,38 @@ tests:
       - notMatchRegex:
           path: data["valkey-start.sh"]
           pattern: 'POD_INDEX:-0'
+
+  - it: should set maxmemory below the memory limit by default
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'echo "maxmemory 192mb"'
+
+  - it: should take maxmemory given in values
+    set:
+      resources:
+        limits:
+          memory: 2Gi
+      maxmemory: 900mb
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'echo "maxmemory 900mb"'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "maxmemory 192mb"
+
+  - it: should reject maxmemory in Kubernetes units
+    set:
+      maxmemory: 256Mi
+    asserts:
+      - failedTemplate:
+          errorPattern: "maxmemory"
+
+  - it: should not set maxmemory when it is empty
+    set:
+      maxmemory: ""
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: "maxmemory"

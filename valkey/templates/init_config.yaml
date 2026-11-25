@@ -362,6 +362,9 @@ data:
       echo "bind * -::*"
       echo "dir /data"
       echo "loglevel {{ .Values.valkeyLogLevel }}"
+      {{- with .Values.maxmemory }}
+      echo "maxmemory {{ . }}"
+      {{- end }}
     } >>"$VALKEY_CONFIG_TMP"
 
     {{- if .Values.auth.enabled }}

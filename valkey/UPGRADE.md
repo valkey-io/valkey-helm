@@ -14,6 +14,33 @@ Upgrade with your complete, migrated values file, without `--reuse-values` or `-
 
 ---
 
+### Resource requests, a memory limit and `maxmemory` by default
+
+**What changed:** the Valkey container requests `cpu: 50m` and `memory: 64Mi` and is limited to `memory: 512Mi`, with no CPU limit. The init containers request `cpu: 10m` and `memory: 16Mi` and are limited to `memory: 32Mi`. `maxmemory` defaults to `192mb`, under half the memory limit, so Valkey refuses writes with an OOM error reply (`maxmemory-policy noeviction`) instead of the kernel killing the container. Before, nothing was set: the pod was BestEffort, the first to be evicted under node memory pressure, and its memory was unbounded.
+
+**Who is affected:**
+
+- Releases that don't set `resources` and keep more than about 190 MB of data: the memory limit and `maxmemory` are both new for them.
+- Releases that set their own `resources` but not `maxmemory`: `maxmemory` still defaults to `192mb`, so with a larger memory limit Valkey now refuses writes once the dataset reaches 192 MB.
+- Releases that set only part of `resources` or `initResources`: Helm merges what you set into the new defaults, so the keys you didn't set now get the chart's values. For example, `resources.requests.memory: 1Gi` alone now comes with `limits.memory: 512Mi`, and Kubernetes rejects a request above its limit. Check the merged values with `helm template` before upgrading, and set any default you don't want to `null`, for example `resources.limits.memory: null`.
+
+**How to configure:** whenever you set `resources.limits.memory`, set `maxmemory` too, to at most about 45% of it; for example `limits.memory: 2Gi` with `maxmemory: 900mb`. A background save or a replica's full sync forks Valkey, and while it runs, memory can reach twice the dataset; with `maxmemory` near half the limit or above, the kernel can kill the container mid-save. `maxmemory` takes Valkey's units (`mb`, `gb`), not Kubernetes ones (`Mi`, `Gi`). To keep the previous behaviour, no resources and no `maxmemory`, set:
+
+```yaml
+resources: null
+initResources: null
+maxmemory: ""
+```
+
+Use `null`, not `{}`: Helm merges an empty map into the chart's defaults, so `resources: {}` keeps them.
+
+**Check before upgrading:**
+
+- **`maxmemory` or `maxmemory-policy` in `extraConfig`**, or in a file it includes. `extraConfig` is read after the chart's settings, so a `maxmemory` there overrides the chart's value: remove it and set the chart's `maxmemory`, or set the chart's `maxmemory: ""` and keep your own. An evicting policy such as `allkeys-lru` had no effect without a `maxmemory`. With the new default it takes effect, and Valkey deletes keys at the ceiling instead of refusing writes.
+- **The size of a persisted dataset.** Valkey loads the whole dataset at startup, and `maxmemory` doesn't limit the load. Check `used_memory` (`valkey-cli INFO memory`) and set `resources.limits.memory` to at least about 2.2 times it, with `maxmemory` to match. Otherwise the container can be killed while loading and restart over and over.
+
+---
+
 ### Standalone `deploymentStrategy` defaults to `Recreate`
 
 **What changed:** the standalone Deployment now stops the old pod before starting the new one, because a rolling update cannot hand a ReadWriteOnce volume over to the new pod. Upgrades have a short downtime.
