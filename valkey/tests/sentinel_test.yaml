@@ -572,24 +572,38 @@ tests:
   # one could make this pod, possibly already the current master, follow a
   # defunct node instead. sentinel.quorum (2 of 3 by default) of them must
   # independently agree on the same other host first.
-  - it: should follow only once sentinel.quorum of the Sentinels agree on the same other master
+  - it: should tally every Sentinel's vote rather than trust the first dissenter
     template: templates/sentinel-configmap.yaml
     asserts:
+      # A sort | uniq -c | sort -rn tally, not a running count keyed to
+      # whichever host was seen first: with Sentinels A, B, B, the first (A)
+      # must not hide the later quorum on B.
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: 'if \[ -z "\$AGREED_HOST" \]; then\n      AGREED_HOST="\$named_host"\n      AGREED_PORT="\$named_port"\n      AGREEING=1\n    elif \[ "\$named_host" = "\$AGREED_HOST" \] && \[ "\$named_port" = "\$AGREED_PORT" \]; then\n      AGREEING=\$\(\(AGREEING \+ 1\)\)\n    fi'
+          pattern: 'VOTES="\$VOTES;\$named_host \$named_port"'
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: 'if \[ "\$AGREEING" -ge 2 \]; then'
+          pattern: 'AGREED=\$\(printf ''%s'' "\$VOTES" \| tr '';'' ''\\n'' \| grep -v ''\^\$'' \| sort \| uniq -c \| sort -rn \| awk -v q=2 ''\$1 >= q \{ print \$2, \$3; exit \}''\)'
 
-  - it: should require more Sentinels to agree as quorum rises
+  - it: should require more votes to agree as quorum rises
     set:
       sentinel.quorum: 3
     template: templates/sentinel-configmap.yaml
     asserts:
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: 'if \[ "\$AGREEING" -ge 3 \]; then'
+          pattern: "awk -v q=3 '\\$1 >= q"
+
+  # Below quorum, the dissenting Sentinel is still skipped for the failover
+  # request: asking it anyway would have it run FAILOVER on the master it
+  # already knows, not on this pod, forcing an unnecessary handover of what
+  # may be a perfectly healthy new master.
+  - it: should not ask a dissenting Sentinel for a failover below quorum
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'case " \$DISSENTING " in\n      \*" \$sentinel "\*\)\n        log "\$\{sentinel%%\.\*\} already names another host as the master, not asking it for a failover"\n        continue\n        ;;\n    esac'
 
   - it: should point this pod at the confirmed master, not just skip the request
     template: templates/sentinel-configmap.yaml

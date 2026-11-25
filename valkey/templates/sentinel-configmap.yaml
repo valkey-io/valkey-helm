@@ -472,27 +472,32 @@ data:
     # independent, converged views outweigh this pod's own, possibly stale,
     # role. An incomplete answer, such as an error reply from a Sentinel mid
     # credential rollout, names no usable port and does not count either way.
+    #
+    # Below quorum, a Sentinel that named another host is still skipped for
+    # the failover request that follows: asking it anyway would have it run
+    # FAILOVER on the master it already knows, not on this pod, forcing an
+    # unnecessary handover of what may be a perfectly healthy new master.
     log "This pod is the master, asking Sentinel for a coordinated failover"
     while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-      AGREED_HOST=""
-      AGREED_PORT=""
-      AGREEING=0
+      VOTES=""
+      DISSENTING=""
       for sentinel in $SENTINELS; do
         [ "$(date +%s)" -lt "$DEADLINE" ] || break
         addr=$(sentinel_cli "$sentinel" sentinel get-master-addr-by-name "$MASTER_SET")
         named_host=$(echo "$addr" | sed -n 1p)
         named_port=$(echo "$addr" | sed -n 2p)
         [ -n "$named_host" ] && [ "$named_host" != "$SELF_HOST" ] && echo "$named_port" | grep -qE "^[0-9]+$" || continue
-        if [ -z "$AGREED_HOST" ]; then
-          AGREED_HOST="$named_host"
-          AGREED_PORT="$named_port"
-          AGREEING=1
-        elif [ "$named_host" = "$AGREED_HOST" ] && [ "$named_port" = "$AGREED_PORT" ]; then
-          AGREEING=$((AGREEING + 1))
-        fi
+        VOTES="$VOTES;$named_host $named_port"
+        DISSENTING="$DISSENTING $sentinel"
       done
-      if [ "$AGREEING" -ge {{ .Values.sentinel.quorum }} ]; then
-        log "$AGREEING Sentinels already name $AGREED_HOST as the master, following it instead of asking for a further failover"
+      # Tallied, not just the first dissenting answer: with Sentinels A, B, B,
+      # the first (A) must not hide the later quorum on B.
+      AGREED=$(printf '%s' "$VOTES" | tr ';' '\n' | grep -v '^$' | sort | uniq -c | sort -rn | awk -v q={{ .Values.sentinel.quorum }} '$1 >= q { print $2, $3; exit }')
+      if [ -n "$AGREED" ]; then
+        set -- $AGREED
+        AGREED_HOST="$1"
+        AGREED_PORT="$2"
+        log "Sentinels agree $AGREED_HOST is already the master, following it instead of asking for a further failover"
         # track_master keeps deriving the marker from this pod's own config
         # on its own timer, independently of record_master below. Without
         # this, its next tick still finds no replicaof line, in a config
@@ -505,6 +510,12 @@ data:
       fi
       for sentinel in $SENTINELS; do
         [ "$(date +%s)" -lt "$DEADLINE" ] || break
+        case " $DISSENTING " in
+          *" $sentinel "*)
+            log "${sentinel%%.*} already names another host as the master, not asking it for a failover"
+            continue
+            ;;
+        esac
         reply=$(sentinel_cli "$sentinel" sentinel failover "$MASTER_SET" coordinated)
         # INPROG: a failover is already running, wait for it like for this one.
         case "$reply" in
