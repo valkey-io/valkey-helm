@@ -702,6 +702,48 @@ tests:
           path: data["init.sh"]
           pattern: 'No Sentinel answered and no recorded topology; refusing to start'
 
+  # The record naming this pod the master is what a restart right after a
+  # failover looks like too, until Sentinel or a running node confirms
+  # otherwise: trusting it on the first failed lookup risks exactly the
+  # write loss the retry above guards the restart guard against.
+  - it: should retry Sentinel and the running nodes before trusting a record that names this pod
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'RETRY_DEADLINE=\$\(\( \$\(date \+%s\) \+ 10 \)\)\n      CONFIRMED=""\n      while \[ "\$\(date \+%s\)" -lt "\$RETRY_DEADLINE" \]; do\n        sleep 2\n        CONFIRMED=\$\(master_from_sentinels \|\| true\)\n        \[ -n "\$CONFIRMED" \] \|\| CONFIRMED=\$\(master_from_running_nodes \|\| true\)\n        \[ -n "\$CONFIRMED" \] && break\n      done'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'Sentinel reports \$FOUND_HOST:\$FOUND_PORT as the master, starting as REPLICA'
+
+  # A step counter only grows by the sleep, not by a slow or hung query it
+  # also runs each round, so it stops bounding the real elapsed time the more
+  # peers there are, or the slower they are to fail. A wall-clock deadline
+  # still lets the one round already running overshoot, but stops starting
+  # another once it is spent.
+  - it: should bound this retry by elapsed time, not by a count of sleeps
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'RETRY_DEADLINE=\$\(\( \$\(date \+%s\) \+ 10 \)\)'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'RETRIED'
+
+  - it: should bound that retry on its own value, not reuse initialTopologyWaitSeconds
+    set:
+      sentinel.masterLookupRetrySeconds: 4
+      sentinel.initialTopologyWaitSeconds: 210
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'RETRY_DEADLINE=\$\(\( \$\(date \+%s\) \+ 4 \)\)'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'while \[ "\$WAITED" -lt "210" \]; do'
+
   - it: should record the master without writing a credential
     template: templates/init_config.yaml
     asserts:
@@ -800,7 +842,7 @@ tests:
       # demotes it.
       - matchRegex:
           path: data["master-restart-guard.sh"]
-          pattern: 'if \[ "\$1" != "\$SELF" \]; then(\s+#[^\n]*)*\s+rm -f "\$SINCE_FILE"\s+follow "\$1 \$2"'
+          pattern: 'if \[ "\$1" != "\$SELF" \]; then(\s+#[^\n]*)*\s+rm -f "\$SINCE_FILE" "\$WAITING_FILE"\s+follow "\$1 \$2"'
 
   - it: should ask every Sentinel by name rather than the headless service
     set:
@@ -830,7 +872,70 @@ tests:
       # left behind carries the waiting state over, not only the deadline.
       - matchRegex:
           path: data["master-restart-guard.sh"]
-          pattern: '\[ -f "\$SINCE_FILE" \] && WAITING="yes"'
+          pattern: '\[ -f "\$WAITING_FILE" \] && WAITING="yes"'
+
+  # A NetworkPolicy can admit this pod's own address only a little after it
+  # starts, so the very first query can find every Sentinel unreachable even
+  # though they are all healthy. Without a retry here the guard let the pod
+  # start as the master on that one failed query alone.
+  - it: should retry briefly before giving up on an unreachable Sentinel
+    template: templates/init_config.yaml
+    asserts:
+      # Counted from SINCE, not from this invocation: a restart during the
+      # lookup must not reset or extend the budget either.
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'LOOKUP_DEADLINE=\$\(\( SINCE \+ 10 \)\)'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'elif \[ -z "\$WAITING" \] && \[ "\$\(date \+%s\)" -ge "\$LOOKUP_DEADLINE" \]; then\s+break'
+
+  - it: should bound the Sentinel-unreachable retry on its own, not on restartFailoverWaitSeconds
+    set:
+      sentinel.masterLookupRetrySeconds: 7
+      sentinel.restartFailoverWaitSeconds: 180
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'LOOKUP_DEADLINE=\$\(\( SINCE \+ 7 \)\)'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '\[ -n "\$WAITING" \] && \[ \$\(\( \$\(date \+%s\) - SINCE \)\) -ge 180 \]'
+
+  # SINCE_FILE exists from the very first tick, before Sentinel has answered
+  # anything, so its mere presence cannot tell a restart during the lookup
+  # apart from one during an actual, Sentinel-confirmed wait for a promotion.
+  # Conflating the two let a restart during the lookup skip LOOKUP_DEADLINE
+  # and fall through to the much longer restartFailoverWaitSeconds instead.
+  - it: should track the Sentinel-confirmed wait separately from the restart timer
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'WAITING_FILE="\$\(dirname "\$CONF"\)/restart-guard-waiting"'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'WAITING="yes"\n        printf .yes.n. > "\$WAITING_FILE"'
+      - notMatchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '\[ -f "\$SINCE_FILE" \] && WAITING'
+
+  # restartFailoverWaitSeconds: 0 means "do not wait for a promotion", not
+  # "do not retry an unreachable Sentinel either": the two are unrelated
+  # budgets, so one at its minimum must not cut the other short.
+  - it: should let restartFailoverWaitSeconds of 0 skip only the promotion wait
+    set:
+      sentinel.masterLookupRetrySeconds: 10
+      sentinel.restartFailoverWaitSeconds: 0
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'LOOKUP_DEADLINE=\$\(\( SINCE \+ 10 \)\)'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: '\[ -n "\$WAITING" \] && \[ \$\(\( \$\(date \+%s\) - SINCE \)\) -ge 0 \]'
 
   - it: should bound every Sentinel query and drop the wait before following
     template: templates/init_config.yaml
@@ -844,7 +949,7 @@ tests:
       # leave a deadline behind for a later wait.
       - matchRegex:
           path: data["master-restart-guard.sh"]
-          pattern: 'rm -f "\$SINCE_FILE"\s+follow "\$1 \$2"'
+          pattern: 'rm -f "\$SINCE_FILE" "\$WAITING_FILE"\s+follow "\$1 \$2"'
 
   - it: should count the replica Sentinel is promoting as healthy
     template: templates/init_config.yaml

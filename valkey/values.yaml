@@ -414,6 +414,15 @@ sentinel:
   # this bounds one attempt rather than the whole startup.
   initialTopologyWaitSeconds: 180
 
+  # How long the init container and the master restart guard retry a Sentinel
+  # or a running node before trusting a recorded topology that names this pod
+  # the master. A NetworkPolicy can admit this pod's own address only a little
+  # after it starts, so the first lookup can find every Sentinel and every
+  # other node unreachable even though they are all healthy, and the record
+  # still names this pod from before a failover it was not up to see. A little
+  # above downAfterMilliseconds covers one Sentinel detection cycle.
+  masterLookupRetrySeconds: 10 # @schema minimum:0
+
   # How long a restarted master waits for Sentinel to promote a replica.
   # A master that is back before downAfterMilliseconds would otherwise stay
   # the master with only the dataset of its last save, and the replicas would
