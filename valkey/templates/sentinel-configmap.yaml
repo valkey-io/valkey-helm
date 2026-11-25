@@ -387,15 +387,26 @@ data:
     # on. This asks the local server rather than Sentinel: Kubernetes stops
     # every pod at once, so a Sentinel may already be gone, while the local
     # server is still up until preStop returns.
+    #
+    # CONFIRMED_HOST and CONFIRMED_PORT, when set, are what a Sentinel has
+    # just named as the master while this pod's own INFO still called itself
+    # master; they override the local view below, which the same staleness
+    # this script guards the failover request against would otherwise feed
+    # straight into the marker a cold start trusts.
     record_master() {
-      info=$(local_info)
-      role=$(echo "$info" | sed -n 's/^role://p')
-      if [ "$role" = "master" ]; then
-        host="$SELF_HOST"
-        port="{{ .Values.service.port }}"
+      if [ -n "${CONFIRMED_HOST:-}" ] && echo "${CONFIRMED_PORT:-}" | grep -qE "^[0-9]+$"; then
+        host="$CONFIRMED_HOST"
+        port="$CONFIRMED_PORT"
       else
-        host=$(echo "$info" | sed -n 's/^master_host://p')
-        port=$(echo "$info" | sed -n 's/^master_port://p')
+        info=$(local_info)
+        role=$(echo "$info" | sed -n 's/^role://p')
+        if [ "$role" = "master" ]; then
+          host="$SELF_HOST"
+          port="{{ .Values.service.port }}"
+        else
+          host=$(echo "$info" | sed -n 's/^master_host://p')
+          port=$(echo "$info" | sed -n 's/^master_port://p')
+        fi
       fi
       if [ -n "$host" ] && echo "$port" | grep -qE "^[0-9]+$"; then
         # Write and rename. This runs while the pod is being torn down, so a
@@ -444,10 +455,29 @@ data:
     # replica while this node still accepts writes, which are discarded when it
     # rejoins as a replica. If the replica cannot catch up, the handover is
     # rolled back rather than losing writes.
+    #
+    # A master that stalls past down-after-milliseconds and then resumes keeps
+    # reporting role:master in its own INFO until Sentinel next reconfigures
+    # it, so the check above can pass for a pod Sentinel has already replaced.
+    # Asking for a further failover would then demote the replica Sentinel
+    # just promoted and hand the role back to this, stale, pod, discarding
+    # whatever the new master has acknowledged since. So before each attempt,
+    # ask the same Sentinel the request is about to go to who it names as the
+    # master; only a Sentinel that has not converged yet still answers with
+    # this pod, and the request goes through as before.
     log "This pod is the master, asking Sentinel for a coordinated failover"
     while [ "$(date +%s)" -lt "$DEADLINE" ]; do
       for sentinel in $SENTINELS; do
         [ "$(date +%s)" -lt "$DEADLINE" ] || break
+        addr=$(sentinel_cli "$sentinel" sentinel get-master-addr-by-name "$MASTER_SET")
+        named_host=$(echo "$addr" | sed -n 1p)
+        named_port=$(echo "$addr" | sed -n 2p)
+        if [ -n "$named_host" ] && [ "$named_host" != "$SELF_HOST" ]; then
+          log "${sentinel%%.*} already names $named_host as the master, skipping the failover request"
+          CONFIRMED_HOST="$named_host"
+          CONFIRMED_PORT="$named_port"
+          exit 0
+        fi
         reply=$(sentinel_cli "$sentinel" sentinel failover "$MASTER_SET" coordinated)
         # INPROG: a failover is already running, wait for it like for this one.
         case "$reply" in
