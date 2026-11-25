@@ -205,10 +205,15 @@ data:
     # restartFailoverWaitSeconds instead of the wait starting over each time.
     if ! grep -qE '^(replicaof|slaveof) ' "$CONF" || grep -qE '^(replicaof|slaveof) no one' "$CONF"; then
       SINCE_FILE="$(dirname "$CONF")/restart-guard-since"
+      # Separate from SINCE_FILE: that one exists from the first tick of this
+      # guard, before Sentinel has said anything, so its mere presence cannot
+      # tell a restart during the lookup below apart from a restart during an
+      # actual, Sentinel-confirmed wait for a promotion.
+      WAITING_FILE="$(dirname "$CONF")/restart-guard-waiting"
       # The file goes once the guard is done, so a file left behind means the
       # container was restarted while it waited, and the wait carries on.
       WAITING=""
-      [ -f "$SINCE_FILE" ] && WAITING="yes"
+      [ -f "$WAITING_FILE" ] && WAITING="yes"
       if ! IFS= read -r SINCE < "$SINCE_FILE" 2>/dev/null || ! echo "$SINCE" | grep -qE '^[0-9]+$'; then
         SINCE=$(date +%s)
         printf '%s\n' "$SINCE" > "$SINCE_FILE"
@@ -219,14 +224,16 @@ data:
       # restartFailoverWaitSeconds: that one waits for an actual promotion,
       # this only waits for a first answer, and should not hold up a
       # genuinely cold cluster, where nothing ever answers, for as long.
-      LOOKUP_DEADLINE=$(( $(date +%s) + {{ .Values.sentinel.masterLookupRetrySeconds }} ))
+      # Counted from SINCE, not from this invocation, so a container restart
+      # during the lookup cannot reset or extend it either.
+      LOOKUP_DEADLINE=$(( SINCE + {{ .Values.sentinel.masterLookupRetrySeconds }} ))
       while :; do
         if VIEW=$(sentinel_view); then
           set -- $VIEW
           if [ "$1" != "$SELF" ]; then
             # Drop the wait before the replicaof line goes in: a container
             # stopped in between must not leave a deadline for a later wait.
-            rm -f "$SINCE_FILE"
+            rm -f "$SINCE_FILE" "$WAITING_FILE"
             follow "$1 $2"
             break
           fi
@@ -239,18 +246,22 @@ data:
           fi
           if [ -z "$WAITING" ]; then
             WAITING="yes"
+            printf 'yes\n' > "$WAITING_FILE"
             echo "$(date) Sentinel still names this pod as the master and holds healthy replicas; waiting for it to promote one of them instead of starting with the dataset on disk" >&2
           fi
         elif [ -z "$WAITING" ] && [ "$(date +%s)" -ge "$LOOKUP_DEADLINE" ]; then
           break
         fi
-        if [ $(( $(date +%s) - SINCE )) -ge {{ .Values.sentinel.restartFailoverWaitSeconds }} ]; then
+        # Only once Sentinel has confirmed the wait: otherwise a short or
+        # zero restartFailoverWaitSeconds, meant to skip waiting for a
+        # promotion, would also cut off the unrelated lookup retry above.
+        if [ -n "$WAITING" ] && [ $(( $(date +%s) - SINCE )) -ge {{ .Values.sentinel.restartFailoverWaitSeconds }} ]; then
           echo "$(date) WARNING: Sentinel promoted no replica within {{ .Values.sentinel.restartFailoverWaitSeconds }}s, starting as configured with the dataset on disk" >&2
           break
         fi
         sleep 2
       done
-      rm -f "$SINCE_FILE"
+      rm -f "$SINCE_FILE" "$WAITING_FILE"
     fi
 {{- end }}
 
@@ -569,11 +580,15 @@ data:
           # nothing reachable yet even though Sentinel and every node are
           # healthy. Retry briefly before starting writable on the strength
           # of a record this pod wrote about itself.
-          RETRIED=0
+          #
+          # Bounded by elapsed time, not by a count of sleeps: each round also
+          # runs a Sentinel query and up to every other node's, and a slow or
+          # hung peer costs up to its own timeout, not just the sleep,
+          # multiplying the actual wait well past this deadline otherwise.
+          RETRY_DEADLINE=$(( $(date +%s) + {{ .Values.sentinel.masterLookupRetrySeconds }} ))
           CONFIRMED=""
-          while [ "$RETRIED" -lt {{ .Values.sentinel.masterLookupRetrySeconds }} ]; do
+          while [ "$(date +%s)" -lt "$RETRY_DEADLINE" ]; do
             sleep 2
-            RETRIED=$((RETRIED + 2))
             CONFIRMED=$(master_from_sentinels || true)
             [ -n "$CONFIRMED" ] || CONFIRMED=$(master_from_running_nodes || true)
             [ -n "$CONFIRMED" ] && break
