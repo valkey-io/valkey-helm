@@ -547,12 +547,12 @@ tests:
   # reporting role:master in its own INFO until Sentinel next reconfigures it.
   # Asking for a failover in that window would demote the replica Sentinel
   # already promoted and hand the role back to this, stale, pod.
-  - it: should check who Sentinel names as the master before each failover request
+  - it: should check who every Sentinel names as the master before each failover request
     template: templates/sentinel-configmap.yaml
     asserts:
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: 'addr=\$\(sentinel_cli "\$sentinel" sentinel get-master-addr-by-name "\$MASTER_SET"\)\n    named_host=\$\(echo "\$addr" \| sed -n 1p\)\n    named_port=\$\(echo "\$addr" \| sed -n 2p\)\n    if \[ -n "\$named_host" \] && \[ "\$named_host" != "\$SELF_HOST" \] && echo "\$named_port" \| grep -qE "\^\[0-9\]\+\$"; then'
+          pattern: 'addr=\$\(sentinel_cli "\$sentinel" sentinel get-master-addr-by-name "\$MASTER_SET"\)\n    named_host=\$\(echo "\$addr" \| sed -n 1p\)\n    named_port=\$\(echo "\$addr" \| sed -n 2p\)\n    \[ -n "\$named_host" \] && \[ "\$named_host" != "\$SELF_HOST" \] && echo "\$named_port" \| grep -qE "\^\[0-9\]\+\$" \|\| continue'
       - matchRegex:
           path: data["sentinel-prestop.sh"]
           pattern: 'following it instead of asking for a further failover'
@@ -560,12 +560,36 @@ tests:
   # An error reply, such as NOAUTH mid credential rollout, has no second line
   # and so no numeric port: it must not be read as "another node is master"
   # and skip a failover this pod may still legitimately need to request.
-  - it: should require a numeric port before trusting that Sentinel named another master
+  - it: should require a numeric port before counting a Sentinel's answer
     template: templates/sentinel-configmap.yaml
     asserts:
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: '\[ "\$named_host" != "\$SELF_HOST" \] && echo "\$named_port" \| grep -qE "\^\[0-9\]\+\$"'
+          pattern: '\[ "\$named_host" != "\$SELF_HOST" \] && echo "\$named_port" \| grep -qE "\^\[0-9\]\+\$" \|\| continue'
+
+  # A single Sentinel's own view can be stale by more than one failover,
+  # still naming a node Sentinel has since replaced again: acting on just
+  # one could make this pod, possibly already the current master, follow a
+  # defunct node instead. sentinel.quorum (2 of 3 by default) of them must
+  # independently agree on the same other host first.
+  - it: should follow only once sentinel.quorum of the Sentinels agree on the same other master
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'if \[ -z "\$AGREED_HOST" \]; then\n      AGREED_HOST="\$named_host"\n      AGREED_PORT="\$named_port"\n      AGREEING=1\n    elif \[ "\$named_host" = "\$AGREED_HOST" \] && \[ "\$named_port" = "\$AGREED_PORT" \]; then\n      AGREEING=\$\(\(AGREEING \+ 1\)\)\n    fi'
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'if \[ "\$AGREEING" -ge 2 \]; then'
+
+  - it: should require more Sentinels to agree as quorum rises
+    set:
+      sentinel.quorum: 3
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'if \[ "\$AGREEING" -ge 3 \]; then'
 
   - it: should point this pod at the confirmed master, not just skip the request
     template: templates/sentinel-configmap.yaml
@@ -576,7 +600,7 @@ tests:
       # corrects it below.
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: 'local_cli replicaof "\$named_host" "\$named_port" >/dev/null 2>&1 \|\| true'
+          pattern: 'local_cli replicaof "\$AGREED_HOST" "\$AGREED_PORT" >/dev/null 2>&1 \|\| true'
 
   - it: should record the Sentinel-confirmed master instead of the local, possibly stale, role
     template: templates/sentinel-configmap.yaml
@@ -588,7 +612,7 @@ tests:
           pattern: 'if \[ -n "\$\{CONFIRMED_HOST:-\}" \] && echo "\$\{CONFIRMED_PORT:-\}" \| grep -qE "\^\[0-9\]\+\$"; then\n    host="\$CONFIRMED_HOST"\n    port="\$CONFIRMED_PORT"'
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: 'CONFIRMED_HOST="\$named_host"\n      CONFIRMED_PORT="\$named_port"\n      exit 0'
+          pattern: 'CONFIRMED_HOST="\$AGREED_HOST"\n    CONFIRMED_PORT="\$AGREED_PORT"\n    exit 0'
 
   - it: should escape sentinel configuration credentials
     template: templates/sentinel-configmap.yaml
