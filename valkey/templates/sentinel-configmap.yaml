@@ -464,7 +464,10 @@ data:
     # whatever the new master has acknowledged since. So before each attempt,
     # ask the same Sentinel the request is about to go to who it names as the
     # master; only a Sentinel that has not converged yet still answers with
-    # this pod, and the request goes through as before.
+    # this pod, and the request goes through as before. An incomplete answer,
+    # such as an error reply from a Sentinel mid credential rollout, names no
+    # usable port and falls through to that request rather than being read as
+    # another master.
     log "This pod is the master, asking Sentinel for a coordinated failover"
     while [ "$(date +%s)" -lt "$DEADLINE" ]; do
       for sentinel in $SENTINELS; do
@@ -472,8 +475,14 @@ data:
         addr=$(sentinel_cli "$sentinel" sentinel get-master-addr-by-name "$MASTER_SET")
         named_host=$(echo "$addr" | sed -n 1p)
         named_port=$(echo "$addr" | sed -n 2p)
-        if [ -n "$named_host" ] && [ "$named_host" != "$SELF_HOST" ]; then
-          log "${sentinel%%.*} already names $named_host as the master, skipping the failover request"
+        if [ -n "$named_host" ] && [ "$named_host" != "$SELF_HOST" ] && echo "$named_port" | grep -qE "^[0-9]+$"; then
+          log "${sentinel%%.*} already names $named_host as the master, following it instead of asking for a further failover"
+          # track_master keeps deriving the marker from this pod's own config
+          # on its own timer, independently of record_master below. Without
+          # this, its next tick still finds no replicaof line, in a config
+          # this pod's own failed attempt never touched, and rewrites the
+          # marker back to this pod right after record_master corrects it.
+          local_cli replicaof "$named_host" "$named_port" >/dev/null 2>&1 || true
           CONFIRMED_HOST="$named_host"
           CONFIRMED_PORT="$named_port"
           exit 0

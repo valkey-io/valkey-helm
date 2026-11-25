@@ -519,9 +519,14 @@ tests:
       - matchRegex:
           path: data["sentinel-prestop.sh"]
           pattern: 'sed -n ''s/\^role://p''\)" = "slave" \] &&\n    \[ "\$\(echo "\$info" \| sed -n ''s/\^master_failover_state://p''\)" = "no-failover" \]'
+      # The coordinated failover itself goes through Sentinel's own FAILOVER,
+      # never a manual client pause or kill as a substitute. A manual
+      # replicaof does appear, but only once Sentinel already names another
+      # node master, where there is no failover left to ask for; see "should
+      # point this pod at the confirmed master" below.
       - notMatchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: 'client pause|client kill|replicaof'
+          pattern: 'client pause|client kill'
 
   - it: should ask each Sentinel by name during graceful shutdown
     set:
@@ -547,10 +552,31 @@ tests:
     asserts:
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: 'addr=\$\(sentinel_cli "\$sentinel" sentinel get-master-addr-by-name "\$MASTER_SET"\)\n    named_host=\$\(echo "\$addr" \| sed -n 1p\)\n    named_port=\$\(echo "\$addr" \| sed -n 2p\)\n    if \[ -n "\$named_host" \] && \[ "\$named_host" != "\$SELF_HOST" \]; then'
+          pattern: 'addr=\$\(sentinel_cli "\$sentinel" sentinel get-master-addr-by-name "\$MASTER_SET"\)\n    named_host=\$\(echo "\$addr" \| sed -n 1p\)\n    named_port=\$\(echo "\$addr" \| sed -n 2p\)\n    if \[ -n "\$named_host" \] && \[ "\$named_host" != "\$SELF_HOST" \] && echo "\$named_port" \| grep -qE "\^\[0-9\]\+\$"; then'
       - matchRegex:
           path: data["sentinel-prestop.sh"]
-          pattern: 'skipping the failover request'
+          pattern: 'following it instead of asking for a further failover'
+
+  # An error reply, such as NOAUTH mid credential rollout, has no second line
+  # and so no numeric port: it must not be read as "another node is master"
+  # and skip a failover this pod may still legitimately need to request.
+  - it: should require a numeric port before trusting that Sentinel named another master
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: '\[ "\$named_host" != "\$SELF_HOST" \] && echo "\$named_port" \| grep -qE "\^\[0-9\]\+\$"'
+
+  - it: should point this pod at the confirmed master, not just skip the request
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      # track_master derives the marker from this pod's own config on its own
+      # timer; without this, its next tick still finds no replicaof line and
+      # rewrites the marker back to this pod right after record_master
+      # corrects it below.
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'local_cli replicaof "\$named_host" "\$named_port" >/dev/null 2>&1 \|\| true'
 
   - it: should record the Sentinel-confirmed master instead of the local, possibly stale, role
     template: templates/sentinel-configmap.yaml
