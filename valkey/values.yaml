@@ -60,6 +60,14 @@ podSecurityContext:
 # otherwise Kubernetes sends SIGKILL while the graceful failover is still running.
 terminationGracePeriodSeconds: 30 # @schema minimum:0
 
+# How the chart's containers (init, valkey, metrics, sentinel, haproxy) report
+# why they stopped. FallbackToLogsOnError copies the end of the log into the
+# termination message when a container exits with an error, so the reason
+# shows in the pod's status. That end of the log can hold the config line
+# Valkey rejected, and with it a credential if the line carries one: set File
+# where principals may read pod status but not the pod's logs.
+terminationMessagePolicy: FallbackToLogsOnError # @schema enum:[File, FallbackToLogsOnError]
+
 # Priority class name for pod scheduling (leave empty to use cluster's default)
 priorityClassName: ""
 
