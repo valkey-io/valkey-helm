@@ -12,6 +12,7 @@
 
 - `cluster.additionalSpec` is deep-merged over `cluster.spec`, and `cluster.additionalSpecString` (a string rendered with `tpl` and parsed as YAML) over that. Maps merge, lists replace, and the escape hatch wins, including `false`, `0`, `""` and `[]`. `null` deletes the key. The chart's own logic (`replicasPerShard` default, `serviceAccountName`, `usersSecret`) runs on the merged result. See [`examples/additional-spec.yaml`](examples/additional-spec.yaml).
 - `values.yaml` documents every ValkeyCluster field as commented-out YAML.
+- Optional password generation (`usersSecret.generate`). You can now automatically generate a password via Helm if none is set and you opt in. Make sure your deployment tool supports Helm's `lookup` function.
 
 ## 0.6.0
 
