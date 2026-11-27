@@ -345,8 +345,8 @@ would start on an empty volume.
 {{- define "valkey.validatePersistence" -}}
 {{- include "valkey.validateRemovedValues" . }}
 {{- $p := .Values.persistence }}
-{{- if and .Values.replica.enabled (lt (int .Values.replica.replicas) 1) }}
-  {{- fail "replica.replicas counts the Valkey pods, the master included, and must be at least 1." }}
+{{- if and .Values.replica.enabled (lt (int .Values.replica.replicas) 0) }}
+  {{- fail "replica.replicas counts the Valkey pods, the master included, and cannot be negative." }}
 {{- end }}
 {{- if .Values.replica.enabled }}
   {{- if not (and $p.enabled $p.size) }}
