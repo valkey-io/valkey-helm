@@ -680,6 +680,7 @@ Use the `valkey-operator` and `valkey-resources` charts in this repository inste
 | securityContext.runAsNonRoot | bool | `true` |  |
 | securityContext.runAsUser | int | `1000` |  |
 | sentinel.affinity | object | `{}` |  |
+| sentinel.allowUnsafeTopology | bool | `false` |  |
 | sentinel.downAfterMilliseconds | int | `5000` |  |
 | sentinel.enabled | bool | `false` |  |
 | sentinel.existingSecret | string | `""` |  |

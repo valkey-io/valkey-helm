@@ -57,6 +57,67 @@ tests:
       - failedTemplate:
           errorPattern: "quorum must be at least 2.*"
 
+  - it: should allow one sentinel and one valkey pod with allowUnsafeTopology
+    set:
+      replica.replicas: 1
+      sentinel.replicas: 1
+      sentinel.quorum: 1
+      sentinel.allowUnsafeTopology: true
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: should still fail with a quorum of zero with allowUnsafeTopology
+    set:
+      sentinel.replicas: 1
+      sentinel.quorum: 0
+      sentinel.allowUnsafeTopology: true
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "sentinel.quorum must be at least 1.*"
+
+  - it: should still fail without sentinels with allowUnsafeTopology
+    set:
+      sentinel.replicas: 0
+      sentinel.quorum: 1
+      sentinel.allowUnsafeTopology: true
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "sentinel.replicas must be at least 1.*"
+
+  - it: should still fail when the quorum exceeds the sentinels with allowUnsafeTopology
+    set:
+      sentinel.replicas: 1
+      sentinel.quorum: 2
+      sentinel.allowUnsafeTopology: true
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "quorum \\(2\\) cannot be greater than sentinel.replicas \\(1\\).*"
+
+  - it: should skip the failover request on shutdown with a single valkey pod
+    set:
+      replica.replicas: 1
+      sentinel.replicas: 1
+      sentinel.quorum: 1
+      sentinel.allowUnsafeTopology: true
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'log "No replica to promote, shutting down"\n\s*exit 0'
+
+  - it: should ask for a failover on shutdown when there is a replica
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'No replica to promote'
+
   - it: should fail when the monitor user is missing from aclUsers
     set:
       auth.enabled: true

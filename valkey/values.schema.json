@@ -894,6 +894,9 @@
                 "affinity": {
                     "type": "object"
                 },
+                "allowUnsafeTopology": {
+                    "type": "boolean"
+                },
                 "downAfterMilliseconds": {
                     "type": "integer"
                 },
