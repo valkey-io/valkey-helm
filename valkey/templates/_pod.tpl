@@ -8,6 +8,7 @@ Include it under the workload's spec.template with nindent 4.
 {{- define "valkey.podTemplate" -}}
 {{- $replicated := .Values.replica.enabled }}
 {{- $sentinel := and $replicated .Values.sentinel.enabled }}
+{{- $sentinelAuth := and $sentinel .Values.sentinel.auth.enabled }}
 {{- $preStopFailover := and $sentinel .Values.sentinel.preStopFailover }}
 {{- $storage := .Values.persistence -}}
 {{- include "valkey.validateMountPaths" . }}
@@ -78,7 +79,7 @@ spec:
           mountPath: /valkey-conf
         - name: scripts
           mountPath: /scripts
-        {{- if $sentinel }}
+        {{- if $sentinelAuth }}
         - name: sentinel-auth
           mountPath: /sentinel-auth
           readOnly: true
@@ -173,11 +174,13 @@ spec:
         {{- if $sentinel }}
         - name: scripts
           mountPath: /scripts
+        {{- if $sentinelAuth }}
         # valkey-start.sh asks Sentinel for the master before a restarted
         # master starts
         - name: sentinel-auth
           mountPath: /sentinel-auth
           readOnly: true
+        {{- end }}
         {{- end }}
         {{- if $preStopFailover }}
         - name: sentinel-scripts
@@ -316,7 +319,9 @@ spec:
       configMap:
         name: {{ include "valkey.fullname" . }}-sentinel-scripts
         defaultMode: 0555
+    {{- if $sentinelAuth }}
     {{- include "valkey.sentinel.authVolume" . | nindent 4 }}
+    {{- end }}
     {{- end }}
     {{- if .Values.extraConfig }}
     - name: valkey-config

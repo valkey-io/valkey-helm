@@ -1,0 +1,195 @@
+suite: sentinel without a password behind mutual TLS
+templates:
+  - templates/statefulset.yaml
+  - templates/sentinel-statefulset.yaml
+  - templates/init_config.yaml
+  - templates/secret.yaml
+  - templates/sentinel-configmap.yaml
+  - templates/haproxy-configmap.yaml
+  - templates/haproxy-deployment.yaml
+  - templates/tests/auth.yaml
+set:
+  replica.enabled: true
+  persistence.enabled: true
+  persistence.size: "5Gi"
+  sentinel.enabled: true
+  sentinel.auth.enabled: false
+  tls.enabled: true
+  tls.existingSecret: "valkey-tls"
+  tls.requireClientCertificate: true
+tests:
+  - it: should require tls when sentinel authentication is off
+    set:
+      tls.enabled: false
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "sentinel.auth.enabled is false, which requires tls.enabled and tls.requireClientCertificate.*"
+
+  - it: should require client certificates when sentinel authentication is off
+    set:
+      tls.requireClientCertificate: false
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "sentinel.auth.enabled is false, which requires tls.enabled and tls.requireClientCertificate.*"
+
+  - it: should refuse an inline sentinel password when sentinel authentication is off
+    set:
+      sentinel.password: "sentinelpw"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "sentinel.password or sentinel.existingSecret is set but sentinel.auth.enabled is false.*"
+
+  - it: should refuse sentinel.existingSecret when sentinel authentication is off
+    set:
+      sentinel.existingSecret: "sentinel-secret"
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "sentinel.password or sentinel.existingSecret is set but sentinel.auth.enabled is false.*"
+
+  - it: should point to sentinel.auth.enabled when the password is missing
+    set:
+      sentinel.auth.enabled: true
+    template: templates/statefulset.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "Sentinel requires its own password.*set sentinel.auth.enabled=false\\."
+
+  - it: should not mount a sentinel credential into the valkey pods
+    template: templates/statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "sentinel-auth")]
+      - notExists:
+          path: spec.template.spec.initContainers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      # The startup script still queries Sentinel, so it keeps its scripts.
+      - exists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "scripts")]
+
+  - it: should not mount a sentinel credential into the sentinel pods
+    template: templates/sentinel-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "sentinel-auth")]
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
+
+  - it: should not render a secret for the sentinel
+    template: templates/secret.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should configure sentinel without an ACL user or sentinel-pass
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'user default off|user sentinel on|sentinel sentinel-user|sentinel sentinel-pass|/sentinel-auth'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: '--user sentinel|SENTINEL_PASSWORD'
+
+  - it: should still configure the monitor credentials with valkey authentication
+    set:
+      auth.enabled: true
+      auth.aclUsers.default.password: "defaultpw"
+      auth.aclUsers.default.permissions: "~* &* +@all"
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel auth-pass \$\{MASTER_SET\} "\$\{MONITOR_PASSWORD_ESCAPED\}"'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel sentinel-pass|user sentinel on'
+
+  - it: should probe sentinel and fail over on shutdown without a password
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-ping.sh"]
+          pattern: 'REPLY=\$\(valkey-cli --tls --cacert /tls/ca\.crt --cert /tls/server\.crt --key /tls/server\.key -t 2 -p 26379 ping\)'
+      - notMatchRegex:
+          path: data["sentinel-ping.sh"]
+          pattern: 'sentinel-auth|--user sentinel'
+      - notMatchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'sentinel-auth|--user sentinel|SENTINEL_PASSWORD'
+      - matchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: 'sentinel failover "\$MASTER_SET" coordinated'
+
+  - it: should ask sentinel for the master on startup without a password
+    template: templates/init_config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'sentinel-auth|--user sentinel|sentinel_password'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'addr=\$\(timeout 5 valkey-cli --tls'
+      - notMatchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'sentinel-auth|--user sentinel|sentinel_password'
+      - matchRegex:
+          path: data["master-restart-guard.sh"]
+          pattern: 'out=\$\(timeout 5 valkey-cli --tls'
+
+  - it: should health check sentinel from haproxy without AUTH
+    set:
+      haproxy.enabled: true
+      haproxy.tls.clientCertFile: "client.pem"
+    template: templates/haproxy-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'AUTH\\ sentinel|SENTINEL_CHECK_PASSWORD'
+      - matchRegex:
+          path: data["haproxy.cfg"]
+          pattern: 'tcp-check send SENTINEL\\ get-master-addr-by-name\\ mymaster'
+
+  - it: should not pass a sentinel password to haproxy
+    set:
+      haproxy.enabled: true
+      haproxy.tls.clientCertFile: "client.pem"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env
+
+  - it: should keep the valkey check password in haproxy with valkey authentication
+    set:
+      haproxy.enabled: true
+      haproxy.tls.clientCertFile: "client.pem"
+      auth.enabled: true
+      auth.aclUsers.default.password: "defaultpw"
+      auth.aclUsers.default.permissions: "~* &* +@all"
+    template: templates/haproxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: VALKEY_CHECK_PASSWORD
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 1
+
+  - it: should look up the master in the helm test without a sentinel password
+    set:
+      auth.enabled: true
+      auth.aclUsers.default.password: "defaultpw"
+      auth.aclUsers.default.permissions: "~* &* +@all"
+    template: templates/tests/auth.yaml
+    asserts:
+      - notExists:
+          path: spec.volumes[?(@.name == "sentinel-auth")]
+      - notExists:
+          path: spec.containers[0].volumeMounts[?(@.name == "sentinel-auth")]
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: 'MASTER=\$\(valkey-cli \$TLS_FLAGS --raw'

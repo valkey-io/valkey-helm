@@ -61,7 +61,10 @@ spec:
           imagePullPolicy: {{ .Values.haproxy.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.haproxy.securityContext | nindent 12 }}
+          {{- if or .Values.sentinel.auth.enabled .Values.auth.enabled }}
           env:
+          {{- end }}
+          {{- if .Values.sentinel.auth.enabled }}
             # Expanded by HAProxy when it parses the config, so the health check
             # credentials stay in the secret instead of the ConfigMap.
             - name: SENTINEL_CHECK_PASSWORD
@@ -74,6 +77,7 @@ spec:
                   name: {{ include "valkey.fullname" . }}-auth
                   key: sentinel-password
                   {{- end }}
+          {{- end }}
           {{- if .Values.auth.enabled }}
             - name: VALKEY_CHECK_PASSWORD
               valueFrom:
